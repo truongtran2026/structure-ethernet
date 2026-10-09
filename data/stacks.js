@@ -394,34 +394,8 @@ window.STACKS = window.STACKS || [];
       tree: [
         ethII("Ethernet II header", "0x0800", "MAC của link vật lý underlay.", "0x0800 = IPv4 (IPv4 ngoài)."),
         { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", set: { protocol: "47", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" }, note: "Địa chỉ hai đầu tunnel; Protocol = 47 → header kế tiếp là GRE." },
-        { added: true, header: "gre", set: { c: "0", k: "0", s: "0", "protocol-type": "0x0800" }, note: "GRE cơ bản 4 byte; Protocol Type 0x0800 → bên trong là IPv4." },
+        { added: true, header: "gre", set: { c: "0", k: "0", s: "0", "protocol-type": "0x0800", key: "1001", seq: "1" }, note: "Protocol Type 0x0800 → bên trong là IPv4. Mặc định là GRE cơ bản 4 byte; chọn biến thể (Key, Sequence, Checksum…) ở card \"Biến thể kích thước header\" để thấy header dài 8–16 byte." },
         { header: "ipv4", label: "Inner IPv4 (gói gốc)", set: { protocol: "253", src: "10.0.1.10", dst: "10.0.2.20", ttl: "63" }, note: "Gói IP gốc giữa hai mạng LAN." },
-        payload(),
-        fcs(),
-      ],
-    },
-    {
-      id: "gre-key-seq",
-      name: "GRE có Key + Sequence Number",
-      category: "Tunnel & Overlay",
-      compareTo: "eth2-ipv4",
-      summary: "Như GRE over IPv4 nhưng bật K và S: header GRE dài 12 byte với Key và Sequence Number.",
-      detail:
-        "Giống GRE over IPv4, nhưng cờ K = 1 và S = 1 nên GRE thêm Key (4 byte) và Sequence Number (4 byte), tổng 12 byte; overhead lên 32 byte. " +
-        "Key cho phép nhiều tunnel giữa cùng cặp endpoint (vd. mỗi VRF một key) và phải khớp ở hai đầu. " +
-        "Sequence Number giúp bên nhận phát hiện gói đến sai thứ tự. " +
-        "Thứ tự trường optional luôn là Checksum → Key → Sequence; ở đây C = 0 nên không có Checksum.",
-      tree: [
-        ethII("Ethernet II header", "0x0800", "MAC của link vật lý underlay.", "0x0800 = IPv4 (IPv4 ngoài)."),
-        { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", set: { protocol: "47", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" }, note: "Protocol = 47 → GRE." },
-        {
-          added: true,
-          header: "gre",
-          enable: ["key", "seq"],
-          set: { c: "0", k: "1", s: "1", "protocol-type": "0x0800", key: "1001", seq: "1" },
-          note: "K = 1, S = 1 → thêm Key và Sequence Number; GRE dài 12 byte.",
-        },
-        { header: "ipv4", label: "Inner IPv4 (gói gốc)", set: { protocol: "253", src: "10.0.1.10", dst: "10.0.2.20", ttl: "63" } },
         payload(),
         fcs(),
       ],

@@ -24,7 +24,7 @@ effort: low
    `compareTo`, `values`, `optional`) → báo.
 5. `index.html` nạp đúng thứ tự, không `type="module"`, không URL http(s) ngoài.
 6. Kiểm 3 stack khó bằng tay qua model: `qinq` (= 12+4+4+2 = 22 byte header L2), `mpls-l3vpn`
-   (2 nhãn, S-bit 0 rồi 1), `gre-key-seq` (GRE = 12 byte).
+   (2 nhãn, S-bit 0 rồi 1), `gre-ipv4` khi áp biến thể GRE "key-seq" (GRE = 12 byte).
 
 ## Đầu ra
 Ghi `_workspace/04_qa-inspector_report.md`: mỗi mục checklist ĐẠT/LỖI + bằng chứng (lệnh, output rút gọn),

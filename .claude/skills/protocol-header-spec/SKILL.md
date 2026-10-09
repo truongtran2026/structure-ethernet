@@ -34,6 +34,13 @@ Vì vậy ưu tiên **chính xác theo chuẩn** trước, **dễ học** sau, v
 - Field optional nằm trong group riêng có `optional` để UI bật/tắt một lần.
 - Không gom chỉ để đủ số lượng; group một field là thừa.
 
+## Stack hay biến thể?
+
+Một stack mới chỉ khi **chuỗi header khác nhau** (thêm/bớt/đổi header). Cùng chuỗi header nhưng khác
+cờ/option/độ dài của một header (GRE có Key, IPv4 có option, TCP SYN…) → thêm `variants` vào header đó,
+**không** tạo stack riêng. Tách stack cho biến thể làm danh sách bên trái rối và trùng lặp
+(đã bỏ `gre-key-seq` vì lý do này).
+
 ## Văn phong `desc`
 
 - Câu đầu: field này **làm gì** (chức năng). Câu sau: giá trị thường gặp, liên hệ thực tế
