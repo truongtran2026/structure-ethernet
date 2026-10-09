@@ -1,0 +1,5 @@
+.claude/
+_workspace/
+_workspace_*/
+CLAUDE.md
+.gitignore

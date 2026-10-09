@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cấu trúc Header Ethernet</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // Ghi nhận file script không nạp được / lỗi cú pháp để app hiện thông báo thay vì trắng trang.
+    window.__ethvizLoad = { failed: [], errors: [] };
+    window.addEventListener('error', function (e) {
+      var t = e.target;
+      if (t && t.tagName === 'SCRIPT') { window.__ethvizLoad.failed.push(t.getAttribute('src')); return; }
+      if (e.message) {
+        var f = (e.filename || '').split('/').pop();
+        window.__ethvizLoad.errors.push((f ? f + ':' + e.lineno + ' — ' : '') + e.message);
+      }
+    }, true);
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <button type="button" id="menu-btn" class="icon-btn menu-btn" aria-controls="sidebar" aria-expanded="false" title="Danh sách frame">☰</button>
+    <a class="brand" href="#" aria-label="Trang đầu">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <span class="brand-text">Cấu trúc Header Ethernet<small>Học từng header, từng bit</small></span>
+    </a>
+    <button type="button" id="theme-btn" class="btn-ghost theme-btn">◐ Tự động</button>
+  </header>
+
+  <div id="boot" class="boot">Đang khởi động… Nếu dòng này không biến mất, kiểm tra <code>js/app.js</code> và mở Console (F12).</div>
+  <noscript><div class="boot">Ứng dụng cần bật JavaScript.</div></noscript>
+
+  <div id="app" class="layout" hidden>
+    <aside id="sidebar" class="sidebar" aria-label="Danh sách loại frame">
+      <label class="search">
+        <span class="sr-only">Tìm loại frame</span>
+        <input id="search" type="search" placeholder="Tìm: VLAN, MPLS, GRE…" autocomplete="off">
+      </label>
+      <nav id="nav" class="nav"></nav>
+    </aside>
+    <div id="scrim" class="scrim" aria-hidden="true"></div>
+
+    <main id="main" class="main">
+      <div id="alerts" class="alerts" aria-live="polite"></div>
+      <section id="stack-head" class="stack-head"></section>
+      <section id="framemap" class="card framemap" aria-label="Bản đồ frame"></section>
+      <section class="card tree-card" aria-labelledby="tree-title">
+        <div class="section-title"><h2 id="tree-title">Cấu trúc chi tiết</h2><span class="muted">▸ bung · ▾ thu gọn</span></div>
+        <div id="tree" class="tree" role="tree" aria-labelledby="tree-title"></div>
+      </section>
+    </main>
+
+    <aside id="detail" class="detail" aria-label="Chi tiết" aria-live="polite"></aside>
+  </div>
+
+  <script src="data/headers-l2.js"></script>
+  <script src="data/headers-l3l4.js"></script>
+  <script src="data/headers-tunnel.js"></script>
+  <script src="data/stacks.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

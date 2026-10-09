@@ -1,0 +1,4 @@
+_workspace/
+_workspace_*/
+.vercel/
+node_modules/

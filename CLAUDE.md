@@ -1,0 +1,19 @@
+# Structure Ethernet
+
+Ứng dụng web tĩnh (mở `index.html` bằng nhấp đúp) giúp học cấu trúc header Ethernet và các biến thể
+(VLAN, QinQ, PBB, MPLS, L2VPN/L3VPN, GRE, VXLAN, PPPoE…), thu gọn/bung theo từng cấp tới từng bit.
+
+## Harness: Ethernet Header Visualizer
+
+**Mục tiêu:** dữ liệu header chính xác theo chuẩn + giao diện học tập thu gọn/bung theo cấp.
+
+**Điều kiện gọi:** mọi yêu cầu xây, mở rộng, sửa dữ liệu hoặc giao diện của ứng dụng này → dùng skill
+`ethernet-header-orchestrator`. Câu hỏi kiến thức đơn thuần có thể trả lời trực tiếp.
+
+**Lịch sử thay đổi:**
+| Ngày | Thay đổi | Đối tượng | Lý do |
+| --- | --- | --- | --- |
+| 2026-10-09 | Dựng harness v2 lần đầu | Toàn bộ | - |
+| 2026-10-09 | Thêm StackNode `added` vào schema + validator; I-Tag tách Res1/Res2 | protocol-header-spec | QA: nhãn "+ thêm" sai ở stack tunnel; reviewer: Res2 ≠ 0 thì frame bị loại |
+| 2026-10-09 | Ghi cách gọi agent qua general-purpose khi agent chưa được nạp | ethernet-header-orchestrator | Agent tạo trong phiên chỉ được nạp ở phiên sau |
+| 2026-10-09 | Thêm `effort` cho 4 agent; frontend-dev mặc định sonnet; bảng chọn model theo loại việc | agents, orchestrator | Tối ưu token: lần chạy đầu ~1/3 token Opus dùng cho việc sửa theo danh sách/cơ học |
