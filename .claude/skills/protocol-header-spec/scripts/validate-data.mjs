@@ -90,6 +90,42 @@ for (const [key, h] of Object.entries(HEADERS)) {
   if (h.maxBytes !== undefined && h.maxBytes !== maxCalc)
     warn(`${where}: maxBytes = ${h.maxBytes} nhưng tính được ${maxCalc}`);
   sizeTable.push([key, h.layer, h.fixedBytes, maxCalc]);
+
+  // Biến thể: tự tính kích thước và so với `bytes`.
+  const hasVariable = optionalIds.size > 0 || varMax > 0;
+  if (hasVariable && key !== "payload" && !h.variants?.length)
+    err(`${where}: có field optional/varBytes nhưng thiếu variants`);
+  const vIds = new Set();
+  for (const v of h.variants || []) {
+    const vw = `${where} › variant "${v.id}"`;
+    if (!v.id || vIds.has(v.id)) err(`${vw}: id thiếu hoặc trùng`);
+    vIds.add(v.id);
+    if (!v.name) err(`${vw}: thiếu name`);
+    const on = new Set(v.enable || []);
+    for (const id of on) if (!optionalIds.has(id)) err(`${vw}: enable "${id}" không phải node optional`);
+    for (const id of Object.keys(v.set || {})) if (!ids.has(id)) err(`${vw}: set.${id} không có trong header`);
+    let bits = 0;
+    const sum = (nodes, present) => {
+      for (const n of nodes) {
+        const here = present && (!n.optional || on.has(n.id));
+        if (n.children) { sum(n.children, here); continue; }
+        if (!here) continue;
+        if (n.bits) bits += n.bits;
+        else if (n.varBytes) {
+          const want = v.varBytes?.[n.id] ?? n.varBytes.default ?? n.varBytes.min;
+          if (want < n.varBytes.min || want > n.varBytes.max) err(`${vw}: varBytes.${n.id}=${want} ngoài [${n.varBytes.min}, ${n.varBytes.max}]`);
+          bits += want * 8;
+        }
+      }
+    };
+    sum(h.fields, true);
+    for (const id of Object.keys(v.varBytes || {})) {
+      let found = false;
+      walk(h.fields, (n) => { if (n.id === id && n.varBytes) found = true; });
+      if (!found) err(`${vw}: varBytes.${id} không phải field varBytes`);
+    }
+    if (bits / 8 !== v.bytes) err(`${vw}: bytes = ${v.bytes} nhưng tính được ${bits / 8}`);
+  }
 }
 
 const stackIds = new Set();

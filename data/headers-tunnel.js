@@ -281,7 +281,7 @@ Object.assign(window.HEADERS, {
         optional: "K = 1",
         desc:
           "Chỉ có khi K = 1: số định danh luồng/tunnel do hai đầu cấu hình, giúp phân biệt nhiều tunnel giữa cùng cặp IP. " +
-          "NVGRE dùng 24 bit đầu của Key làm VSID.",
+          "NVGRE (RFC 7637) dùng 24 bit cao của Key làm VSID và 8 bit thấp làm FlowID.",
         example: "1001",
       },
       {
@@ -292,6 +292,24 @@ Object.assign(window.HEADERS, {
         desc: "Chỉ có khi S = 1: số thứ tự tăng dần để bên nhận phát hiện gói đến sai thứ tự hoặc mất.",
         example: "1",
       },
+    ],
+    variants: [
+      { id: "basic", name: "Cơ bản", enable: [], set: { c: "0", k: "0", s: "0" }, bytes: 4,
+        note: "GRE cơ bản theo RFC 2784, phổ biến nhất (vd. tunnel site-to-site)." },
+      { id: "key", name: "Key", enable: ["key"], set: { c: "0", k: "1", s: "0" }, bytes: 8,
+        note: "Dùng Key để phân biệt nhiều tunnel cùng cặp endpoint (vd. mỗi VRF/tenant một key). NVGRE bắt buộc dạng này (C=0, K=1, S=0): 24 bit cao của Key là VSID, 8 bit thấp là FlowID." },
+      { id: "seq", name: "Sequence", enable: ["seq"], set: { c: "0", k: "0", s: "1" }, bytes: 8,
+        note: "Đánh số thứ tự để bên nhận phát hiện gói sai thứ tự hoặc mất." },
+      { id: "checksum", name: "Checksum", enable: ["checksum-group"], set: { c: "1", k: "0", s: "0" }, bytes: 8,
+        note: "Hiếm gặp vì tốn CPU tính checksum trên cả payload." },
+      { id: "key-seq", name: "Key + Sequence", enable: ["key", "seq"], set: { c: "0", k: "1", s: "1" }, bytes: 12,
+        note: "Tunnel có Key và đánh số thứ tự để phát hiện gói đến sai thứ tự (GRE không tự sắp xếp lại; bên nhận có thể bỏ hoặc đệm gói)." },
+      { id: "checksum-key", name: "Checksum + Key", enable: ["checksum-group", "key"], set: { c: "1", k: "1", s: "0" }, bytes: 12,
+        note: "Tunnel phân biệt bằng Key và có kiểm tra toàn vẹn; ít gặp." },
+      { id: "checksum-seq", name: "Checksum + Sequence", enable: ["checksum-group", "seq"], set: { c: "1", k: "0", s: "1" }, bytes: 12,
+        note: "Tunnel có checksum và số thứ tự nhưng không dùng Key; ít gặp." },
+      { id: "full", name: "Đầy đủ C+K+S", enable: ["checksum-group", "key", "seq"], set: { c: "1", k: "1", s: "1" }, bytes: 16,
+        note: "Bật mọi trường tuỳ chọn; gặp khi cần đủ kiểm tra toàn vẹn, phân biệt tunnel và thứ tự gói." },
     ],
   },
 

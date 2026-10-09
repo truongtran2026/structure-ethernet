@@ -38,6 +38,67 @@
     return Math.max(0, n);
   }
 
+
+  /** Gom node optional (mọi cấp) và field varBytes của một header def. */
+  function collectControls(defs, out) {
+    out = out || { optionals: [], vars: [] };
+    (defs || []).forEach(function (d) {
+      if (d.optional) out.optionals.push(d.id);
+      if (d.varBytes) out.vars.push(d);
+      if (d.children) collectControls(d.children, out);
+    });
+    return out;
+  }
+
+  function clampVar(def, n) {
+    var vb = def.varBytes || {};
+    n = Math.round(Number(n) || 0);
+    if (vb.min != null && n < vb.min) n = vb.min;
+    if (vb.max != null && n > vb.max) n = vb.max;
+    return Math.max(0, n);
+  }
+
+  /**
+   * Trạng thái điều khiển mà một variant ngụ ý:
+   *  enabled[id] = bool cho MỌI node optional (thiếu trong variant.enable → tắt),
+   *  varBytes[id] = byte cho mọi field varBytes (thiếu → default ?? min).
+   */
+  function variantState(headerDef, variant) {
+    var c = collectControls(headerDef && headerDef.fields);
+    var enable = (variant && variant.enable) || [];
+    var vb = (variant && variant.varBytes) || {};
+    var enabled = {}, varBytes = {};
+    c.optionals.forEach(function (id) { enabled[id] = enable.indexOf(id) >= 0; });
+    c.vars.forEach(function (d) {
+      var n = has(vb, d.id) ? vb[d.id] : (d.varBytes.default != null ? d.varBytes.default : (d.varBytes.min || 0));
+      varBytes[d.id] = clampVar(d, n);
+    });
+    return { enabled: enabled, varBytes: varBytes };
+  }
+
+  /** Variant khớp đúng cấu hình (enabledMap/varBytesMap đầy đủ) hoặc null. */
+  function matchVariant(headerDef, enabledMap, varBytesMap) {
+    var list = (headerDef && headerDef.variants) || [];
+    for (var i = 0; i < list.length; i++) {
+      var vs = variantState(headerDef, list[i]);
+      var ok = Object.keys(vs.enabled).every(function (id) { return !!(enabledMap && enabledMap[id]) === vs.enabled[id]; }) &&
+        Object.keys(vs.varBytes).every(function (id) { return varBytesMap && Number(varBytesMap[id]) === vs.varBytes[id]; });
+      if (ok) return list[i];
+    }
+    return null;
+  }
+
+  /** Cấu hình hiện hành (state > StackNode > mặc định) của header, dạng map đầy đủ. */
+  function effectiveControls(h, sn, en, varState) {
+    var c = collectControls(h.fields);
+    var enabled = {}, varBytes = {};
+    c.optionals.forEach(function (id) {
+      enabled[id] = has(en, id) ? !!en[id] : (sn.enable || []).indexOf(id) >= 0;
+    });
+    c.vars.forEach(function (d) { varBytes[d.id] = resolveVarBytes(d, sn, varState); });
+    return { enabled: enabled, varBytes: varBytes };
+  }
+
   /**
    * Dựng node field/group của một header.
    * ctx.pos = bit hiện tại trong header (chỉ tăng với field đang có mặt).
@@ -243,8 +304,21 @@
       node.short = h.short || node.name;
       node.layer = LAYERS.indexOf(h.layer) >= 0 ? h.layer : 'payload';
       var en = enabledState[path] || {};
+      var eff = effectiveControls(h, sn, en, varStateAll[path] || null);
+      var active = matchVariant(h, eff.enabled, eff.varBytes);
+      node.variants = (h.variants || []).map(function (v) {
+        return { id: v.id, name: v.name, bytes: v.bytes, note: v.note || null, set: v.set || null, def: v };
+      });
+      node.activeVariantId = active ? active.id : null;
+      if (node.variants.length) {
+        var vbytes = node.variants.map(function (v) { return v.bytes; });
+        node.variantRange = { min: Math.min.apply(null, vbytes), max: Math.max.apply(null, vbytes) };
+      }
+      // set của variant đang khớp ưu tiên hơn set của StackNode (vd. ihl, data-offset, cờ c/k/s)
+      var mergedSet = (sn.set || (active && active.set)) ? Object.assign({}, sn.set || {}, (active && active.set) || {}) : null;
+      node.set = mergedSet;
       var ctx = {
-        headerPath: path, sn: sn, set: sn.set, pos: 0, index: index,
+        headerPath: path, sn: sn, set: mergedSet, pos: 0, index: index,
         varState: varStateAll[path] || null,
         isEnabled: function (id) {
           if (has(en, id)) return !!en[id];
@@ -421,7 +495,9 @@
     collectUnits: collectUnits,
     layoutUnits: layoutUnits,
     layoutBits: layoutBits,
-    countHeaders: countHeaders
+    countHeaders: countHeaders,
+    variantState: variantState,
+    matchVariant: matchVariant
   };
   root.EthViz = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

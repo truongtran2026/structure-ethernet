@@ -16,4 +16,5 @@
 | 2026-10-09 | Dựng harness v2 lần đầu | Toàn bộ | - |
 | 2026-10-09 | Thêm StackNode `added` vào schema + validator; I-Tag tách Res1/Res2 | protocol-header-spec | QA: nhãn "+ thêm" sai ở stack tunnel; reviewer: Res2 ≠ 0 thì frame bị loại |
 | 2026-10-09 | Ghi cách gọi agent qua general-purpose khi agent chưa được nạp | ethernet-header-orchestrator | Agent tạo trong phiên chỉ được nạp ở phiên sau |
+| 2026-10-09 | Thêm `Header.variants` vào schema; validator tự tính bytes từng biến thể và bắt buộc variants cho header có optional/varBytes | protocol-header-spec | Người dùng cần thấy "GRE 4/8/12/16 B" theo cấu hình |
 | 2026-10-09 | Thêm `effort` cho 4 agent; frontend-dev mặc định sonnet; bảng chọn model theo loại việc | agents, orchestrator | Tối ưu token: lần chạy đầu ~1/3 token Opus dùng cho việc sửa theo danh sách/cơ học |

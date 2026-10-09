@@ -366,11 +366,14 @@
     }
     var open = isOpen(n);
     var meta = [n.bits + ' bit'];
+    var av = n.variants && n.variants.length ? variantOf(n, n.activeVariantId) : null;
     if (n.offsetBit != null) meta.push(byteRange(n.offsetBit, n.bits));
     return '<div class="node node--header layer-' + n.layer + (open ? ' is-open' : '') + (n.wire ? ' is-wire' : '') + '">' +
       '<div class="row row--header' + sel(n) + '"' + rowAttrs(n, level, open) + '>' + caret(n, open) +
         '<span class="swatch layer-' + n.layer + '" aria-hidden="true"></span>' +
         '<span class="row-name"><span class="nm">' + esc(n.name) + '</span><span class="dash">–</span><b class="sz">' + esc(fmtBytes(n.bits)) + '</b>' +
+          (n.variantRange && n.variantRange.min !== n.variantRange.max ? '<span class="badge badge--range" title="Kích thước thay đổi theo biến thể">' + esc(n.variantRange.min + '–' + n.variantRange.max + ' B') + '</span>' : '') +
+          (av ? '<span class="badge badge--var" title="Biến thể đang khớp">' + esc(av.name) + '</span>' : '') +
           (n.label ? '<span class="chip">' + esc(n.label) + '</span>' : '') +
           (n.addedLabel ? '<span class="badge badge--add">+ thêm</span>' : '') +
           (n.wire ? '<span class="badge badge--wire">chỉ trên dây</span>' : '') +
@@ -379,10 +382,54 @@
       '</div>' +
       (open ? '<div class="node-body node-body--header" role="group">' +
         (n.note ? '<p class="note">' + esc(n.note) + '</p>' : '') +
-        renderBitmap(n) +
+        renderVariantBar(n) + renderBitmap(n) +
         '<div class="fields">' + n.children.map(function (c) { return renderField(c, level + 1); }).join('') + '</div>' +
       '</div>' : '') +
       '</div>';
+  }
+
+  // ---------- biến thể ----------
+  function variantOf(hn, id) {
+    return (hn.variants || []).filter(function (v) { return v.id === id; })[0] || null;
+  }
+  function variantBytesTxt(v) { return num(v.bytes) + ' B'; }
+
+  function renderVariantBar(n) {
+    if (!n.variants || !n.variants.length) return '';
+    var custom = n.activeVariantId == null;
+    return '<div class="var-bar" role="group" aria-label="Biến thể của ' + attr(n.name) + '"><span class="var-bar-label">Biến thể</span>' +
+      n.variants.map(function (v) {
+        var on = v.id === n.activeVariantId;
+        return '<button type="button" class="var-chip' + (on ? ' is-on' : '') + '" data-action="variant" data-hp="' + attr(n.path) +
+          '" data-vid="' + attr(v.id) + '" aria-pressed="' + on + '" title="' + attr(v.note || '') + '">' + esc(v.name) +
+          ' <span class="var-chip-sz">· ' + esc(variantBytesTxt(v)) + '</span></button>';
+      }).join('') +
+      (custom ? '<span class="var-chip is-on is-custom" title="Cấu hình hiện tại không trùng biến thể nào">Tuỳ chỉnh <span class="var-chip-sz">· ' + esc(num(n.bits / 8)) + ' B</span></span>' : '') +
+      '</div>';
+  }
+
+  function renderVariantTable(n) {
+    if (!n.variants || !n.variants.length) return '';
+    return '<h3>Các biến thể</h3><p class="muted var-hint">Bấm một dòng để áp dụng cấu hình đó.</p>' +
+      '<div class="tbl-wrap"><table class="values var-table"><thead><tr><th>Tên</th><th>Giá trị đặc trưng</th><th>Kích thước</th><th>Ghi chú</th></tr></thead><tbody>' +
+      n.variants.map(function (v) {
+        var on = v.id === n.activeVariantId;
+        var sets = v.set ? Object.keys(v.set).map(function (k) { return '<code>' + esc(k + ' = ' + v.set[k]) + '</code>'; }).join(' ') : '<span class="muted">—</span>';
+        return '<tr class="var-row' + (on ? ' is-active' : '') + '" tabindex="0" data-action="variant" data-hp="' + attr(n.path) + '" data-vid="' + attr(v.id) +
+          '"><td><b>' + esc(v.name) + '</b></td><td>' + sets + '</td><td>' + esc(variantBytesTxt(v)) +
+          '</td><td>' + esc(v.note || '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
+  function applyVariant(hp, vid) {
+    var hn = app.model.index[hp];
+    var v = hn && variantOf(hn, vid);
+    if (!v) return;
+    var vs = EthViz.variantState(hn.header, v.def);
+    app.state.enabled[hp] = vs.enabled;
+    app.state.varBytes[hp] = vs.varBytes;
+    saveState();
+    render();
   }
 
   function renderField(n, level) {
@@ -546,7 +593,7 @@
       (opts.length ? '<h3>Phần tuỳ chọn</h3><ul class="plain">' + opts.map(function (o) {
         return '<li class="opt-line">' + optToggle(o) + ' <a href="#" data-goto="' + attr(o.path) + '">' + esc(o.name) + '</a> <span class="muted">' + esc(fmtBytes(o.sizeIfOn)) + '</span></li>';
       }).join('') + '</ul>' : '') +
-      vars.map(varInput).join('');
+      vars.map(varInput).join('') + renderVariantTable(n);
   }
 
   function varInput(f) {
@@ -740,6 +787,9 @@
     if ((btn = t.closest('[data-level]'))) { setLevel(Number(btn.getAttribute('data-level'))); return; }
     if ((btn = t.closest('[data-action="reset"]'))) {
       app.state = defaultState(); saveState(); render(); return;
+    }
+    if ((btn = t.closest('[data-action="variant"]'))) {
+      e.preventDefault(); applyVariant(btn.getAttribute('data-hp'), btn.getAttribute('data-vid')); return;
     }
     if ((btn = t.closest('[data-action="opt"]'))) {
       e.preventDefault(); e.stopPropagation();

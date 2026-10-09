@@ -244,7 +244,15 @@ Object.assign(window.HEADERS, {
           { v: "148", m: "Router Alert (RSVP, IGMP)" }
         ]
       }
-    ]
+    ],
+    variants: [
+      { id: "no-options", name: "Không option", enable: [], varBytes: { options: 0 }, set: { ihl: "5" }, bytes: 20,
+        note: "Gần như mọi gói IPv4 thông thường." },
+      { id: "router-alert", name: "Router Alert", enable: [], varBytes: { options: 4 }, set: { ihl: "6" }, bytes: 24,
+        note: "Option 4 byte (RFC 2113) báo router xử lý gói đặc biệt, gặp ở IGMP, RSVP." },
+      { id: "max-options", name: "Option tối đa", enable: [], varBytes: { options: 40 }, set: { ihl: "15" }, bytes: 60,
+        note: "40 byte option, vd. Record Route 39 byte + 1 byte đệm; options luôn phải đệm tới bội số 4 byte." }
+    ],
   },
 
   "ipv6": {
@@ -576,7 +584,19 @@ Object.assign(window.HEADERS, {
           { v: "29", m: "TCP-AO (bảo vệ phiên BGP)" }
         ]
       }
-    ]
+    ],
+    variants: [
+      { id: "no-options", name: "Không option", enable: [], varBytes: { options: 0 }, set: { "data-offset": "5" }, bytes: 20,
+        note: "Segment không dùng option, vd. segment RST, hoặc segment dữ liệu/ACK trên Windows (mặc định tắt Timestamps)." },
+      { id: "mss-only", name: "Chỉ MSS", enable: [], varBytes: { options: 4 }, set: { "data-offset": "6" }, bytes: 24,
+        note: "SYN chỉ thông báo MSS, gặp ở thiết bị nhúng hoặc stack TCP tối giản." },
+      { id: "ack-timestamps", name: "ACK + Timestamps", enable: [], varBytes: { options: 12 }, set: { "data-offset": "8" }, bytes: 32,
+        note: "NOP 1 + NOP 1 + Timestamps 10 = 12 byte option; phổ biến trên Linux cho segment ACK/dữ liệu sau handshake." },
+      { id: "syn-linux", name: "SYN điển hình Linux", enable: [], varBytes: { options: 20 }, set: { "data-offset": "10" }, bytes: 40,
+        note: "MSS 4 + SACK-permitted 2 + Timestamps 10 + NOP 1 + Window Scale 3 = 20 byte; gặp ở SYN của Linux." },
+      { id: "max-options", name: "Option tối đa", enable: [], varBytes: { options: 40 }, set: { "data-offset": "15" }, bytes: 60,
+        note: "Giới hạn 40 byte option (Data Offset = 15); hiếm gặp, vd. SACK 4 block (2 + 4×8 = 34 byte, đệm NOP lên 36) hoặc SACK 3 block + Timestamps." }
+    ],
   },
 
   "udp": {

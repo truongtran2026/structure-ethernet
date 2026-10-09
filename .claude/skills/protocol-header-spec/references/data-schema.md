@@ -33,9 +33,29 @@ Thứ tự nạp trong `index.html`: `data/headers-*.js` → `data/stacks.js` �
   detail: "…",                     // 2–5 câu tiếng Việt: hoạt động, lưu ý khi học
   fixedBytes: 4,                   // kích thước khi KHÔNG bật trường optional nào (validator kiểm tra)
   maxBytes: 16,                    // (tuỳ chọn) kích thước khi bật mọi optional / option dài nhất
-  fields: [ /* Node[] */ ]
+  fields: [ /* Node[] */ ],
+  variants: [ /* Variant[] — BẮT BUỘC khi header có field optional hoặc varBytes (trừ header `payload`) */ ]
 }
 ```
+
+### Variant (các cấu hình thường gặp của header, kèm kích thước)
+
+Giúp người học thấy ngay "không option 4B, có Key 8B, Key + Sequence 12B…" và bấm để áp dụng.
+
+```js
+{
+  id: "key-seq",                   // duy nhất trong header
+  name: "Key + Sequence",          // tên ngắn hiển thị trên nút
+  enable: ["key", "seq"],          // id node optional BẬT; mọi node optional khác coi như TẮT
+  varBytes: { options: 0 },        // (tuỳ chọn) độ dài field varBytes; thiếu → default ?? min
+  set: { k: "1", s: "1" },         // (tuỳ chọn) giá trị field đặc trưng của biến thể (cờ, IHL, Data Offset…)
+  bytes: 12,                       // kích thước header — validator tự tính lại và so khớp
+  note: "…"                        // tiếng Việt: khi nào gặp biến thể này
+}
+```
+
+Liệt kê biến thể theo kích thước tăng dần; biến thể đầu là cấu hình tối thiểu.
+Khi StackNode có `enable`/`varBytes` khớp đúng một biến thể, UI coi đó là biến thể đang chọn.
 
 ## 3. Node trong header: Field hoặc Group
 
@@ -126,5 +146,8 @@ Riêng octet đầu MAC: viết theo thứ tự hiển thị chuẩn (bit 7..0 c
 5. Field có đúng một trong hai: `bits` (int > 0) hoặc `varBytes`.
 6. `desc`/`summary` không rỗng; `set`/`enable`/`varBytes` của StackNode trỏ đến id có thật.
 7. `layer` thuộc danh sách hợp lệ.
+8. Header có field optional/varBytes (trừ `payload`) phải có `variants`. Mỗi variant: `id` duy nhất,
+   `enable` chỉ chứa node optional, `varBytes` trỏ field varBytes và nằm trong [min, max],
+   `set` trỏ field có thật, `bytes` = kích thước tự tính.
 
 Chạy: `node .claude/skills/protocol-header-spec/scripts/validate-data.mjs .`

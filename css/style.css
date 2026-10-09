@@ -390,3 +390,20 @@ button { font: inherit; color: inherit; }
   .node-body { padding-left: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---- biến thể header ---- */
+.badge--range { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); font-family: var(--mono); }
+.badge--var { background: var(--add-bg); color: var(--add); }
+.var-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 10px; }
+.var-bar-label { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-right: 2px; }
+.var-chip { font: inherit; font-size: .82rem; padding: 3px 11px; border-radius: 99px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.var-chip:hover { background: var(--surface-2); }
+.var-chip.is-on { background: var(--add-bg); border-color: var(--add); color: var(--add); font-weight: 600; cursor: default; }
+.var-chip.is-custom { border-style: dashed; }
+.var-chip-sz { font-family: var(--mono); opacity: .8; }
+.var-table .var-row { cursor: pointer; }
+.var-table .var-row:hover td { background: var(--surface-2); }
+.var-table .var-row.is-active td { background: var(--add-bg); }
+.var-table code { margin-right: 4px; white-space: nowrap; }
+.var-hint { margin: 0 0 6px; font-size: .84rem; }
+@media (max-width: 600px) { .var-chip { padding: 5px 11px; } }
