@@ -27,6 +27,9 @@
       <span class="brand-text">Cấu trúc Header Ethernet<small>Học từng header, từng bit</small></span>
     </a>
     <button type="button" id="theme-btn" class="btn-ghost theme-btn">◐ Tự động</button>
+    <!-- Chỉ có ý nghĩa khi chạy trên Vercel (middleware.js); mở bằng file:// thì ẩn. -->
+    <a id="logout-btn" class="btn-ghost logout-btn" href="/logout" hidden>Đăng xuất</a>
+    <script>if (location.protocol !== "file:") document.getElementById("logout-btn").hidden = false;</script>
   </header>
 
   <div id="boot" class="boot">Đang khởi động… Nếu dòng này không biến mất, kiểm tra <code>js/app.js</code> và mở Console (F12).</div>
