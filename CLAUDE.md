@@ -18,4 +18,5 @@
 | 2026-10-09 | Ghi cách gọi agent qua general-purpose khi agent chưa được nạp | ethernet-header-orchestrator | Agent tạo trong phiên chỉ được nạp ở phiên sau |
 | 2026-10-09 | Thêm `Header.variants` vào schema; validator tự tính bytes từng biến thể và bắt buộc variants cho header có optional/varBytes | protocol-header-spec | Người dùng cần thấy "GRE 4/8/12/16 B" theo cấu hình |
 | 2026-10-09 | Bỏ stack `gre-key-seq`; thêm quy tắc "Stack hay biến thể?" | protocol-header-spec, data | Trùng với biến thể Key + Sequence của GRE |
+| 2026-10-09 | Gộp `mpls-l2vpn-vpws` + `mpls-vpls` thành `mpls-l2vpn` | data, catalog | Cùng chuỗi header trên dây; khác biệt control plane để trong `detail` |
 | 2026-10-09 | Thêm `effort` cho 4 agent; frontend-dev mặc định sonnet; bảng chọn model theo loại việc | agents, orchestrator | Tối ưu token: lần chạy đầu ~1/3 token Opus dùng cho việc sửa theo danh sách/cơ học |

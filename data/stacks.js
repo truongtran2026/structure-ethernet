@@ -303,17 +303,21 @@ window.STACKS = window.STACKS || [];
       ],
     },
     {
-      id: "mpls-l2vpn-vpws",
-      name: "MPLS L2VPN VPWS (EoMPLS)",
+      id: "mpls-l2vpn",
+      name: "MPLS L2VPN (VPWS / VPLS)",
       category: "MPLS & VPN",
       compareTo: "eth2-ipv4",
-      summary: "Pseudowire điểm–điểm: nhãn transport + nhãn PW + Control Word, bên trong là nguyên khung Ethernet khách hàng.",
+      summary: "Pseudowire mang nguyên khung Ethernet khách hàng: nhãn transport + nhãn PW + Control Word. VPWS (điểm–điểm) và VPLS (đa điểm) dùng chung khuôn dạng này.",
       detail:
         "So với Ethernet II + IPv4, thêm nhãn transport, nhãn PW (S = 1) và Control Word 4 byte, sau đó là nguyên khung Ethernet của khách hàng " +
         "(MAC, VLAN tag, EtherType, IPv4) — thêm 30 byte: Ethernet lõi 14 + 8 byte nhãn + 4 byte CW, cộng 4 byte VLAN tag vốn có của khung khách (khung khách được mang nguyên vẹn). " +
-        "PE chỉ ánh xạ attachment circuit (cổng/VLAN) ↔ pseudowire, không học MAC và không đọc IP khách. " +
-        "Control Word (nibble đầu 0000) tránh việc LSR làm ECMP nhầm khung Ethernet thành gói IP. " +
-        "Khung Ethernet bên trong không có FCS riêng — chỉ có FCS của frame ngoài.",
+        "Control Word (nibble đầu 0000) tránh việc LSR làm ECMP nhầm khung Ethernet thành gói IP; nó là tuỳ chọn, thoả thuận khi dựng PW, nhưng nên bật. " +
+        "Khung Ethernet bên trong không có FCS riêng — chỉ có FCS của frame ngoài. " +
+        "VPWS và VPLS giống hệt nhau trên dây; khác nhau ở control plane: " +
+        "VPWS (EoMPLS, pseudowire điểm–điểm) — PE chỉ ánh xạ attachment circuit (cổng/VLAN) ↔ một pseudowire, không học MAC và không đọc IP khách. " +
+        "VPLS (đa điểm) — mỗi PE có một VSI (switch ảo) học MAC nguồn của khung bên trong và gắn với PW nhận được; các PE nối full mesh pseudowire " +
+        "(LDP RFC 4762 hoặc BGP RFC 4761); split horizon: khung nhận từ một PW lõi không chuyển sang PW lõi khác (thay STP chống loop); " +
+        "broadcast/unknown unicast được nhân bản ra mọi PW.",
       tree: [
         added(ethII("Ethernet II header (lõi MPLS)", "0x8847", "MAC giữa hai router kề nhau trong lõi.", "0x8847 = MPLS unicast.")),
         {
@@ -322,56 +326,18 @@ window.STACKS = window.STACKS || [];
           note: "Nhãn transport + nhãn pseudowire.",
           children: [
             { header: "mpls-label", label: "Transport label (outer)", set: { label: "24001", s: "0", ttl: "254" }, note: "Đưa gói tới PE đầu kia; S = 0." },
-            { header: "mpls-label", label: "PW label (inner)", set: { label: "299776", s: "1", ttl: "255" }, note: "Nhãn pseudowire do LDP (targeted) cấp; xác định attachment circuit ở PE đích. S = 1." },
+            { header: "mpls-label", label: "PW label (inner)", set: { label: "299776", s: "1", ttl: "255" }, note: "Nhãn pseudowire do PE đích cấp (LDP targeted hoặc BGP). VPWS: xác định attachment circuit ra. VPLS: xác định VSI và PW nguồn — PE đích học MAC nguồn gắn với PW này. S = 1." },
           ],
         },
-        { added: true, header: "pw-cw", set: { seq: "0" }, note: "Control Word 4 byte; Sequence = 0 nghĩa là không dùng sequencing." },
+        { added: true, header: "pw-cw", set: { seq: "0" }, note: "Control Word 4 byte (tuỳ chọn, thoả thuận khi dựng PW); Sequence = 0 nghĩa là không dùng sequencing." },
         {
           group: "Inner Ethernet frame (khách hàng)",
-          note: NO_FCS,
+          note: NO_FCS + " Với VPLS, MAC nguồn của khung này là thứ VSI học.",
           children: [
-            { header: "eth-mac", label: "MAC khách hàng", note: "MAC gốc của thiết bị khách hàng, PE không đổi." },
-            { header: "vlan-8021q", set: { tpid: "0x8100", vid: "100" }, note: "VLAN tag của khách (tuỳ chế độ raw/tagged có thể bị bỏ)." },
+            { header: "eth-mac", label: "MAC khách hàng", note: "MAC gốc của thiết bị khách hàng, PE không đổi. VPLS: VSI học MAC nguồn ↔ PW và tra MAC đích để chọn PW/AC ra." },
+            { header: "vlan-8021q", set: { tpid: "0x8100", vid: "100" }, note: "VLAN tag của khách (chế độ tagged; ở chế độ raw có thể bị bỏ)." },
             { header: "ethertype", set: { type: "0x0800" } },
             { header: "ipv4", set: { protocol: "253", src: "192.168.100.10", dst: "192.168.100.20" } },
-            payload(),
-          ],
-        },
-        fcs("FCS của frame ngoài cùng trên link lõi MPLS."),
-      ],
-    },
-    {
-      id: "mpls-vpls",
-      name: "MPLS L2VPN VPLS",
-      category: "MPLS & VPN",
-      compareTo: "eth2-ipv4",
-      summary: "Cùng khuôn dạng với VPWS nhưng PE hoạt động như switch ảo, học MAC và nối nhiều site qua lưới pseudowire.",
-      detail:
-        "Trên dây VPLS giống hệt VPWS: Ethernet lõi (0x8847) · nhãn transport · nhãn PW · Control Word (tuỳ chọn) · khung Ethernet khách. " +
-        "Khác biệt nằm ở control plane: mỗi PE có một VSI (virtual switch) học MAC nguồn của khung bên trong và gắn với PW nhận được, " +
-        "các PE nối full mesh pseudowire (LDP RFC 4762 hoặc BGP RFC 4761). " +
-        "Split horizon: khung nhận từ một PW lõi không bao giờ được chuyển sang PW lõi khác, thay cho STP để chống loop. " +
-        "Khung broadcast/unknown unicast bị nhân bản ra mọi PW (ingress replication).",
-      tree: [
-        added(ethII("Ethernet II header (lõi MPLS)", "0x8847", "MAC giữa hai router kề nhau trong lõi.", "0x8847 = MPLS unicast.")),
-        {
-          added: true,
-          group: "MPLS label stack",
-          note: "Nhãn transport + nhãn PW của VSI.",
-          children: [
-            { header: "mpls-label", label: "Transport label (outer)", set: { label: "24001", s: "0", ttl: "254" }, note: "Tới PE đích; S = 0." },
-            { header: "mpls-label", label: "PW label (VSI)", set: { label: "299808", s: "1", ttl: "255" }, note: "Xác định VSI và PW nguồn — PE đích học MAC nguồn gắn với PW này. S = 1." },
-          ],
-        },
-        { added: true, header: "pw-cw", set: { seq: "0" }, note: "Control Word tuỳ chọn với VPLS (thỏa thuận qua LDP); nhiều triển khai bật để tránh lỗi ECMP." },
-        {
-          group: "Inner Ethernet frame (khách hàng)",
-          note: NO_FCS + " MAC nguồn của khung này là thứ VSI học.",
-          children: [
-            { header: "eth-mac", label: "MAC khách hàng", note: "VSI học MAC nguồn ↔ PW; tra MAC đích để chọn PW/AC ra." },
-            { header: "vlan-8021q", set: { tpid: "0x8100", vid: "100" }, note: "VLAN tag của khách (tagged mode)." },
-            { header: "ethertype", set: { type: "0x0800" } },
-            { header: "ipv4", set: { protocol: "253", src: "192.168.100.10", dst: "192.168.100.30" } },
             payload(),
           ],
         },

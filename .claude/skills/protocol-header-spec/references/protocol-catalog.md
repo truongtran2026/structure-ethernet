@@ -48,8 +48,7 @@ dạng `varBytes` (min 0, max 40). GRE optional: group `checksum-group` (Checksu
 | VLAN | `pbb` | Backbone{eth-mac (B-DA/B-SA), vlan-8021ad (B-Tag), pbb-itag} · Customer frame{eth-mac, vlan-8021ad?, vlan-8021q, ethertype, ipv4, payload} · fcs |
 | MPLS & VPN | `mpls-ipv4` | Ethernet{eth-mac, ethertype=0x8847} · mpls-label(S=1) · ipv4 · payload · fcs |
 | MPLS & VPN | `mpls-l3vpn` | Ethernet{…0x8847} · Label stack{transport label S=0, VPN label S=1} · ipv4 · payload · fcs |
-| MPLS & VPN | `mpls-l2vpn-vpws` | Ethernet{…0x8847} · Label stack{transport, PW label S=1} · pw-cw · Inner Ethernet{eth-mac, vlan-8021q, ethertype, ipv4, payload} · fcs |
-| MPLS & VPN | `mpls-vpls` | Như VPWS; nhấn mạnh học MAC, PW mesh, split horizon trong `detail` |
+| MPLS & VPN | `mpls-l2vpn` | Ethernet{…0x8847} · Label stack{transport, PW label S=1} · pw-cw · Inner Ethernet{eth-mac, vlan-8021q, ethertype, ipv4, payload} · fcs. Gộp VPWS + VPLS (cùng khuôn dạng trên dây; khác control plane ghi trong `detail`) |
 | Tunnel & Overlay | `gre-ipv4` | Ethernet · Outer IPv4(proto=47) · gre(proto=0x0800) · Inner IPv4 · payload · fcs |
 | (đã bỏ) | `gre-key-seq` | Trùng với biến thể "Key + Sequence" của `gre` trong `gre-ipv4` — không tạo stack riêng cho biến thể của một header |
 | Tunnel & Overlay | `gretap` | Ethernet · Outer IPv4 · gre(proto=0x6558) · Inner Ethernet{eth-mac, ethertype, ipv4, payload} · fcs |
