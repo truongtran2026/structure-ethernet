@@ -273,6 +273,7 @@
         stat('Payload', num(t.payloadBytes) + ' byte', 'chỉnh độ dài ở panel chi tiết') +
         stat('Số header', String(t.headerCount), 'không tính payload') +
       '</div>' +
+      renderVariantCard() +
       (st.detail ? '<details class="stack-detail"><summary>Giải thích stack này</summary><p>' + esc(st.detail) + '</p>' +
         (base ? '<p class="muted">So sánh với <a href="#' + attr(base.id) + '">' + esc(base.name) + '</a>: header được thêm có nhãn <span class="badge badge--add">+ thêm</span>.</p>' : '') +
         '</details>' : '') +
@@ -421,15 +422,80 @@
       }).join('') + '</tbody></table></div>';
   }
 
-  function applyVariant(hp, vid) {
+  /** Header (kể cả trong sgroup) có biến thể, theo thứ tự xuất hiện. */
+  function variantHeaders() {
+    var out = [];
+    (function walk(list) {
+      list.forEach(function (n) {
+        if (n.kind === 'sgroup') walk(n.children);
+        else if (n.kind === 'header' && !n.missing && n.variants && n.variants.length) out.push(n);
+      });
+    })(app.model.nodes);
+    return out;
+  }
+
+  /** Card nổi bật: mọi header có biến thể, chip bấm được ngay cả khi header đang thu gọn. */
+  function renderVariantCard() {
+    var hs = variantHeaders();
+    if (!hs.length) return '';
+    var rows = hs.map(function (n) {
+      var custom = n.activeVariantId == null;
+      var name = (n.short || n.name) + (n.label ? ' · ' + n.label : '');
+      var chips = n.variants.map(function (v) {
+        var on = v.id === n.activeVariantId;
+        return '<button type="button" class="var-chip' + (on ? ' is-on' : '') + '" data-action="variant" data-reveal="1" data-hp="' + attr(n.path) +
+          '" data-vid="' + attr(v.id) + '" aria-pressed="' + on + '" title="' + attr(v.note || '') + '">' + esc(v.name) +
+          ' <span class="var-chip-sz">· ' + esc(variantBytesTxt(v)) + '</span></button>';
+      }).join('') + (custom ? '<span class="var-chip is-on is-custom" title="Cấu hình hiện tại không trùng biến thể nào">Tuỳ chỉnh <span class="var-chip-sz">· ' + esc(num(n.bits / 8)) + ' B</span></span>' : '');
+      return '<div class="vc-row" data-hl="' + attr(n.path) + '"><div class="vc-head"><b class="vc-name">' + esc(name) + '</b>' +
+        '<span class="vc-size">hiện tại <b>' + esc(fmtBytes(n.bits)) + '</b></span></div>' +
+        '<div class="var-bar vc-chips" role="group" aria-label="Biến thể của ' + attr(n.name) + '">' + chips + '</div></div>';
+    }).join('');
+    return '<section class="card var-card" aria-label="Biến thể kích thước header">' +
+      '<div class="section-title"><h2>Biến thể kích thước header</h2></div>' +
+      '<p class="vc-lead">Bấm một biến thể để xem header thay đổi thế nào — các bit cờ/IHL/Data Offset và kích thước frame cập nhật theo.</p>' +
+      rows + '</section>';
+  }
+
+  /** Mở header + các nhóm chứa field mà variant.set chạm tới để thấy từng bit (vd C, K, S). */
+  function revealVariant(hp, v) {
+    var hn = app.model.index[hp];
+    if (!hn) return;
+    openAncestors(hn);
+    setOpen(hn, true);
+    Object.keys(v.set || {}).forEach(function (k) {
+      var f = app.model.index[hp + '/' + k];
+      if (!f) return;
+      var p = app.model.index[f.parentPath];
+      while (p && p.path !== hp) { setOpen(p, true); p = app.model.index[p.parentPath]; }
+    });
+  }
+
+  function flashHeader(hp) {
+    var els = document.querySelectorAll('.fm-seg[data-hl="' + cssEsc(hp) + '"], #tree .row--header[data-hl="' + cssEsc(hp) + '"]');
+    Array.prototype.forEach.call(els, function (e) { e.classList.add('is-flash'); });
+    setTimeout(function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.is-flash'), function (e) { e.classList.remove('is-flash'); });
+    }, 1600);
+  }
+
+  function applyVariant(hp, vid, reveal) {
     var hn = app.model.index[hp];
     var v = hn && variantOf(hn, vid);
     if (!v) return;
     var vs = EthViz.variantState(hn.header, v.def);
     app.state.enabled[hp] = vs.enabled;
     app.state.varBytes[hp] = vs.varBytes;
+    if (reveal) revealVariant(hp, v);
     saveState();
     render();
+    if (reveal) {
+      var wrap = document.querySelector('#tree .node--header .row--header[data-path="' + cssEsc(hp) + '"]');
+      var bm = wrap && wrap.parentNode.querySelector('.bm-wrap');
+      var target = bm || wrap;
+      if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      flashHeader(hp);
+    }
   }
 
   function renderField(n, level) {
@@ -789,7 +855,7 @@
       app.state = defaultState(); saveState(); render(); return;
     }
     if ((btn = t.closest('[data-action="variant"]'))) {
-      e.preventDefault(); applyVariant(btn.getAttribute('data-hp'), btn.getAttribute('data-vid')); return;
+      e.preventDefault(); applyVariant(btn.getAttribute('data-hp'), btn.getAttribute('data-vid'), btn.hasAttribute('data-reveal')); return;
     }
     if ((btn = t.closest('[data-action="opt"]'))) {
       e.preventDefault(); e.stopPropagation();

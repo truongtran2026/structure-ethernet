@@ -408,3 +408,20 @@ button { font: inherit; color: inherit; }
 .var-table code { margin-right: 4px; white-space: nowrap; }
 .var-hint { margin: 0 0 6px; font-size: .84rem; }
 @media (max-width: 600px) { .var-chip { padding: 5px 11px; } }
+
+/* ---- card biến thể header ---- */
+.var-card { margin: 12px 0; border-left: 4px solid var(--add); }
+.vc-lead { margin: 2px 0 10px; font-size: .88rem; color: var(--muted); }
+.vc-row { padding: 8px 0; border-top: 1px dashed var(--border); }
+.vc-row:first-of-type { border-top: 0; }
+.vc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.vc-name { font-size: .95rem; }
+.vc-size { font-size: .82rem; color: var(--muted); }
+.vc-size b { color: var(--add); font-family: var(--mono); font-size: .95rem; }
+.vc-chips { margin: 6px 0 0; }
+.var-card .var-chip { font-size: .86rem; padding: 4px 12px; }
+.var-card .var-chip.is-on { cursor: default; }
+@keyframes ev-flash { 0%, 60% { box-shadow: 0 0 0 4px var(--hl); background-color: color-mix(in srgb, var(--hl) 45%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.is-flash { animation: ev-flash 1.5s ease-out; }
+@media (prefers-reduced-motion: reduce) { .is-flash { animation: none; outline: 3px solid var(--hl); } }
+@media (max-width: 600px) { .var-card .var-chip { padding: 6px 12px; } }
