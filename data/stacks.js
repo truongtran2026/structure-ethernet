@@ -374,6 +374,88 @@ window.STACKS = window.STACKS || [];
       ],
     },
     {
+      id: "gre-ipsec-transport",
+      name: "GRE over IPsec (transport mode)",
+      category: "Tunnel & Overlay",
+      compareTo: "gre-ipv4",
+      summary: "Gói GRE được ESP bảo vệ ở transport mode: IPv4 ngoài đổi Protocol 47 → 50, GRE + gói gốc nằm trong vùng mã hoá.",
+      detail:
+        "So với GRE over IPv4, thêm ESP header (SPI + Sequence + IV), ESP trailer (Padding + Pad Length + Next Header = 47) và ICV; IPv4 ngoài giữ nguyên địa chỉ nhưng Protocol đổi từ 47 thành 50 (ESP). " +
+        "Với AES-GCM-128 mặc định, overhead thêm 36 byte (ESP 8 + IV 8 + padding 2 + 2 + ICV 16), tổng cộng 60 byte so với gói IP gốc (cùng IPv4 ngoài 20 + GRE 4); padding dao động 0–3 byte theo độ dài gói. " +
+        "Transport mode chỉ chèn ESP sau header IP sẵn có, còn tunnel mode bọc thêm một IPv4 mới; vì GRE đã có IP ngoài mang địa chỉ hai đầu tunnel nên transport mode tiết kiệm 20 byte và là cấu hình phổ biến cho GRE over IPsec (DMVPN, crypto map/IPsec profile). " +
+        "Do overhead lớn, thường hạ MTU tunnel (vd. ip mtu 1400) và chỉnh MSS (ip tcp adjust-mss 1360) để tránh phân mảnh. " +
+        "Nếu có NAT trên đường đi, NAT-T chèn thêm UDP 4500 (8 byte) giữa IPv4 ngoài và ESP.",
+      roleNote: "IPv4 ngoài (proto 50) chở gói tới peer IPsec; ESP header/trailer/ICV và GRE là lớp đóng gói (bảo mật + tunnel); Inner IPv4 + payload là hành khách — tất cả từ GRE trở vào đều bị mã hoá.",
+      tree: [
+        ethII("Ethernet II header", "0x0800", "MAC của link vật lý underlay.", "0x0800 = IPv4 (IPv4 ngoài)."),
+        { header: "ipv4", label: "Outer IPv4 (tunnel + IPsec)", role: "delivery", set: { protocol: "50", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" },
+          note: "Chính là Outer IPv4 của GRE (không thêm header mới), nhưng Protocol đổi 47 → 50 vì header kế tiếp giờ là ESP. Địa chỉ hai đầu tunnel GRE cũng là hai peer IPsec." },
+        {
+          group: "ESP – vùng xác thực (ICV bảo vệ)",
+          note: "Mọi thứ từ SPI tới Next Header đều được ICV xác thực; IPv4 ngoài không nằm trong vùng này.",
+          children: [
+            { added: true, header: "esp", role: "encap", set: { spi: "0x00001001", seq: "1" }, varBytes: { iv: 8 },
+              note: "SPI chọn SA, Sequence chống phát lại; IV 8 byte cho AES-GCM-128. Ba trường này gửi rõ, không mã hoá." },
+            {
+              group: "Vùng mã hoá (ESP payload)",
+              note: "Bị mã hoá: người quan sát giữa đường chỉ thấy IPv4 ngoài + SPI/Sequence, không biết bên trong là GRE. Độ dài cần căn: GRE 4 + IPv4 20 + payload 64 + 2 = 90 → padding 2 (căn 4 byte cho GCM).",
+              children: [
+                { header: "gre", role: "encap", set: { c: "0", k: "0", s: "0", "protocol-type": "0x0800" }, note: "GRE nằm nguyên vẹn trong vùng mã hoá; Protocol Type 0x0800 → bên trong là IPv4." },
+                { header: "ipv4", label: "Inner IPv4 (gói gốc)", role: "passenger", set: { protocol: "253", src: "10.0.1.10", dst: "10.0.2.20", ttl: "63" }, note: "Gói IP gốc giữa hai mạng LAN, được mã hoá." },
+                payload(),
+                { added: true, header: "esp-trailer", role: "encap", set: { "pad-length": "2", "next-header": "47" }, varBytes: { padding: 2 },
+                  note: "Next Header = 47 → sau khi giải mã, phần dữ liệu là GRE. Padding 2 byte để 90 + 2 = 92 chia hết 4 (AES-GCM)." },
+              ],
+            },
+          ],
+        },
+        { added: true, header: "esp-icv", role: "encap", varBytes: { icv: 16 }, note: "Authentication tag 16 byte của AES-GCM-128; không mã hoá, đặt sau vùng xác thực." },
+        fcs(),
+      ],
+    },
+    {
+      id: "gre-ipsec-tunnel",
+      name: "GRE over IPsec (tunnel mode)",
+      category: "Tunnel & Overlay",
+      compareTo: "gre-ipv4",
+      summary: "Cả gói GRE (gồm IPv4 Protocol 47 của nó) được ESP mã hoá rồi bọc thêm một IPv4 mới Protocol 50.",
+      detail:
+        "So với GRE over IPv4, thêm New IPv4 (20 byte, Protocol 50), ESP header + IV, ESP trailer (Next Header = 4) và ICV; IPv4 ngoài cũ của GRE (Protocol 47) giờ nằm trong vùng mã hoá. " +
+        "Với AES-GCM-128 mặc định, overhead thêm 56 byte (IPv4 mới 20 + ESP 8 + IV 8 + padding 2 + 2 + ICV 16), tổng 80 byte so với gói IP gốc. " +
+        "Khác transport mode ở chỗ ESP bảo vệ cả header IP của GRE; nhưng thường địa chỉ IPv4 mới trùng với IPv4 của GRE (cùng hai router), nên 20 byte đó gần như thừa — vì vậy với GRE người ta ưu tiên transport mode. " +
+        "Tunnel mode vẫn gặp khi peer IPsec khác endpoint GRE hoặc thiết bị chỉ hỗ trợ tunnel mode; cần hạ MTU/MSS nhiều hơn (vd. ip mtu 1400, ip tcp adjust-mss 1360 chỉ đủ an toàn với AES-GCM; với AES-CBC + HMAC-SHA-256-128 gói 1400 B ở tunnel mode thành đúng 1500 B, thêm NAT-T (+8) sẽ vượt 1500 nên cần hạ MTU thêm). " +
+        "Nếu có NAT trên đường đi, NAT-T chèn thêm UDP 4500 (8 byte) giữa IPv4 mới và ESP.",
+      roleNote: "New IPv4 (proto 50) chở gói tới peer IPsec; ESP là lớp bảo mật; bên trong, IPv4 proto 47 lại là delivery của GRE, GRE là encap, Inner IPv4 + payload là hành khách.",
+      tree: [
+        ethII("Ethernet II header", "0x0800", "MAC của link vật lý underlay.", "0x0800 = IPv4 (IPv4 mới của IPsec)."),
+        { added: true, header: "ipv4", label: "New IPv4 (IPsec tunnel)", role: "delivery", set: { protocol: "50", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" },
+          note: "Header IPv4 mới do IPsec tunnel mode thêm, Protocol = 50 → ESP. Ở đây địa chỉ trùng với IPv4 của GRE bên trong (cùng hai router) — đó là 20 byte dư so với transport mode." },
+        {
+          group: "ESP – vùng xác thực (ICV bảo vệ)",
+          note: "Mọi thứ từ SPI tới Next Header đều được ICV xác thực; New IPv4 không nằm trong vùng này.",
+          children: [
+            { added: true, header: "esp", role: "encap", set: { spi: "0x00001001", seq: "1" }, varBytes: { iv: 8 },
+              note: "SPI chọn SA, Sequence chống phát lại; IV 8 byte cho AES-GCM-128. Ba trường này gửi rõ, không mã hoá." },
+            {
+              group: "Vùng mã hoá (ESP payload)",
+              note: "Bị mã hoá: cả gói GRE nguyên vẹn (IPv4 proto 47 + GRE + gói gốc). Độ dài cần căn: 20 + 4 + 20 + 64 + 2 = 110 → padding 2 (căn 4 byte cho GCM).",
+              children: [
+                { header: "ipv4", label: "GRE IPv4 (proto 47)", role: "delivery", set: { protocol: "47", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" },
+                  note: "Chính là Outer IPv4 của GRE over IPv4 (nên không đánh dấu \"thêm\"), nay nằm trong vùng mã hoá. Vẫn là delivery của GRE: Protocol = 47 → GRE." },
+                { header: "gre", role: "encap", set: { c: "0", k: "0", s: "0", "protocol-type": "0x0800" }, note: "Protocol Type 0x0800 → bên trong là IPv4." },
+                { header: "ipv4", label: "Inner IPv4 (gói gốc)", role: "passenger", set: { protocol: "253", src: "10.0.1.10", dst: "10.0.2.20", ttl: "63" }, note: "Gói IP gốc giữa hai mạng LAN." },
+                payload(),
+                { added: true, header: "esp-trailer", role: "encap", set: { "pad-length": "2", "next-header": "4" }, varBytes: { padding: 2 },
+                  note: "Next Header = 4 (IPv4) → sau khi giải mã là cả một gói IPv4 (tunnel mode). Padding 2 byte để 110 + 2 = 112 chia hết 4 (AES-GCM)." },
+              ],
+            },
+          ],
+        },
+        { added: true, header: "esp-icv", role: "encap", varBytes: { icv: 16 }, note: "Authentication tag 16 byte của AES-GCM-128; không mã hoá, đặt sau vùng xác thực." },
+        fcs(),
+      ],
+    },
+    {
       id: "gretap",
       name: "GRETAP (Ethernet over GRE)",
       category: "Tunnel & Overlay",

@@ -1,5 +1,5 @@
-// Header nhóm tunnel / MPLS: mpls-label, pw-cw, gre, vxlan.
-// Nguồn: RFC 3032, RFC 5462, RFC 4385, RFC 4448, RFC 2784, RFC 2890, RFC 7348.
+// Header nhóm tunnel / MPLS / IPsec: mpls-label, pw-cw, gre, vxlan, esp, esp-trailer, esp-icv.
+// Nguồn: RFC 3032, RFC 5462, RFC 4385, RFC 4448, RFC 2784, RFC 2890, RFC 7348, RFC 4303, RFC 4106, RFC 3602, RFC 2404, RFC 4868.
 window.HEADERS = window.HEADERS || {};
 Object.assign(window.HEADERS, {
   "mpls-label": {
@@ -360,6 +360,165 @@ Object.assign(window.HEADERS, {
         reserved: true,
         desc: "Dự trữ, đặt 0.",
       },
+    ],
+  },
+
+  // ───────────── IPsec ESP (RFC 4303): header, trailer, ICV ─────────────
+  esp: {
+    id: "esp",
+    name: "Encapsulating Security Payload (ESP) Header",
+    short: "ESP",
+    layer: "tunnel",
+    standard: "RFC 4303 §2.1–2.3, RFC 4106 (AES-GCM), RFC 3602 (AES-CBC)",
+    summary: "Phần đầu của gói ESP (IP Protocol 50): SPI chọn Security Association, Sequence Number chống phát lại, kèm IV của thuật toán mã hoá.",
+    detail:
+      "ESP bọc phần dữ liệu cần bảo vệ thành ba khối: header (SPI + Sequence Number + IV), phần đã mã hoá (payload + ESP trailer) và ICV ở cuối. " +
+      "SPI + Sequence Number không mã hoá (bên nhận cần chúng để tìm khoá) nhưng nằm trong vùng ICV xác thực. " +
+      "Theo RFC 4303, IV thuộc đầu trường Payload Data và cũng KHÔNG được mã hoá; ở đây tách IV thành field riêng để thấy rõ kích thước của nó theo từng thuật toán. " +
+      "Không có trường độ dài hay \"next protocol\" ở đầu — giao thức bên trong chỉ biết sau khi giải mã, qua Next Header trong trailer.",
+    fixedBytes: 8,
+    maxBytes: 24,
+    fields: [
+      {
+        id: "spi",
+        name: "Security Parameters Index",
+        abbr: "SPI",
+        bits: 32,
+        desc:
+          "Số định danh Security Association (SA) do bên nhận chọn khi IKE thương lượng; bên nhận dùng SPI (kèm IP đích) để tìm khoá và thuật toán giải mã. " +
+          "Mỗi chiều của tunnel có SPI riêng. Giá trị 1–255 do IANA dự trữ, 0 không xuất hiện trên dây.",
+        values: [
+          { v: "0", m: "Dự trữ – chỉ dùng nội bộ, không gửi trên dây" },
+          { v: "1–255", m: "IANA dự trữ" },
+        ],
+        example: "0x00001001",
+      },
+      {
+        id: "seq",
+        name: "Sequence Number",
+        bits: 32,
+        desc:
+          "Bộ đếm tăng 1 cho mỗi gói gửi trên SA, bắt đầu từ 1; bên nhận dùng cửa sổ chống phát lại (anti-replay window) để loại gói trùng/cũ. " +
+          "Với Extended Sequence Number (ESN, 64 bit) chỉ 32 bit thấp được gửi trên dây, 32 bit cao vẫn đưa vào tính ICV.",
+        example: "1",
+      },
+      {
+        id: "iv",
+        name: "Initialization Vector",
+        abbr: "IV",
+        varBytes: { min: 0, max: 16, default: 8 },
+        desc:
+          "Giá trị khởi tạo cho thuật toán mã hoá, gửi rõ (không mã hoá) ở đầu Payload Data theo RFC 4303; tách riêng ở đây để thấy kích thước. " +
+          "Độ dài do thuật toán quyết định: AES-GCM/ChaCha20-Poly1305 dùng 8 byte, AES-CBC dùng 16 byte (bằng một block), ENCR_NULL không có IV.",
+        example: "8 byte (AES-GCM)",
+      },
+    ],
+    variants: [
+      { id: "null", name: "ENCR_NULL (chỉ xác thực)", enable: [], varBytes: { iv: 0 }, bytes: 8,
+        note: "Không mã hoá, chỉ xác thực (vd. ENCR_NULL + HMAC-SHA-256, RFC 2410): không có IV; payload vẫn đọc được bằng Wireshark." },
+      { id: "aes-gcm", name: "AES-GCM-128/256", enable: [], varBytes: { iv: 8 }, bytes: 16,
+        note: "AES-GCM (RFC 4106) — combined mode vừa mã hoá vừa xác thực, IV 8 byte; lựa chọn phổ biến nhất hiện nay. ChaCha20-Poly1305 (RFC 7634) cũng dùng IV 8 byte." },
+      { id: "aes-cbc", name: "AES-CBC", enable: [], varBytes: { iv: 16 }, bytes: 24,
+        note: "AES-CBC (RFC 3602): IV 16 byte = một block AES, đi kèm thuật toán xác thực riêng (HMAC-SHA1-96/HMAC-SHA-256-128)." },
+    ],
+  },
+
+  "esp-trailer": {
+    id: "esp-trailer",
+    name: "ESP Trailer",
+    short: "ESP Trl",
+    layer: "tunnel",
+    standard: "RFC 4303 §2.4–2.6",
+    summary: "Phần đuôi nằm trong vùng mã hoá của ESP: Padding + Pad Length + Next Header cho biết bên trong là giao thức gì.",
+    detail:
+      "Padding làm cho (payload + padding + 2 byte cuối) chia hết cho block size của thuật toán (AES-CBC: 16 byte), " +
+      "và trong mọi trường hợp phải để Pad Length + Next Header kết thúc thẳng hàng 4 byte (AES-GCM: căn 4 byte). " +
+      "Toàn bộ trailer bị mã hoá cùng payload (trừ khi dùng ENCR_NULL, RFC 2410) nên người quan sát không thấy Next Header — đó là lý do ESP đặt \"next protocol\" ở cuối thay vì ở đầu. " +
+      "Sau khi giải mã, bên nhận đọc Pad Length để cắt padding rồi dựa vào Next Header để giao phần còn lại cho GRE (47), IPv4 (4)…",
+    fixedBytes: 2,
+    maxBytes: 257,
+    fields: [
+      {
+        id: "padding",
+        name: "Padding",
+        varBytes: { min: 0, max: 255, default: 2 },
+        desc:
+          "0–255 byte đệm để căn theo block mã hoá (CBC: 16 byte; GCM: 4 byte) và để hai trường cuối thẳng hàng 4 byte. " +
+          "Nội dung mặc định là dãy 1, 2, 3… để bên nhận kiểm tra; có thể đệm thêm để che độ dài thật của gói.",
+        example: "01 02",
+      },
+      {
+        id: "pad-length",
+        name: "Pad Length",
+        bits: 8,
+        desc: "Số byte Padding ngay phía trước (0–255), để bên nhận cắt bỏ padding sau khi giải mã.",
+        example: "2",
+      },
+      {
+        id: "next-header",
+        name: "Next Header",
+        bits: 8,
+        desc:
+          "Giao thức của dữ liệu được bảo vệ (giá trị IP Protocol của IANA). " +
+          "Transport mode: giao thức lớp trên của gói gốc (GRE = 47, TCP = 6…); tunnel mode: 4 (cả gói IPv4) hoặc 41 (IPv6).",
+        values: [
+          { v: "4", m: "IPv4 – tunnel mode (cả gói IPv4 nằm bên trong)" },
+          { v: "41", m: "IPv6 – tunnel mode" },
+          { v: "47", m: "GRE – GRE over IPsec transport mode" },
+          { v: "6", m: "TCP (transport mode)" },
+          { v: "17", m: "UDP (transport mode)" },
+          { v: "59", m: "No Next Header – gói giả (dummy) để che lưu lượng (TFC)" },
+        ],
+        example: "47",
+      },
+    ],
+    variants: [
+      { id: "no-pad", name: "Không padding", enable: [], varBytes: { padding: 0 }, set: { "pad-length": "0" }, bytes: 2,
+        note: "Khi (payload + 2) đã chia hết cho kích thước căn chỉnh (vd. GCM với payload 90 byte → 92 chia hết 4). Ít gặp với dữ liệu ngẫu nhiên." },
+      { id: "gcm-align4", name: "GCM – căn 4 byte", enable: [], varBytes: { padding: 2 }, set: { "pad-length": "2" }, bytes: 4,
+        note: "AES-GCM chỉ yêu cầu căn 4 byte. Tính cho payload 64 byte mặc định của stack transport: GRE 4 + IPv4 20 + 64 = 88; 88 + 2 = 90 → đệm 2 thành 92 (chia hết 4). Stack tunnel: 20 + 88 + 2 = 110 → cũng đệm 2." },
+      { id: "cbc-align16", name: "CBC – căn 16 byte", enable: [], varBytes: { padding: 6 }, set: { "pad-length": "6" }, bytes: 8,
+        note: "AES-CBC yêu cầu căn theo block 16 byte. Tính cho payload 64 byte mặc định của stack transport: 88 + 2 = 90 → đệm 6 thành 96 (= 6 block). (Stack tunnel: 110 + 2 = 112 = 7 block, chỉ cần đệm 2.)" },
+    ],
+  },
+
+  "esp-icv": {
+    id: "esp-icv",
+    name: "ESP Integrity Check Value (ICV)",
+    short: "ICV",
+    layer: "tunnel",
+    standard: "RFC 4303 §2.8, RFC 2404, RFC 4868, RFC 4106",
+    summary: "Mã xác thực ở cuối gói ESP, chứng minh header ESP + phần mã hoá không bị sửa và đến từ đúng peer.",
+    detail:
+      "ICV KHÔNG bao gồm header IP ngoài (khác với AH). Với HMAC (vd. AES-CBC + HMAC), ICV tính trên SPI, Sequence Number, IV và ciphertext (gồm cả trailer); " +
+      "bên nhận kiểm ICV trước khi giải mã, nên gói giả mạo bị loại sớm mà không tốn công giải mã. " +
+      "Với AES-GCM (AEAD), AAD chỉ gồm SPI + Sequence Number (ESN nếu dùng); IV là một phần của nonce (salt 4 byte + IV 8 byte) nên được bảo vệ gián tiếp; kiểm tag và giải mã diễn ra cùng một bước (RFC 4106 §4–5). " +
+      "Độ dài phụ thuộc thuật toán: HMAC thường cắt ngắn (truncate) giá trị băm, ví dụ HMAC-SHA-256 cho 32 byte nhưng chỉ gửi 16 byte. " +
+      "ICV không bị mã hoá và không có trường độ dài — hai bên biết kích thước nhờ SA đã thương lượng.",
+    fixedBytes: 0,
+    maxBytes: 32,
+    fields: [
+      {
+        id: "icv",
+        name: "Integrity Check Value",
+        abbr: "ICV",
+        varBytes: { min: 0, max: 32, default: 16 },
+        desc:
+          "Giá trị kiểm tra toàn vẹn do thuật toán xác thực sinh ra (HMAC cắt ngắn hoặc authentication tag của AES-GCM). " +
+          "HMAC phủ SPI, Seq, IV và ciphertext (gồm trailer); GCM phủ ciphertext cộng AAD = SPI + Seq. " +
+          "Bên nhận tự tính lại và so sánh; sai một bit là bỏ gói.",
+        example: "16 byte (AES-GCM tag)",
+      },
+    ],
+    variants: [
+      { id: "none", name: "Không ICV", enable: [], varBytes: { icv: 0 }, bytes: 0,
+        note: "Chỉ mã hoá, không xác thực (vd. AES-CBC không kèm HMAC). RFC 4303 chỉ cho phép confidentiality-only ở mức MAY, nhưng RFC 8221 §4 quy định \"Encryption without authentication is not effective and MUST NOT be used\"; AUTH_NONE là MUST NOT (bảng §6) trừ khi dùng AEAD như AES-GCM — khi đó ICV chính là tag GCM. Vì vậy chỉ mang tính minh hoạ." },
+      { id: "hmac-sha1-96", name: "HMAC-SHA1-96", enable: [], varBytes: { icv: 12 }, bytes: 12,
+        note: "HMAC-SHA1-96 (RFC 2404); từng là mặc định, nay chỉ còn để tương thích thiết bị cũ. (AES-GCM cũng cho phép ICV 8/12 byte – RFC 4106 §6.)" },
+      { id: "icv-16", name: "AES-GCM / HMAC-SHA-256-128", enable: [], varBytes: { icv: 16 }, bytes: 16,
+        note: "16 byte: authentication tag của AES-GCM (RFC 4106, ICV 16 byte – loại phổ biến) hoặc HMAC-SHA-256 cắt còn 128 bit (RFC 4868) đi kèm AES-CBC. Gộp một biến thể vì cùng kích thước." },
+      { id: "hmac-sha512-256", name: "HMAC-SHA-512-256", enable: [], varBytes: { icv: 32 }, bytes: 32,
+        note: "HMAC-SHA-512 cắt còn 256 bit (RFC 4868); mức SHOULD trong RFC 8221, dùng khi cần ICV dài hơn." },
     ],
   },
 });

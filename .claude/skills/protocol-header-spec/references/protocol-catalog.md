@@ -23,6 +23,9 @@ Thêm giao thức mới: thêm dòng vào bảng trước, rồi mới viết d�
 | headers-tunnel.js | `pw-cw` | Pseudowire Control Word | 4 | | RFC 4385, RFC 4448 |
 | headers-tunnel.js | `gre` | GRE | 4 | 16 | RFC 2784, RFC 2890 |
 | headers-tunnel.js | `vxlan` | VXLAN | 8 | | RFC 7348 |
+| headers-tunnel.js | `esp` | ESP header: SPI(32) + Sequence(32) + IV (varBytes 0–16, theo thuật toán) | 8 | 24 | RFC 4303, RFC 4106 (GCM), RFC 3602 (CBC) |
+| headers-tunnel.js | `esp-trailer` | ESP trailer: Padding (varBytes 0–255) + Pad Length(8) + Next Header(8) | 2 | 257 | RFC 4303 §2.4–2.6 |
+| headers-tunnel.js | `esp-icv` | Integrity Check Value (varBytes, theo thuật toán) | 0 | 32 | RFC 4303 §2.8, RFC 2404, RFC 4868 |
 | headers-l3l4.js | `ipv4` | IPv4 | 20 | 60 | RFC 791 |
 | headers-l3l4.js | `ipv6` | IPv6 | 40 | | RFC 8200 |
 | headers-l3l4.js | `tcp` | TCP | 20 | 60 | RFC 9293 |
@@ -51,9 +54,11 @@ dạng `varBytes` (min 0, max 40). GRE optional: group `checksum-group` (Checksu
 | MPLS & VPN | `mpls-l2vpn` | Ethernet{…0x8847} · Label stack{transport, PW label S=1} · pw-cw · Inner Ethernet{eth-mac, vlan-8021q, ethertype, ipv4, payload} · fcs. Gộp VPWS + VPLS (cùng khuôn dạng trên dây; khác control plane ghi trong `detail`) |
 | Tunnel & Overlay | `gre-ipv4` | Ethernet · Outer IPv4(proto=47) · gre(proto=0x0800) · Inner IPv4 · payload · fcs |
 | (đã bỏ) | `gre-key-seq` | Trùng với biến thể "Key + Sequence" của `gre` trong `gre-ipv4` — không tạo stack riêng cho biến thể của một header |
+| Tunnel & Overlay | `gre-ipsec-transport` | Ethernet · IPv4(proto=50) · group "ESP – vùng xác thực"{esp, group "Vùng mã hoá"{gre, Inner IPv4, payload, esp-trailer(NH=47)}} · esp-icv · fcs. compareTo `gre-ipv4`. Mặc định AES-GCM-128: IV 8, ICV 16, căn 4 byte |
+| Tunnel & Overlay | `gre-ipsec-tunnel` | Ethernet · New IPv4(proto=50) · group "ESP – vùng xác thực"{esp, group "Vùng mã hoá"{GRE-IPv4(proto=47), gre, Inner IPv4, payload, esp-trailer(NH=4)}} · esp-icv · fcs. compareTo `gre-ipv4` |
 | Tunnel & Overlay | `gretap` | Ethernet · Outer IPv4 · gre(proto=0x6558) · Inner Ethernet{eth-mac, ethertype, ipv4, payload} · fcs |
 | Tunnel & Overlay | `vxlan` | Ethernet · Outer IPv4(17) · UDP(dport 4789) · vxlan · Inner Ethernet{…} · fcs |
 | Truy nhập | `pppoe-session` | Ethernet{eth-mac, ethertype=0x8864} · pppoe · ppp-proto(0x0021) · ipv4 · payload · fcs |
 
-Mọi stack có `compareTo: "eth2-ipv4"` (trừ chính nó) để UI tô đậm header được thêm.
+Mọi stack có `compareTo: "eth2-ipv4"` (trừ chính nó và hai stack GRE over IPsec so với `gre-ipv4`) để UI tô đậm header được thêm.
 Inner Ethernet trong L2VPN/VXLAN/GRETAP **không có FCS riêng** — ghi rõ trong `note`.

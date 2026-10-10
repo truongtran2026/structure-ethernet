@@ -20,4 +20,5 @@
 | 2026-10-09 | Bỏ stack `gre-key-seq`; thêm quy tắc "Stack hay biến thể?" | protocol-header-spec, data | Trùng với biến thể Key + Sequence của GRE |
 | 2026-10-09 | Gộp `mpls-l2vpn-vpws` + `mpls-vpls` thành `mpls-l2vpn` | data, catalog | Cùng chuỗi header trên dây; khác biệt control plane để trong `detail` |
 | 2026-10-10 | Thêm StackNode `role` (link/delivery/encap/passenger) + `roleNote`; validator bắt buộc role | protocol-header-spec, data, UI | Người dùng muốn nhóm theo vai trò đóng gói (Outer IP / GRE / Inner) cho dễ nhớ |
+| 2026-10-10 | Thêm header esp/esp-trailer/esp-icv + stack gre-ipsec-transport, gre-ipsec-tunnel (compareTo gre-ipv4) | data, catalog | Người dùng yêu cầu GRE over IPsec |
 | 2026-10-09 | Thêm `effort` cho 4 agent; frontend-dev mặc định sonnet; bảng chọn model theo loại việc | agents, orchestrator | Tối ưu token: lần chạy đầu ~1/3 token Opus dùng cho việc sửa theo danh sách/cơ học |
