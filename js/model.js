@@ -9,6 +9,22 @@
 
   var LAYERS = ['phy', 'l2', 'l2_5', 'l3', 'l4', 'tunnel', 'payload', 'trailer'];
 
+  /** Vai trò đóng gói (data-schema mục 4b) — thứ tự hiển thị cố định. */
+  var ROLES = [
+    { id: 'link', name: 'Link', long: 'Link (khung L2 của chặng)',
+      desc: 'Header L2 đổi ở mỗi chặng: MAC, VLAN tag của chặng, LLC/SNAP, FCS, preamble.' },
+    { id: 'delivery', name: 'Delivery', long: 'Delivery (vận chuyển qua mạng lõi)',
+      desc: 'Đưa gói tới đầu kia của tunnel/LSP: Outer IP, Outer UDP, nhãn transport MPLS.' },
+    { id: 'encap', name: 'Encapsulation', short: 'Encap', long: 'Encapsulation (đóng gói / dịch vụ)',
+      desc: 'Cho biết bên trong là gì và thuộc ai: GRE, VXLAN, nhãn VPN/PW, Control Word, I-Tag, PPPoE + PPP.' },
+    { id: 'passenger', name: 'Passenger', long: 'Passenger (gói/khung gốc được chở)',
+      desc: 'Phần người dùng gửi: IP/TCP/UDP + payload, hoặc nguyên khung Ethernet khách.' }
+  ];
+  var ROLE_BY_ID = {};
+  ROLES.forEach(function (r) { ROLE_BY_ID[r.id] = r; });
+  var NO_ROLE = { id: null, name: 'Chưa gán', long: 'Chưa gán vai trò', desc: 'Dữ liệu chưa ghi role cho header này.' };
+  function roleInfo(id) { return (id && ROLE_BY_ID[id]) || NO_ROLE; }
+
   function has(obj, key) {
     return obj != null && Object.prototype.hasOwnProperty.call(obj, key);
   }
@@ -249,25 +265,38 @@
     var explicitAdded = hasExplicitAdded(stack.tree);
     var baseCounts = base && !explicitAdded ? countHeaders(base.tree) : null;
     var seenCounts = {};
+    var hasRoles = false;
 
     // inAdded = true khi một group tổ tiên được đánh dấu added (mọi header con coi là thêm)
-    function buildStackNodes(list, parentPath, depth, inAdded) {
+    // inRole = role kế thừa từ group tổ tiên gần nhất (node con có thể ghi đè)
+    function buildStackNodes(list, parentPath, depth, inAdded, inRole) {
       return (list || []).map(function (sn, i) {
         var path = parentPath + '/' + i;
-        if (sn && Array.isArray(sn.children)) return buildGroup(sn, path, parentPath, depth, inAdded);
-        return buildHeader(sn || {}, path, parentPath, depth, inAdded);
+        if (sn && Array.isArray(sn.children)) return buildGroup(sn, path, parentPath, depth, inAdded, inRole);
+        return buildHeader(sn || {}, path, parentPath, depth, inAdded, inRole);
       });
     }
 
-    function buildGroup(sn, path, parentPath, depth, inAdded) {
+    /** role tự có (hợp lệ) hoặc kế thừa; role lạ → cảnh báo và coi như kế thừa. */
+    function resolveRole(sn, inRole, label) {
+      if (sn && sn.role != null) {
+        if (ROLE_BY_ID[sn.role]) return sn.role;
+        warnings.push(stack.id + ' › ' + label + ': role không hợp lệ "' + sn.role + '" (chỉ: ' +
+          ROLES.map(function (r) { return r.id; }).join(', ') + ').');
+      }
+      return inRole || null;
+    }
+
+    function buildGroup(sn, path, parentPath, depth, inAdded, inRole) {
       var startBit = cursor;
       var node = {
         kind: 'sgroup', path: path, parentPath: parentPath, depth: depth,
         name: sn.group || 'Nhóm', note: sn.note || null, sn: sn
       };
       index[path] = node;
+      node.role = resolveRole(sn, inRole, node.name);
       var selfAdded = explicitAdded && sn.added === true;
-      node.children = buildStackNodes(sn.children, path, depth + 1, inAdded || selfAdded);
+      node.children = buildStackNodes(sn.children, path, depth + 1, inAdded || selfAdded, node.role);
       // group được coi là "thêm" nếu tự đánh dấu, thuộc group thêm, hoặc mọi con đều là phần thêm
       node.added = !!(inAdded || selfAdded || (node.children.length && node.children.every(function (c) { return c.added; })));
       node.bits = cursor - startBit;
@@ -278,7 +307,7 @@
       return node;
     }
 
-    function buildHeader(sn, path, parentPath, depth, inAdded) {
+    function buildHeader(sn, path, parentPath, depth, inAdded, inRole) {
       var h = sn.header ? headers[sn.header] : null;
       var node = {
         kind: 'header', path: path, parentPath: parentPath, depth: depth, sn: sn,
@@ -286,6 +315,8 @@
         wire: !!sn.wire, set: sn.set || null
       };
       index[path] = node;
+      node.role = resolveRole(sn, inRole, sn.label || sn.header || '?');
+      if (node.role) hasRoles = true;
       if (!h) {
         node.missing = true;
         node.name = sn.header || '(không rõ)';
@@ -343,7 +374,7 @@
       return node;
     }
 
-    var nodes = buildStackNodes(stack.tree, stack.id, 0, false);
+    var nodes = buildStackNodes(stack.tree, stack.id, 0, false, null);
     markAddedLabels(nodes, false);
 
     var frameBits = 0, payloadBits = 0, wireBits = 0, headerCount = 0;
@@ -382,7 +413,8 @@
         headerCount: headerCount,
         compare: compare
       },
-      addedSource: explicitAdded ? 'explicit' : (baseCounts ? 'count' : null)
+      addedSource: explicitAdded ? 'explicit' : (baseCounts ? 'count' : null),
+      hasRoles: hasRoles
     };
   }
 
@@ -484,6 +516,49 @@
     return rows;
   }
 
+  /** Mọi node header (kể cả header thiếu dữ liệu) theo thứ tự trên dây. */
+  function headersInOrder(nodes, out) {
+    out = out || [];
+    (nodes || []).forEach(function (n) {
+      if (n.kind === 'sgroup') headersInOrder(n.children, out);
+      else if (n.kind === 'header') out.push(n);
+    });
+    return out;
+  }
+
+  /**
+   * roleRuns(model) → các ĐOẠN vai trò liên tiếp theo thứ tự trên dây:
+   *   [{ role, name, long, desc, path, offsetBit, bits, bytes, wireBits, headers: [headerNode…] }]
+   * Gộp các header liền kề cùng role; role xuất hiện lại không liền kề (vd link đầu frame và FCS
+   * ở cuối) thành đoạn riêng. Header `wire` (preamble/SFD) không có role thì coi là `link`, được đặt
+   * vào đoạn nhưng KHÔNG cộng vào bits/offset (cộng vào wireBits). Kích thước lấy từ model nên
+   * theo đúng biến thể/optional đang bật.
+   */
+  function roleRuns(model) {
+    var runs = [];
+    var prefix = (model && model.stack && model.stack.id) || 'stack';
+    headersInOrder(model && model.nodes).forEach(function (h) {
+      var role = h.role || (h.wire ? 'link' : null);
+      var last = runs[runs.length - 1];
+      if (!last || last.role !== role) {
+        var info = roleInfo(role);
+        last = {
+          kind: 'rrun', role: role, name: info.name, short: info.short || info.name, long: info.long, desc: info.desc,
+          path: prefix + '/@role' + runs.length, index: runs.length,
+          offsetBit: null, bits: 0, bytes: 0, wireBits: 0, headers: []
+        };
+        runs.push(last);
+      }
+      last.headers.push(h);
+      if (h.wire) { last.wireBits += h.bits || 0; return; }
+      if (last.offsetBit == null && h.offsetBit != null) last.offsetBit = h.offsetBit;
+      last.bits += h.bits || 0;
+      last.bytes = last.bits / 8;
+    });
+    runs.forEach(function (r) { r.wire = r.bits === 0 && r.wireBits > 0; });
+    return runs;
+  }
+
   /** isOpen nhận node; trả về các hàng sơ đồ bit cho một header node. */
   function layoutBits(headerNode, isOpen, width) {
     return layoutUnits(collectUnits(headerNode.children || [], isOpen), width);
@@ -491,6 +566,9 @@
 
   var api = {
     LAYERS: LAYERS,
+    ROLES: ROLES,
+    roleInfo: roleInfo,
+    roleRuns: roleRuns,
     buildModel: buildModel,
     collectUnits: collectUnits,
     layoutUnits: layoutUnits,

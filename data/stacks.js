@@ -7,18 +7,20 @@ window.STACKS = window.STACKS || [];
   var DATA = 64;
 
   function payload(note) {
-    return { header: "payload", label: "Payload (dữ liệu ứng dụng)", note: note || "Ví dụ 64 byte dữ liệu ứng dụng.", varBytes: { data: DATA } };
+    return { header: "payload", role: "passenger", label: "Payload (dữ liệu ứng dụng)", note: note || "Ví dụ 64 byte dữ liệu ứng dụng.", varBytes: { data: DATA } };
   }
   function fcs(note) {
     return {
       header: "eth-fcs",
+      role: "link",
       note: note || "CRC-32 tính trên toàn frame từ Destination MAC tới hết payload (không gồm preamble/SFD).",
     };
   }
-  // Header Ethernet II: MAC + EtherType
+  // Header Ethernet II: MAC + EtherType (role link: khung L2 của chặng)
   function ethII(group, type, note, typeNote, macNote) {
     return {
       group: group,
+      role: "link",
       note: note,
       children: [
         { header: "eth-mac", note: macNote },
@@ -46,9 +48,9 @@ window.STACKS = window.STACKS || [];
         "Trên dây còn có Preamble + SFD 8 byte trước frame và khoảng trống IFG 12 byte sau frame, nhưng chúng không tính vào kích thước frame. " +
         "Frame tối thiểu 64 byte, tối đa 1518 byte (MTU 1500) tính từ MAC đích tới FCS.",
       tree: [
-        { header: "phy-preamble", wire: true, note: "7 byte Preamble + 1 byte SFD để đồng bộ bit; chỉ có trên dây, không tính vào frame." },
+        { role: "link", header: "phy-preamble", wire: true, note: "7 byte Preamble + 1 byte SFD để đồng bộ bit; chỉ có trên dây, không tính vào frame." },
         ethII("Ethernet II header", "0x0800", "14 byte: ai gửi, gửi cho ai, và lớp trên là gì.", "0x0800 = IPv4 → header kế tiếp là IPv4."),
-        { header: "ipv4", set: { protocol: "253", src: "192.168.1.10", dst: "192.168.1.20", ttl: "64" }, note: "Gói IPv4 20 byte (không có options). Payload ở đây là dữ liệu thô, không gắn giao thức lớp 4 cụ thể, nên Protocol = 253 (giá trị dành cho thử nghiệm, RFC 3692) cho nhất quán; thực tế sẽ là 6 (TCP), 17 (UDP)… — xem các stack bên dưới." },
+        { role: "passenger", header: "ipv4", set: { protocol: "253", src: "192.168.1.10", dst: "192.168.1.20", ttl: "64" }, note: "Gói IPv4 20 byte (không có options). Payload ở đây là dữ liệu thô, không gắn giao thức lớp 4 cụ thể, nên Protocol = 253 (giá trị dành cho thử nghiệm, RFC 3692) cho nhất quán; thực tế sẽ là 6 (TCP), 17 (UDP)… — xem các stack bên dưới." },
         payload("Ví dụ 64 byte dữ liệu (lớp 4 trở lên). Payload Ethernet (IPv4 + dữ liệu) phải ≥ 46 byte, nếu thiếu sẽ được đệm."),
         fcs(),
       ],
@@ -66,7 +68,7 @@ window.STACKS = window.STACKS || [];
         "Vì vậy cùng 64 byte dữ liệu, frame IPv6 dài hơn 20 byte.",
       tree: [
         ethII("Ethernet II header", "0x86DD", "Giống hệt Ethernet II của IPv4, chỉ khác EtherType.", "0x86DD = IPv6."),
-        { added: true, header: "ipv6", set: { "next-header": "59", "hop-limit": "64", src: "2001:db8::10", dst: "2001:db8::5" }, note: "Header IPv6 cố định 40 byte; Next Header = 59 (No Next Header, RFC 8200) vì payload ở đây là dữ liệu thô, không có header lớp trên." },
+        { role: "passenger", added: true, header: "ipv6", set: { "next-header": "59", "hop-limit": "64", src: "2001:db8::10", dst: "2001:db8::5" }, note: "Header IPv6 cố định 40 byte; Next Header = 59 (No Next Header, RFC 8200) vì payload ở đây là dữ liệu thô, không có header lớp trên." },
         payload(),
         fcs(),
       ],
@@ -84,8 +86,8 @@ window.STACKS = window.STACKS || [];
         "Ví dụ là kết nối HTTPS: client port động → server port 443.",
       tree: [
         ethII("Ethernet II header", "0x0800", "MAC + EtherType IPv4.", "0x0800 = IPv4."),
-        { header: "ipv4", set: { protocol: "6", src: "192.168.1.10", dst: "203.0.113.80", ttl: "64" }, note: "Protocol = 6 → lớp kế tiếp là TCP." },
-        { added: true, header: "tcp", set: { "src-port": "51514", "dst-port": "443" }, note: "Port nguồn là port động của client; port đích 443 (HTTPS)." },
+        { role: "passenger", header: "ipv4", set: { protocol: "6", src: "192.168.1.10", dst: "203.0.113.80", ttl: "64" }, note: "Protocol = 6 → lớp kế tiếp là TCP." },
+        { role: "passenger", added: true, header: "tcp", set: { "src-port": "51514", "dst-port": "443" }, note: "Port nguồn là port động của client; port đích 443 (HTTPS)." },
         payload(),
         fcs(),
       ],
@@ -103,8 +105,8 @@ window.STACKS = window.STACKS || [];
         "Ví dụ là một truy vấn DNS tới port 53.",
       tree: [
         ethII("Ethernet II header", "0x0800", "MAC + EtherType IPv4.", "0x0800 = IPv4."),
-        { header: "ipv4", set: { protocol: "17", src: "192.168.1.10", dst: "8.8.8.8", ttl: "64" }, note: "Protocol = 17 → lớp kế tiếp là UDP." },
-        { added: true, header: "udp", set: { "src-port": "50000", "dst-port": "53" }, note: "Port đích 53 = DNS." },
+        { role: "passenger", header: "ipv4", set: { protocol: "17", src: "192.168.1.10", dst: "8.8.8.8", ttl: "64" }, note: "Protocol = 17 → lớp kế tiếp là UDP." },
+        { role: "passenger", added: true, header: "udp", set: { "src-port": "50000", "dst-port": "53" }, note: "Port đích 53 = DNS." },
         payload(),
         fcs(),
       ],
@@ -124,15 +126,15 @@ window.STACKS = window.STACKS || [];
         "mà dùng Configuration BPDU thật 35 byte; frame ngắn hơn 64 byte nên được đệm (padding) — Length không tính phần đệm.",
       tree: [
         {
-          group: "802.3 MAC header",
+          group: "802.3 MAC header", role: "link",
           note: "14 byte như Ethernet II, nhưng trường cuối là Length.",
           children: [
             { header: "eth-mac", note: "Ví dụ: MAC đích là địa chỉ multicast của STP 01:80:C2:00:00:00." },
             { added: true, header: "eth-length", set: { length: "0x0026 (38)" }, note: "Length = LLC 3 + Configuration BPDU 35 = 38 byte (≤ 1500 nên là Length, không phải EtherType). RST BPDU 36 byte → 0x0027." },
           ],
         },
-        { added: true, header: "llc", set: { dsap: "0x42", ssap: "0x42", control: "0x03" }, note: "DSAP/SSAP 0x42 = Spanning Tree; Control 0x03 = UI (không kết nối)." },
-        { header: "payload", label: "Payload (Configuration BPDU)", varBytes: { data: 35 }, note: "Configuration BPDU STP 35 byte (IEEE 802.1D). MAC 12 + Length 2 + LLC 3 + BPDU 35 + FCS 4 = 56 byte < 64, nên sau BPDU có 8 byte đệm (padding) để frame đủ 64 byte; Length không tính phần đệm." },
+        { role: "link", added: true, header: "llc", set: { dsap: "0x42", ssap: "0x42", control: "0x03" }, note: "DSAP/SSAP 0x42 = Spanning Tree; Control 0x03 = UI (không kết nối)." },
+        { role: "passenger", header: "payload", label: "Payload (Configuration BPDU)", varBytes: { data: 35 }, note: "Configuration BPDU STP 35 byte (IEEE 802.1D). MAC 12 + Length 2 + LLC 3 + BPDU 35 + FCS 4 = 56 byte < 64, nên sau BPDU có 8 byte đệm (padding) để frame đủ 64 byte; Length không tính phần đệm." },
         fcs(),
       ],
     },
@@ -149,15 +151,15 @@ window.STACKS = window.STACKS || [];
         "So với Ethernet II tốn thêm 8 byte (LLC + SNAP), nên IP trên Ethernet thực tế dùng Ethernet II.",
       tree: [
         {
-          group: "802.3 MAC header",
+          group: "802.3 MAC header", role: "link",
           note: "Trường sau MAC là Length.",
           children: [
             { header: "eth-mac" },
             { added: true, header: "eth-length", set: { length: "0x0048 (72)" }, note: "Length = LLC 3 + SNAP 5 + dữ liệu 64 = 72 byte." },
           ],
         },
-        { added: true, header: "llc", set: { dsap: "0xAA", ssap: "0xAA", control: "0x03" }, note: "AA/AA/03 báo hiệu có header SNAP phía sau." },
-        { added: true, header: "snap", set: { oui: "00-00-00", pid: "0x0800" }, note: "OUI 00-00-00 → PID là EtherType; 0x0800 = IPv4 (RFC 1042)." },
+        { role: "link", added: true, header: "llc", set: { dsap: "0xAA", ssap: "0xAA", control: "0x03" }, note: "AA/AA/03 báo hiệu có header SNAP phía sau." },
+        { role: "link", added: true, header: "snap", set: { oui: "00-00-00", pid: "0x0800" }, note: "OUI 00-00-00 → PID là EtherType; 0x0800 = IPv4 (RFC 1042)." },
         payload("Ví dụ 64 byte dữ liệu (ở đây là gói IPv4, gộp chung làm payload để tập trung vào LLC/SNAP)."),
         fcs(),
       ],
@@ -177,7 +179,7 @@ window.STACKS = window.STACKS || [];
         "Tag được thêm/bỏ tại cổng trunk/access của switch; FCS phải tính lại khi chèn tag.",
       tree: [
         {
-          group: "Ethernet header + 802.1Q tag",
+          group: "Ethernet header + 802.1Q tag", role: "link",
           note: "18 byte: MAC (12) + VLAN tag (4) + EtherType (2).",
           children: [
             { header: "eth-mac" },
@@ -185,7 +187,7 @@ window.STACKS = window.STACKS || [];
             { header: "ethertype", set: { type: "0x0800" }, note: "EtherType thật của payload, bị đẩy ra sau tag." },
           ],
         },
-        { header: "ipv4", set: { protocol: "253", src: "192.168.100.10", dst: "192.168.100.20" } },
+        { role: "passenger", header: "ipv4", set: { protocol: "253", src: "192.168.100.10", dst: "192.168.100.20" } },
         payload(),
         fcs("CRC-32 tính lại khi switch chèn/bỏ tag."),
       ],
@@ -202,7 +204,7 @@ window.STACKS = window.STACKS || [];
         "Tag ngoài cùng nằm gần MAC nhất. Một số thiết bị cũ dùng TPID 0x9100 hoặc 0x8100 cho tag ngoài.",
       tree: [
         {
-          group: "Ethernet header + S-Tag + C-Tag",
+          group: "Ethernet header + S-Tag + C-Tag", role: "link",
           note: "22 byte: MAC (12) + S-Tag (4) + C-Tag (4) + EtherType (2).",
           children: [
             { header: "eth-mac" },
@@ -211,7 +213,7 @@ window.STACKS = window.STACKS || [];
             { header: "ethertype", set: { type: "0x0800" } },
           ],
         },
-        { header: "ipv4", set: { protocol: "253", src: "192.168.100.10", dst: "192.168.100.20" } },
+        { role: "passenger", header: "ipv4", set: { protocol: "253", src: "192.168.100.10", dst: "192.168.100.20" } },
         payload(),
         fcs(),
       ],
@@ -228,19 +230,20 @@ window.STACKS = window.STACKS || [];
         "Lõi mạng chỉ học MAC của các BEB chứ không học MAC khách hàng, nên bảng MAC nhỏ và dịch vụ mở rộng tới 16 triệu I-SID. " +
         "Frame khách hàng giữ nguyên MAC và C-Tag; S-Tag của khách thường được BEB bỏ đi và ánh xạ sang I-SID (không vẽ ở đây). " +
         "Toàn frame chỉ có một FCS ở cuối.",
+      roleNote: "B-DA/B-SA + B-Tag chỉ để đi qua lõi backbone (link), I-Tag cho biết dịch vụ nào (encap), còn nguyên khung khách bên trong là hành khách.",
       tree: [
         {
           added: true,
-          group: "Backbone header (PBB)",
+          group: "Backbone header (PBB)", role: "link",
           note: "22 byte: B-DA/B-SA (12) + B-Tag (4) + I-Tag (6) do Backbone Edge Bridge thêm vào.",
           children: [
             { header: "eth-mac", label: "B-DA / B-SA", note: "MAC của BEB đích/nguồn trong mạng backbone." },
             { header: "vlan-8021ad", label: "B-Tag", set: { tpid: "0x88A8", vid: "300" }, note: "B-VLAN 300 trong lõi backbone." },
-            { header: "pbb-itag", label: "I-Tag", set: { tpid: "0x88E7", isid: "10000", uca: "0" }, note: "TPID 0x88E7; I-SID (24 bit) định danh dịch vụ khách hàng, ví dụ 10000." },
+            { role: "encap", header: "pbb-itag", label: "I-Tag", set: { tpid: "0x88E7", isid: "10000", uca: "0" }, note: "TPID 0x88E7; I-SID (24 bit) định danh dịch vụ khách hàng, ví dụ 10000." },
           ],
         },
         {
-          group: "Customer frame (C-DA/C-SA…)",
+          group: "Customer frame (C-DA/C-SA…)", role: "passenger",
           note: "Frame khách hàng được mang nguyên vẹn, không có FCS riêng.",
           children: [
             { header: "eth-mac", label: "C-DA / C-SA", note: "MAC gốc của khách hàng." },
@@ -267,10 +270,11 @@ window.STACKS = window.STACKS || [];
         "Chỉ có một nhãn nên S = 1; MPLS không có trường báo giao thức bên trong — egress LSR biết giao thức nhờ binding nhãn ↔ FEC do chính nó quảng bá, không phải đoán (RFC 3032 §2.2). " +
         "LSR trung gian có thể nhìn nibble đầu sau nhãn đáy (4 = IPv4, 6 = IPv6) chỉ để băm ECMP (RFC 4928). " +
         "Với PHP, nhãn bị pop ở hop áp chót và gói đến egress là IPv4 thuần.",
+      roleNote: "Ethernet chỉ là chặng link, nhãn MPLS là vé đi qua lõi (delivery), gói IPv4 là hành khách không bị đọc dọc đường.",
       tree: [
         ethII("Ethernet II header", "0x8847", "MAC của hai LSR kề nhau (đổi ở mỗi hop).", "0x8847 = MPLS unicast → header kế tiếp là nhãn MPLS."),
-        { added: true, header: "mpls-label", label: "MPLS label (LDP)", set: { label: "24001", tc: "0", s: "1", ttl: "63" }, note: "Nhãn duy nhất nên S = 1; TTL chép từ IP (64) rồi trừ 1." },
-        { header: "ipv4", set: { protocol: "253", src: "10.1.1.1", dst: "10.2.2.2", ttl: "64" }, note: "Gói IPv4 nguyên vẹn; LSR ở giữa không đọc header này." },
+        { added: true, header: "mpls-label", label: "MPLS label (LDP)", role: "delivery", set: { label: "24001", tc: "0", s: "1", ttl: "63" }, note: "Nhãn duy nhất nên S = 1; TTL chép từ IP (64) rồi trừ 1." },
+        { role: "passenger", header: "ipv4", set: { protocol: "253", src: "10.1.1.1", dst: "10.2.2.2", ttl: "64" }, note: "Gói IPv4 nguyên vẹn; LSR ở giữa không đọc header này." },
         payload(),
         fcs(),
       ],
@@ -286,6 +290,7 @@ window.STACKS = window.STACKS || [];
         "Nhãn ngoài (transport, LDP/RSVP/SR) được swap qua từng P router để tới PE đích; nhãn trong (VPN, do MP-BGP quảng bá) " +
         "chỉ PE đích hiểu, dùng để chọn VRF. Nhờ vậy nhiều khách hàng dùng trùng dải IP riêng vẫn tách biệt. " +
         "Chỉ nhãn VPN ở đáy có S = 1. Gói IPv4 bên trong là gói của khách hàng, không có header IP bọc ngoài.",
+      roleNote: "Nhãn transport đưa gói tới PE đích (delivery), nhãn VPN cho biết thuộc VRF khách nào (encap), IPv4 khách là hành khách.",
       tree: [
         ethII("Ethernet II header", "0x8847", "MAC giữa hai router kề nhau trong lõi MPLS.", "0x8847 = MPLS unicast."),
         {
@@ -293,11 +298,11 @@ window.STACKS = window.STACKS || [];
           group: "MPLS label stack",
           note: "2 nhãn × 4 byte, đọc từ ngoài vào trong.",
           children: [
-            { header: "mpls-label", label: "Transport label (outer)", set: { label: "24001", tc: "0", s: "0", ttl: "63" }, note: "Nhãn LDP/SR tới loopback PE đích; S = 0 vì còn nhãn phía sau." },
-            { header: "mpls-label", label: "VPN label (inner)", set: { label: "30", tc: "0", s: "1", ttl: "63" }, note: "Nhãn VPN do MP-BGP (VPNv4) cấp; PE đích dùng để chọn VRF. Nhãn đáy nên S = 1." },
+            { header: "mpls-label", label: "Transport label (outer)", role: "delivery", set: { label: "24001", tc: "0", s: "0", ttl: "63" }, note: "Nhãn LDP/SR tới loopback PE đích; S = 0 vì còn nhãn phía sau." },
+            { header: "mpls-label", label: "VPN label (inner)", role: "encap", set: { label: "30", tc: "0", s: "1", ttl: "63" }, note: "Nhãn VPN do MP-BGP (VPNv4) cấp; PE đích dùng để chọn VRF. Nhãn đáy nên S = 1." },
           ],
         },
-        { header: "ipv4", label: "IPv4 của khách hàng", set: { protocol: "253", src: "172.16.1.10", dst: "172.16.2.20", ttl: "63" }, note: "Gói IP khách hàng (địa chỉ riêng, có thể trùng giữa các VRF)." },
+        { header: "ipv4", label: "IPv4 của khách hàng", role: "passenger", set: { protocol: "253", src: "172.16.1.10", dst: "172.16.2.20", ttl: "63" }, note: "Gói IP khách hàng (địa chỉ riêng, có thể trùng giữa các VRF)." },
         payload(),
         fcs(),
       ],
@@ -318,6 +323,7 @@ window.STACKS = window.STACKS || [];
         "VPLS (đa điểm) — mỗi PE có một VSI (switch ảo) học MAC nguồn của khung bên trong và gắn với PW nhận được; các PE nối full mesh pseudowire " +
         "(LDP RFC 4762 hoặc BGP RFC 4761); split horizon: khung nhận từ một PW lõi không chuyển sang PW lõi khác (thay STP chống loop); " +
         "broadcast/unknown unicast được nhân bản ra mọi PW.",
+      roleNote: "Nhãn transport đưa tới PE đích (delivery), nhãn PW + Control Word cho biết pseudowire nào (encap), cả khung Ethernet khách là hành khách.",
       tree: [
         added(ethII("Ethernet II header (lõi MPLS)", "0x8847", "MAC giữa hai router kề nhau trong lõi.", "0x8847 = MPLS unicast.")),
         {
@@ -325,13 +331,13 @@ window.STACKS = window.STACKS || [];
           group: "MPLS label stack",
           note: "Nhãn transport + nhãn pseudowire.",
           children: [
-            { header: "mpls-label", label: "Transport label (outer)", set: { label: "24001", s: "0", ttl: "254" }, note: "Đưa gói tới PE đầu kia; S = 0." },
-            { header: "mpls-label", label: "PW label (inner)", set: { label: "299776", s: "1", ttl: "255" }, note: "Nhãn pseudowire do PE đích cấp (LDP targeted hoặc BGP). VPWS: xác định attachment circuit ra. VPLS: xác định VSI và PW nguồn — PE đích học MAC nguồn gắn với PW này. S = 1." },
+            { header: "mpls-label", label: "Transport label (outer)", role: "delivery", set: { label: "24001", s: "0", ttl: "254" }, note: "Đưa gói tới PE đầu kia; S = 0." },
+            { header: "mpls-label", label: "PW label (inner)", role: "encap", set: { label: "299776", s: "1", ttl: "255" }, note: "Nhãn pseudowire do PE đích cấp (LDP targeted hoặc BGP). VPWS: xác định attachment circuit ra. VPLS: xác định VSI và PW nguồn — PE đích học MAC nguồn gắn với PW này. S = 1." },
           ],
         },
-        { added: true, header: "pw-cw", set: { seq: "0" }, note: "Control Word 4 byte (tuỳ chọn, thoả thuận khi dựng PW); Sequence = 0 nghĩa là không dùng sequencing." },
+        { role: "encap", added: true, header: "pw-cw", set: { seq: "0" }, note: "Control Word 4 byte (tuỳ chọn, thoả thuận khi dựng PW); Sequence = 0 nghĩa là không dùng sequencing." },
         {
-          group: "Inner Ethernet frame (khách hàng)",
+          group: "Inner Ethernet frame (khách hàng)", role: "passenger",
           note: NO_FCS + " Với VPLS, MAC nguồn của khung này là thứ VSI học.",
           children: [
             { header: "eth-mac", label: "MAC khách hàng", note: "MAC gốc của thiết bị khách hàng, PE không đổi. VPLS: VSI học MAC nguồn ↔ PW và tra MAC đích để chọn PW/AC ra." },
@@ -357,11 +363,12 @@ window.STACKS = window.STACKS || [];
         "IPv4 ngoài mang địa chỉ hai đầu tunnel, mạng ở giữa chỉ định tuyến theo nó. " +
         "GRE Protocol Type = 0x0800 cho đầu kia biết bên trong là IPv4. " +
         "Không có mã hoá: GRE thường kết hợp IPsec khi cần bảo mật.",
+      roleNote: "Outer IPv4 chở gói tới đầu tunnel, GRE cho biết bên trong là IPv4, Inner IPv4 là gói gốc của người dùng.",
       tree: [
         ethII("Ethernet II header", "0x0800", "MAC của link vật lý underlay.", "0x0800 = IPv4 (IPv4 ngoài)."),
-        { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", set: { protocol: "47", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" }, note: "Địa chỉ hai đầu tunnel; Protocol = 47 → header kế tiếp là GRE." },
-        { added: true, header: "gre", set: { c: "0", k: "0", s: "0", "protocol-type": "0x0800", key: "1001", seq: "1" }, note: "Protocol Type 0x0800 → bên trong là IPv4. Mặc định là GRE cơ bản 4 byte; chọn biến thể (Key, Sequence, Checksum…) ở card \"Biến thể kích thước header\" để thấy header dài 8–16 byte." },
-        { header: "ipv4", label: "Inner IPv4 (gói gốc)", set: { protocol: "253", src: "10.0.1.10", dst: "10.0.2.20", ttl: "63" }, note: "Gói IP gốc giữa hai mạng LAN." },
+        { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", role: "delivery", set: { protocol: "47", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" }, note: "Địa chỉ hai đầu tunnel; Protocol = 47 → header kế tiếp là GRE." },
+        { role: "encap", added: true, header: "gre", set: { c: "0", k: "0", s: "0", "protocol-type": "0x0800", key: "1001", seq: "1" }, note: "Protocol Type 0x0800 → bên trong là IPv4. Mặc định là GRE cơ bản 4 byte; chọn biến thể (Key, Sequence, Checksum…) ở card \"Biến thể kích thước header\" để thấy header dài 8–16 byte." },
+        { header: "ipv4", label: "Inner IPv4 (gói gốc)", role: "passenger", set: { protocol: "253", src: "10.0.1.10", dst: "10.0.2.20", ttl: "63" }, note: "Gói IP gốc giữa hai mạng LAN." },
         payload(),
         fcs(),
       ],
@@ -378,12 +385,13 @@ window.STACKS = window.STACKS || [];
         "So với Ethernet II + IPv4, thêm 38 byte: Ethernet ngoài 14 + IPv4 ngoài 20 + GRE 4 (khung Ethernet gốc được mang nguyên vẹn bên trong). " +
         "Hai đầu tunnel hoạt động như hai cổng của một switch: học MAC, chuyển broadcast. " +
         "Khung Ethernet bên trong không có FCS riêng.",
+      roleNote: "Outer IPv4 chở gói tới đầu tunnel, GRE (0x6558) cho biết bên trong là khung Ethernet, khung Ethernet đó là hành khách.",
       tree: [
         added(ethII("Outer Ethernet header (underlay)", "0x0800", "MAC của link vật lý underlay.", "0x0800 = IPv4 (IPv4 ngoài).")),
-        { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", set: { protocol: "47", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" }, note: "Protocol = 47 → GRE." },
-        { added: true, header: "gre", set: { c: "0", k: "0", s: "0", "protocol-type": "0x6558" }, note: "0x6558 = Transparent Ethernet Bridging → bên trong là khung Ethernet." },
+        { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", role: "delivery", set: { protocol: "47", src: "203.0.113.1", dst: "198.51.100.2", ttl: "255" }, note: "Protocol = 47 → GRE." },
+        { role: "encap", added: true, header: "gre", set: { c: "0", k: "0", s: "0", "protocol-type": "0x6558" }, note: "0x6558 = Transparent Ethernet Bridging → bên trong là khung Ethernet." },
         {
-          group: "Inner Ethernet frame (khách hàng)",
+          group: "Inner Ethernet frame (khách hàng)", role: "passenger",
           note: NO_FCS,
           children: [
             { header: "eth-mac", label: "MAC bên trong", note: "MAC của host ở hai site L2 được nối." },
@@ -407,13 +415,14 @@ window.STACKS = window.STACKS || [];
         "Dùng UDP để tận dụng ECMP: port nguồn là hash của khung bên trong. " +
         "VNI 24 bit thay cho VLAN ID 12 bit, cho ~16 triệu segment trong data center. " +
         "Khung Ethernet bên trong không có FCS riêng, VLAN tag của khách thường bị VTEP bỏ và ánh xạ sang VNI.",
+      roleNote: "Outer IPv4 + UDP chở gói giữa hai VTEP, VXLAN (VNI) cho biết segment nào, khung Ethernet bên trong là hành khách.",
       tree: [
         added(ethII("Outer Ethernet header (underlay)", "0x0800", "MAC giữa VTEP và router/switch underlay kế tiếp.", "0x0800 = IPv4 ngoài.")),
-        { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", set: { protocol: "17", src: "10.255.0.1", dst: "10.255.0.2", ttl: "64" }, note: "Địa chỉ VTEP nguồn/đích; Protocol = 17 → UDP." },
-        { added: true, header: "udp", label: "Outer UDP", set: { "src-port": "49152", "dst-port": "4789" }, note: "Port đích 4789 (IANA) → VXLAN; port nguồn là hash của khung trong để chia tải ECMP." },
-        { added: true, header: "vxlan", set: { flags: "0x08", vni: "10100" }, note: "Cờ I = 1, VNI 10100 xác định segment L2." },
+        { added: true, header: "ipv4", label: "Outer IPv4 (tunnel)", role: "delivery", set: { protocol: "17", src: "10.255.0.1", dst: "10.255.0.2", ttl: "64" }, note: "Địa chỉ VTEP nguồn/đích; Protocol = 17 → UDP." },
+        { added: true, header: "udp", label: "Outer UDP", role: "delivery", set: { "src-port": "49152", "dst-port": "4789" }, note: "Port đích 4789 (IANA) → VXLAN; port nguồn là hash của khung trong để chia tải ECMP." },
+        { role: "encap", added: true, header: "vxlan", set: { flags: "0x08", vni: "10100" }, note: "Cờ I = 1, VNI 10100 xác định segment L2." },
         {
-          group: "Inner Ethernet frame (khách hàng)",
+          group: "Inner Ethernet frame (khách hàng)", role: "passenger",
           note: NO_FCS,
           children: [
             { header: "eth-mac", label: "MAC máy ảo/host", note: "MAC gốc của VM/host trong segment overlay." },
@@ -438,11 +447,12 @@ window.STACKS = window.STACKS || [];
         "và trường PPP Protocol 2 byte (0x0021 = IPv4). " +
         "Session ID do BRAS/BNG cấp ở giai đoạn Discovery (EtherType 0x8863) và định danh phiên của thuê bao. " +
         "Do tốn 8 byte, MTU PPPoE thường là 1492 và MSS TCP được kẹp xuống 1452.",
+      roleNote: "Ethernet chỉ là chặng tới BNG, PPPoE + PPP Protocol là lớp đóng gói phiên thuê bao, IPv4 là hành khách.",
       tree: [
         ethII("Ethernet II header", "0x8864", "MAC của CPE và BRAS/BNG.", "0x8864 = PPPoE Session stage."),
-        { added: true, header: "pppoe", set: { code: "0x00", "session-id": "0x0011", length: "86" }, note: "Code 0x00 = dữ liệu session; Session ID do BRAS cấp; Length = PPP Protocol 2 + IPv4 20 + dữ liệu 64 = 86 byte (không tính header PPPoE)." },
-        { added: true, header: "ppp-proto", set: { protocol: "0x0021" }, note: "0x0021 = IPv4 (0x0057 = IPv6, 0xC021 = LCP)." },
-        { header: "ipv4", set: { protocol: "253", src: "100.64.10.5", dst: "203.0.113.80" } },
+        { role: "encap", added: true, header: "pppoe", set: { code: "0x00", "session-id": "0x0011", length: "86" }, note: "Code 0x00 = dữ liệu session; Session ID do BRAS cấp; Length = PPP Protocol 2 + IPv4 20 + dữ liệu 64 = 86 byte (không tính header PPPoE)." },
+        { role: "encap", added: true, header: "ppp-proto", set: { protocol: "0x0021" }, note: "0x0021 = IPv4 (0x0057 = IPv6, 0xC021 = LCP)." },
+        { role: "passenger", header: "ipv4", set: { protocol: "253", src: "100.64.10.5", dst: "203.0.113.80" } },
         payload(),
         fcs(),
       ],

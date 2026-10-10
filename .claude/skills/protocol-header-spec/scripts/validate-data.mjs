@@ -136,9 +136,13 @@ for (const s of STACKS) {
   stackIds.add(s.id);
   for (const k of ["name", "category", "summary", "detail"]) if (!s[k]) err(`${where}: thiếu ${k}`);
   if (!Array.isArray(s.tree) || !s.tree.length) { err(`${where}: tree rỗng`); continue; }
-  const visit = (nodes) => {
+  const ROLES = ["link", "delivery", "encap", "passenger"];
+  const visit = (nodes, parentRole) => {
     for (const n of nodes) {
-      if (n.group) { if (!n.children?.length) err(`${where}: group "${n.group}" rỗng`); else visit(n.children); continue; }
+      if (n.role !== undefined && !ROLES.includes(n.role)) err(`${where}: role "${n.role}" không hợp lệ`);
+      const role = n.role ?? parentRole;
+      if (n.group) { if (!n.children?.length) err(`${where}: group "${n.group}" rỗng`); else visit(n.children, role); continue; }
+      if (!role) err(`${where}: header "${n.header}"${n.label ? ` (${n.label})` : ""} thiếu role`);
       const h = HEADERS[n.header];
       if (!h) { err(`${where}: header "${n.header}" không tồn tại`); continue; }
       for (const fid of Object.keys(n.set || {}))

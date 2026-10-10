@@ -19,9 +19,15 @@
   var THEMES = ['auto', 'light', 'dark'];
   var THEME_LABEL = { auto: '◐ Tự động', light: '☀ Sáng', dark: '☾ Tối' };
 
+  var GROUPBY_KEY = 'ethviz.groupBy';
+  var GROUPBY = [
+    { id: 'struct', label: 'Cấu trúc', hint: 'Nhóm theo cấu trúc header của stack (vd. "Ethernet II header")' },
+    { id: 'role', label: 'Vai trò', hint: 'Nhóm theo vai trò đóng gói: Link › Delivery › Encapsulation › Passenger' }
+  ];
+
   var app = {
     stacks: [], headers: {}, current: null, state: null, model: null, query: '',
-    hl: null, focusPath: null
+    hl: null, focusPath: null, groupBy: 'struct', runs: [], roleParent: {}
   };
 
   // ---------- tiện ích ----------
@@ -59,7 +65,8 @@
   }
 
   // ---------- trạng thái ----------
-  function defaultState() { return { level: 1, open: {}, enabled: {}, varBytes: {}, selected: null }; }
+  // open = trạng thái mở/đóng ở chế độ Cấu trúc; roleOpen = riêng cho chế độ Vai trò
+  function defaultState() { return { level: 1, open: {}, roleOpen: {}, enabled: {}, varBytes: {}, selected: null }; }
   function loadState(id) {
     var s = storeGet(STORE_PREFIX + id);
     var d = defaultState();
@@ -69,23 +76,38 @@
   }
   function saveState() { if (app.current) storeSet(STORE_PREFIX + app.current.id, app.state); }
 
-  /** Mặc định mở/đóng theo cấp; state.open ghi đè cho từng node. */
+  /** Chế độ Vai trò chỉ có hiệu lực khi stack có role. */
+  function roleMode() { return app.groupBy === 'role' && !!(app.model && app.model.hasRoles); }
+  function openMap() {
+    var k = roleMode() ? 'roleOpen' : 'open';
+    if (!app.state[k] || typeof app.state[k] !== 'object') app.state[k] = {};
+    return app.state[k];
+  }
+  /** Cha trong cây đang hiển thị: ở chế độ Vai trò cha của header là đoạn vai trò chứa nó. */
+  function parentOf(node) {
+    if (!node) return null;
+    if (roleMode() && node.kind === 'header') return app.model.index[app.roleParent[node.path]] || null;
+    return app.model.index[node.parentPath] || null;
+  }
+
+  /** Mặc định mở/đóng theo cấp; state.open (hoặc roleOpen) ghi đè cho từng node. */
   function isOpen(node) {
     if (!node) return false;
-    if (has(app.state.open, node.path)) return !!app.state.open[node.path];
+    var om = openMap();
+    if (has(om, node.path)) return !!om[node.path];
     var lv = app.state.level;
-    if (node.kind === 'sgroup') return lv >= 1;
+    if (node.kind === 'sgroup' || node.kind === 'rrun') return lv >= 1;
     if (node.kind === 'header') return lv >= 2;
     if (node.kind === 'group') return lv >= 3;
     return false;
   }
   function canOpen(node) {
-    return node && (node.kind === 'sgroup' || node.kind === 'group' || (node.kind === 'header' && !node.missing));
+    return node && (node.kind === 'sgroup' || node.kind === 'rrun' || node.kind === 'group' || (node.kind === 'header' && !node.missing));
   }
-  function setOpen(node, open) { app.state.open[node.path] = !!open; }
+  function setOpen(node, open) { openMap()[node.path] = !!open; }
   function openAncestors(node) {
-    var p = node && app.model.index[node.parentPath];
-    while (p) { setOpen(p, true); p = app.model.index[p.parentPath]; }
+    var p = parentOf(node);
+    while (p) { setOpen(p, true); p = parentOf(p); }
   }
 
   // ---------- khởi động ----------
@@ -99,6 +121,7 @@
     app.headers = window.HEADERS || {};
     app.stacks = (Array.isArray(window.STACKS) ? window.STACKS : []).filter(function (s) { return s && s.id; });
     app.load = load;
+    app.groupBy = storeGet(GROUPBY_KEY) === 'role' ? 'role' : 'struct';
     initTheme();
     root.hidden = false;
     var bootEl = $('#boot'); if (bootEl) bootEl.hidden = true;
@@ -137,11 +160,24 @@
   function rebuild() {
     try {
       app.model = EthViz.buildModel(app.current, app.state, app.headers, app.stacks);
+      indexRoleRuns();
     } catch (e) {
       app.model = null;
       app.buildError = e;
     }
   }
+
+  /** Tính các đoạn vai trò và đưa vào index (để chọn/thu gọn/bàn phím như node thường). */
+  function indexRoleRuns() {
+    app.runs = app.model.hasRoles ? EthViz.roleRuns(app.model) : [];
+    app.roleParent = {};
+    app.runs.forEach(function (r) {
+      r.parentPath = null;
+      app.model.index[r.path] = r;
+      r.headers.forEach(function (h) { app.roleParent[h.path] = r.path; });
+    });
+  }
+  function runOf(headerPath) { return app.model.index[app.roleParent[headerPath]] || null; }
 
   // ---------- sidebar ----------
   function stackMatches(st, q) {
@@ -216,10 +252,12 @@
     $('#alerts').innerHTML = loadAlerts() + modelAlerts();
     $('#stack-head').innerHTML = renderHead();
     $('#framemap').innerHTML = renderFrameMap();
-    $('#tree').innerHTML = app.model.nodes.map(function (n) { return renderNode(n, 1); }).join('') ||
+    var top = roleMode() ? app.runs : app.model.nodes;
+    $('#tree').innerHTML = top.map(function (n) { return renderNode(n, 1); }).join('') ||
       '<p class="muted">Stack này chưa có header nào.</p>';
     renderDetail();
     restoreFocus();
+    layoutRoleBand();
     applyHighlight(app.hl);
   }
 
@@ -278,6 +316,12 @@
         (base ? '<p class="muted">So sánh với <a href="#' + attr(base.id) + '">' + esc(base.name) + '</a>: header được thêm có nhãn <span class="badge badge--add">+ thêm</span>.</p>' : '') +
         '</details>' : '') +
       '<div class="toolbar" role="toolbar" aria-label="Cấp hiển thị">' +
+        (app.model.hasRoles ? '<span class="toolbar-label">Nhóm theo</span>' +
+          '<div class="seg-group" role="group" aria-label="Nhóm theo">' + GROUPBY.map(function (g) {
+            var on = (roleMode() ? 'role' : 'struct') === g.id;
+            return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-groupby="' + g.id + '" title="' + attr(g.hint) +
+              '" aria-pressed="' + on + '">' + esc(g.label) + '</button>';
+          }).join('') + '</div>' : '') +
         '<span class="toolbar-label">Cấp hiển thị</span>' +
         '<div class="seg-group">' + levelBtns + '</div>' +
         '<button type="button" class="btn-ghost" data-action="reset" title="Xoá mọi thay đổi thu gọn/bật tắt/độ dài của stack này">Khôi phục mặc định</button>' +
@@ -318,9 +362,74 @@
     var legend = Object.keys(LAYER_LABEL).filter(function (k) { return layers[k]; }).map(function (k) {
       return '<span class="lg-item"><span class="lg-sw layer-' + k + '"></span>' + esc(LAYER_LABEL[k]) + '</span>';
     }).join('');
+    var roles = app.runs.length > 0;
     return '<div class="section-title"><h2>Bản đồ frame</h2><span class="muted">độ rộng tỉ lệ theo byte · bấm để xem chi tiết</span></div>' +
-      '<div class="fm-scroll"><div class="fm">' + body + '</div></div>' +
-      '<div class="legend">' + legend + '<span class="lg-item"><span class="lg-sw lg-wire"></span>Chỉ trên dây</span></div>';
+      '<div class="fm-scroll"><div class="fm-stage">' + (roles ? renderRoleBand() : '') + '<div class="fm">' + body + '</div></div></div>' +
+      '<div class="legend">' + legend + '<span class="lg-item"><span class="lg-sw lg-wire"></span>Chỉ trên dây</span></div>' +
+      (roles ? renderRoleLegend() : '');
+  }
+
+  // ---------- dải vai trò (trên bản đồ frame) ----------
+  function roleCls(role) { return 'role-' + (role || 'none'); }
+  function runSizeTxt(r) { return r.wire ? 'chỉ trên dây' : num(r.bytes) + ' B'; }
+  function runTitle(r) {
+    return r.long + ' — ' + (r.wire ? 'chỉ trên dây' : fmtSize(r.bits) + (r.offsetBit != null ? ', ' + byteRange(r.offsetBit, r.bits) : '')) +
+      (r.wireBits && !r.wire ? ' (+' + fmtBytes(r.wireBits) + ' preamble/SFD chỉ trên dây, không tính)' : '') +
+      '\nGồm: ' + r.headers.map(function (h) { return h.label || h.short || h.name; }).join(', ') + '\n' + r.desc;
+  }
+
+  /** Mỗi đoạn một "ngoặc" màu; vị trí ngang được đo theo ô header ở layoutRoleBand(). */
+  function renderRoleBand() {
+    return '<div class="fm-roles" aria-label="Vai trò đóng gói">' + app.runs.map(function (r) {
+      return '<button type="button" class="fm-role ' + roleCls(r.role) + (r.wire ? ' is-wire' : '') + '" data-run="' + attr(r.path) +
+        '" data-hl="' + attr(r.path) + '" title="' + attr(runTitle(r)) + '">' +
+        '<span class="fm-role-lbl"><b>' + esc(r.short) + '</b><span class="fm-role-sep"> · </span><span class="fm-role-sz">' + esc(runSizeTxt(r)) + '</span></span></button>';
+    }).join('') + '</div>';
+  }
+
+  function renderRoleLegend() {
+    var note = app.current && app.current.roleNote;
+    return '<div class="legend legend--roles"><span class="lg-title">Vai trò:</span>' + EthViz.ROLES.map(function (R) {
+      return '<span class="lg-item" title="' + attr(R.desc) + '"><span class="role-sw ' + roleCls(R.id) + '"></span>' + esc(R.long) + '</span>';
+    }).join('') + '</div>' +
+      (note ? '<p class="role-note"><b>Mẹo nhớ:</b> ' + esc(note) + '</p>' : '');
+  }
+
+  /** Ô trên bản đồ đại diện cho một header: chính nó, hoặc group cha gần nhất đang thu gọn. */
+  function fmElFor(path) {
+    var n = app.model.index[path];
+    while (n) {
+      var el = document.querySelector('#framemap .fm [data-path="' + cssEsc(n.path) + '"]');
+      if (el) return el;
+      n = app.model.index[n.parentPath];
+    }
+    return null;
+  }
+
+  /** Đặt left/width mỗi ngoặc vai trò khớp đúng mép các ô header của đoạn đó. */
+  function layoutRoleBand() {
+    var stage = document.querySelector('#framemap .fm-stage');
+    if (!stage || !app.runs.length) return;
+    var base = stage.getBoundingClientRect().left;
+    Array.prototype.forEach.call(stage.querySelectorAll('.fm-role'), function (el) {
+      var r = app.model.index[el.getAttribute('data-run')];
+      if (!r) return;
+      var lo = Infinity, hi = -Infinity;
+      r.headers.forEach(function (h) {
+        var c = fmElFor(h.path);
+        if (!c) return;
+        var b = c.getBoundingClientRect();
+        lo = Math.min(lo, b.left); hi = Math.max(hi, b.right);
+      });
+      if (lo === Infinity) { el.hidden = true; return; }
+      el.hidden = false;
+      el.style.left = (lo - base) + 'px';
+      el.style.width = Math.max(hi - lo, 8) + 'px';
+      // không đủ chỗ cho "Tên · N B" trên một dòng → xếp hai dòng
+      el.classList.remove('is-narrow');
+      var lbl = el.firstChild;
+      if (lbl && lbl.scrollWidth > lbl.clientWidth + 1) el.classList.add('is-narrow');
+    });
   }
 
   // ---------- cây cấu trúc ----------
@@ -336,6 +445,7 @@
   }
 
   function renderNode(node, level) {
+    if (node.kind === 'rrun') return renderRun(node, level);
     if (node.kind === 'sgroup') return renderSGroup(node, level);
     if (node.kind === 'header') return renderHeader(node, level);
     return renderField(node, level);
@@ -353,6 +463,24 @@
       '</div>' +
       (open ? '<div class="node-body" role="group">' + (n.note ? '<p class="note">' + esc(n.note) + '</p>' : '') +
         n.children.map(function (c) { return renderNode(c, level + 1); }).join('') + '</div>' : '') +
+      '</div>';
+  }
+
+  /** Dòng nhóm của chế độ Vai trò: bên trong là các header như chế độ Cấu trúc (bỏ group cấu trúc). */
+  function renderRun(r, level) {
+    var open = isOpen(r);
+    var range = r.offsetBit != null && r.bits ? byteRange(r.offsetBit, r.bits) : (r.wire ? 'chỉ trên dây' : '');
+    return '<div class="node node--rrun ' + roleCls(r.role) + (open ? ' is-open' : '') + '">' +
+      '<div class="row row--rrun' + sel(r) + '"' + rowAttrs(r, level, open) + '>' + caret(r, open) +
+        '<span class="role-sw" aria-hidden="true"></span>' +
+        '<span class="row-name"><span class="nm">' + esc(r.long) + '</span><span class="dash">–</span><b class="sz">' +
+          esc(r.wire ? fmtBytes(r.wireBits) : fmtBytes(r.bits)) + '</b>' +
+          (r.wireBits && !r.wire ? '<span class="badge badge--wire" title="Preamble/SFD đặt trong đoạn này nhưng không tính vào kích thước frame">+' + esc(fmtBytes(r.wireBits)) + ' trên dây</span>' : '') +
+          (r.wire ? '<span class="badge badge--wire">chỉ trên dây</span>' : '') + '</span>' +
+        '<span class="row-meta">' + esc(r.headers.length + ' header' + (range ? ' · ' + range : '')) + '</span>' +
+        '<span class="row-desc">' + esc(r.desc) + '</span>' +
+      '</div>' +
+      (open ? '<div class="node-body" role="group">' + r.headers.map(function (h) { return renderNode(h, level + 1); }).join('') + '</div>' : '') +
       '</div>';
   }
 
@@ -608,7 +736,8 @@
       return;
     }
     var html = '';
-    if (n.kind === 'sgroup') html = detailSGroup(n);
+    if (n.kind === 'rrun') html = detailRun(n);
+    else if (n.kind === 'sgroup') html = detailSGroup(n);
     else if (n.kind === 'header') html = detailHeader(n);
     else html = detailField(n);
     el.innerHTML = '<div class="detail-card">' + html + '</div>';
@@ -631,6 +760,29 @@
       ]) + (n.note ? '<p>' + esc(n.note) + '</p>' : '');
   }
 
+  function detailRun(r) {
+    return '<span class="eyebrow"><span class="role-sw ' + roleCls(r.role) + '"></span>Vai trò đóng gói</span><h2>' + esc(r.long) + '</h2>' +
+      '<p class="lead">' + esc(r.desc) + '</p>' +
+      dl([
+        ['Kích thước', r.wire ? 'Chỉ có trên dây — không tính vào kích thước frame' : esc(fmtSize(r.bits))],
+        r.offsetBit != null && r.bits ? ['Vị trí trong frame', esc(byteRange(r.offsetBit, r.bits))] : null,
+        r.wireBits && !r.wire ? ['Trên dây', esc('+' + fmtBytes(r.wireBits) + ' preamble/SFD (không tính)')] : null,
+        ['Gồm', '<ul class="plain">' + r.headers.map(function (c) {
+          return '<li><a href="#" data-goto="' + attr(c.path) + '">' + esc(c.label || c.name) + '</a> <span class="muted">' +
+            esc(c.missing ? 'thiếu' : fmtBytes(c.bits) + (c.wire ? ' · chỉ trên dây' : '')) + '</span></li>';
+        }).join('') + '</ul>']
+      ]) + (app.current.roleNote ? '<p class="role-note"><b>Mẹo nhớ:</b> ' + esc(app.current.roleNote) + '</p>' : '');
+  }
+
+  function roleLine(n) {
+    if (!app.model.hasRoles) return null;
+    var R = EthViz.roleInfo(n.role || (n.wire ? 'link' : null));
+    var run = runOf(n.path);
+    return ['Vai trò', '<span class="role-sw ' + roleCls(R.id) + '"></span>' +
+      (run ? '<a href="#" data-goto="' + attr(run.path) + '"><b>' + esc(R.name) + '</b></a>' : '<b>' + esc(R.name) + '</b>') +
+      ' — ' + esc(R.desc)];
+  }
+
   function collectOptional(list, out) {
     list.forEach(function (c) { if (c.optional) out.push(c); if (c.children) collectOptional(c.children, out); });
     return out;
@@ -649,6 +801,7 @@
       (n.added ? '<p><span class="badge badge--add">+ thêm</span> ' + (n.addedLabel ? 'so với stack gốc' : 'thuộc nhóm được thêm so với stack gốc') + '</p>' : '') +
       (h.summary ? '<p class="lead">' + esc(h.summary) + '</p>' : '') +
       dl([
+        roleLine(n),
         ['Kích thước', esc(fmtSize(n.bits))],
         ['Cố định / tối đa', esc((h.fixedBytes != null ? h.fixedBytes + ' byte' : '?') + (h.maxBytes ? ' / ' + h.maxBytes + ' byte' : ''))],
         n.wire ? ['Vị trí', 'Chỉ có trên dây — không tính vào kích thước frame'] : ['Vị trí trong frame', esc(byteRange(n.offsetBit, n.bits))],
@@ -753,7 +906,7 @@
 
   function setLevel(n) {
     app.state.level = n;
-    app.state.open = {};
+    if (roleMode()) app.state.roleOpen = {}; else app.state.open = {};
     saveState();
     render();
   }
@@ -771,6 +924,13 @@
     app.state.varBytes[hp] = app.state.varBytes[hp] || {};
     app.state.varBytes[hp][id] = Number(val) || 0;
     saveState();
+    render();
+  }
+
+  function setGroupBy(id) {
+    app.groupBy = id === 'role' ? 'role' : 'struct';
+    storeSet(GROUPBY_KEY, app.groupBy);
+    app.focusPath = null;
     render();
   }
 
@@ -799,7 +959,17 @@
   function applyHighlight(path) {
     Array.prototype.forEach.call(document.querySelectorAll('.is-hl'), function (e) { e.classList.remove('is-hl'); });
     if (!path) return;
-    Array.prototype.forEach.call(document.querySelectorAll('[data-hl="' + cssEsc(path) + '"]'), function (e) { e.classList.add('is-hl'); });
+    var paths = [path];
+    var run = app.model && app.model.index[path];
+    // đoạn vai trò → sáng cả các header (và group thu gọn chứa chúng trên bản đồ)
+    if (run && run.kind === 'rrun') run.headers.forEach(function (h) {
+      paths.push(h.path);
+      var c = fmElFor(h.path);
+      if (c) c.classList.add('is-hl');
+    });
+    paths.forEach(function (p) {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-hl="' + cssEsc(p) + '"]'), function (e) { e.classList.add('is-hl'); });
+    });
   }
 
   // ---------- giao diện: theme ----------
@@ -831,6 +1001,7 @@
       if (row) { app.hl = row.getAttribute('data-hl'); applyHighlight(app.hl); }
     });
     $('#search').addEventListener('input', function (e) { app.query = e.target.value; renderSidebar(); });
+    window.addEventListener('resize', layoutRoleBand);
     window.addEventListener('hashchange', function () {
       var id = idFromHash();
       if (id && (!app.current || id !== app.current.id)) showStack(id, true);
@@ -851,6 +1022,8 @@
     if (t.closest('#scrim')) { document.body.classList.remove('nav-open'); return; }
     if (!app.model) return;
     if ((btn = t.closest('[data-level]'))) { setLevel(Number(btn.getAttribute('data-level'))); return; }
+    if ((btn = t.closest('[data-groupby]'))) { setGroupBy(btn.getAttribute('data-groupby')); return; }
+    if ((btn = t.closest('.fm-role'))) { select(btn.getAttribute('data-run'), roleMode() ? { reveal: true } : { showDetail: true }); return; }
     if ((btn = t.closest('[data-action="reset"]'))) {
       app.state = defaultState(); saveState(); render(); return;
     }
@@ -902,7 +1075,7 @@
         break;
       case 'ArrowLeft':
         if (canOpen(node) && open) toggle(path, false);
-        else if (node.parentPath && rowEl(node.parentPath)) focusRow(rowEl(node.parentPath));
+        else if (parentOf(node) && rowEl(parentOf(node).path)) focusRow(rowEl(parentOf(node).path));
         break;
       case 'Enter': select(path, { showDetail: true }); break;
       case ' ': toggle(path); break;

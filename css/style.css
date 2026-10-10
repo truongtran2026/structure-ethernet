@@ -29,6 +29,9 @@
   --tunnel-bg: #ece1fb;  --tunnel-bd: #8250d8;  --tunnel-fg: #36156e;
   --payload-bg: #eeebe6; --payload-bd: #9a8f80; --payload-fg: #3b342b;
   --trailer-bg: #fbe0e3; --trailer-bd: #cc3f55; --trailer-fg: #5c0f1c;
+
+  /* vai trò đóng gói: màu đậm, bão hoà (khác bảng pastel của layer) */
+  --role-link: #3d4a5c; --role-delivery: #d9480f; --role-encap: #b0179c; --role-passenger: #0b7c8f; --role-none: #8a929e;
   color-scheme: light;
 }
 
@@ -46,6 +49,7 @@
     --tunnel-bg: #2f1f52;  --tunnel-bd: #a983f0;  --tunnel-fg: #ece2ff;
     --payload-bg: #302c27; --payload-bd: #b0a493; --payload-fg: #efe9e0;
     --trailer-bg: #46191f; --trailer-bd: #f06b7f; --trailer-fg: #ffdfe4;
+    --role-link: #b4bfcf; --role-delivery: #ff9259; --role-encap: #f27ae2; --role-passenger: #4fd1e3; --role-none: #6b7380;
     color-scheme: dark;
   }
 }
@@ -62,6 +66,7 @@
   --tunnel-bg: #2f1f52;  --tunnel-bd: #a983f0;  --tunnel-fg: #ece2ff;
   --payload-bg: #302c27; --payload-bd: #b0a493; --payload-fg: #efe9e0;
   --trailer-bg: #46191f; --trailer-bd: #f06b7f; --trailer-fg: #ffdfe4;
+  --role-link: #b4bfcf; --role-delivery: #ff9259; --role-encap: #f27ae2; --role-passenger: #4fd1e3; --role-none: #6b7380;
   color-scheme: dark;
 }
 
@@ -425,3 +430,49 @@ button { font: inherit; color: inherit; }
 .is-flash { animation: ev-flash 1.5s ease-out; }
 @media (prefers-reduced-motion: reduce) { .is-flash { animation: none; outline: 3px solid var(--hl); } }
 @media (max-width: 600px) { .var-card .var-chip { padding: 6px 12px; } }
+
+/* ===== Vai trò đóng gói (cách nhóm thứ hai) ===== */
+.role-link      { --rc: var(--role-link); }
+.role-delivery  { --rc: var(--role-delivery); }
+.role-encap     { --rc: var(--role-encap); }
+.role-passenger { --rc: var(--role-passenger); }
+.role-none      { --rc: var(--role-none); }
+.role-sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--rc); flex: none; vertical-align: -1px; margin-right: 4px; }
+
+/* dải ngoặc phía trên các ô; left/width đặt bằng JS theo mép ô header */
+.fm-stage { position: relative; min-width: min-content; }
+.fm-roles { position: relative; height: 36px; margin-bottom: 16px; }
+.fm-role {
+  position: absolute; top: 0; height: 36px; left: 0; width: 0; padding: 0 3px 6px; font: inherit;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  background: transparent; border: 0; cursor: pointer; color: var(--rc); overflow: visible;
+}
+/* ngoặc: thanh màu dưới nhãn + hai chân xuống phía ô header */
+.fm-role::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -6px; height: 10px;
+  border: 3px solid var(--rc); border-bottom: 0; border-radius: 6px 6px 0 0;
+}
+.fm-role.is-wire::after { border-style: dashed; }
+.fm-role-lbl {
+  display: block; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: .76rem; line-height: 20px; color: var(--rc);
+}
+.fm-role-lbl b { font-weight: 750; }
+.fm-role.is-narrow .fm-role-lbl { line-height: 14px; font-size: .72rem; }
+.fm-role.is-narrow .fm-role-lbl b, .fm-role.is-narrow .fm-role-sz { display: block; overflow: hidden; text-overflow: ellipsis; }
+.fm-role.is-narrow .fm-role-sep { display: none; }
+.fm-role:hover::after, .fm-role.is-hl::after { border-width: 4px; background: color-mix(in srgb, var(--rc) 18%, transparent); }
+.fm-role:hover .fm-role-lbl, .fm-role.is-hl .fm-role-lbl { text-decoration: underline; }
+.fm-role:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.legend--roles { margin-top: 6px; }
+.lg-title { font-weight: 650; color: var(--text); }
+.role-note {
+  margin: 8px 0 0; padding: 6px 10px; font-size: .86rem; border-radius: 8px;
+  background: var(--surface-2); border-left: 3px solid var(--accent);
+}
+
+/* cây chế độ Vai trò */
+.row--rrun { background: color-mix(in srgb, var(--rc) 9%, var(--surface)); border-left: 5px solid var(--rc); font-weight: 600; }
+.row--rrun .nm { color: var(--rc); }
+.row-desc { flex: 1 0 100%; padding-left: 34px; font-size: .82rem; font-weight: 400; color: var(--muted); }
+.node--rrun > .node-body { border-left: 2px solid color-mix(in srgb, var(--rc) 45%, var(--border)); margin-left: 13px; padding-left: 14px; }

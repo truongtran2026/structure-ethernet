@@ -123,6 +123,7 @@ Riêng octet đầu MAC: viết theo thứ tự hiển thị chuẩn (bit 7..0 c
   enable: ["key"],                 // (tuỳ chọn) id field/group optional được bật mặc định
   varBytes: { payload: 46 },       // (tuỳ chọn) độ dài mặc định cho trường varBytes: fieldId → bytes
   wire: true,                      // (tuỳ chọn) chỉ có trên dây (preamble/SFD), không tính vào kích thước frame
+  role: "delivery",                // BẮT BUỘC (trên node này hoặc group cha): vai trò đóng gói, xem mục 4b
   added: true                      // (tuỳ chọn) header này được THÊM so với stack `compareTo`.
                                    // Stack có compareTo phải đánh dấu tường minh mọi header được thêm
                                    // (vd. Outer IPv4 + GRE trong gre-ipv4, không phải Inner IPv4).
@@ -137,6 +138,23 @@ Riêng octet đầu MAC: viết theo thứ tự hiển thị chuẩn (bit 7..0 c
 }
 ```
 
+## 4b. Vai trò đóng gói (`role`) — cách nhóm thứ hai
+
+Thuật ngữ theo RFC 1701/2784 (delivery / encapsulation / passenger), mở rộng cho mọi loại frame.
+Danh sách cố định (thứ tự hiển thị):
+
+| role | Tên hiển thị | Gồm |
+| --- | --- | --- |
+| `link` | Link (khung L2 của chặng) | Header L2 thay đổi ở mỗi chặng: Ethernet/MAC, VLAN tag của chặng đó, LLC/SNAP, FCS, preamble |
+| `delivery` | Delivery (vận chuyển qua mạng lõi) | Header đưa gói tới đầu kia của tunnel/LSP: Outer IP, Outer UDP, nhãn transport MPLS |
+| `encap` | Encapsulation (đóng gói / dịch vụ) | Header cho biết bên trong là gì & thuộc ai: GRE, VXLAN, nhãn VPN/PW, Control Word, I-Tag, PPPoE + PPP |
+| `passenger` | Passenger (gói/khung gốc được chở) | Phần người dùng gửi: IP/TCP/UDP + payload, hoặc nguyên khung Ethernet khách |
+
+Stack có thể có `roleNote` (tuỳ chọn, 1 câu tiếng Việt): mẹo nhớ vai trò từng phần, nên có khi stack có ≥ 3 vai trò.
+
+Gán `role` trên group thì mọi con kế thừa (con có thể ghi đè). Stack không tunnel (Ethernet II…)
+chỉ có `link` + `passenger` là đúng — không bịa delivery/encap.
+
 ## 5. Bất biến mà validator kiểm tra
 
 1. Mọi `header` trong stack tồn tại trong `window.HEADERS`.
@@ -149,5 +167,6 @@ Riêng octet đầu MAC: viết theo thứ tự hiển thị chuẩn (bit 7..0 c
 8. Header có field optional/varBytes (trừ `payload`) phải có `variants`. Mỗi variant: `id` duy nhất,
    `enable` chỉ chứa node optional, `varBytes` trỏ field varBytes và nằm trong [min, max],
    `set` trỏ field có thật, `bytes` = kích thước tự tính.
+9. Mọi StackNode header có `role` hợp lệ (tự có hoặc kế thừa từ group cha).
 
 Chạy: `node .claude/skills/protocol-header-spec/scripts/validate-data.mjs .`
