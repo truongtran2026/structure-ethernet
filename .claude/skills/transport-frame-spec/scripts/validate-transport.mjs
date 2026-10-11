@@ -107,13 +107,33 @@ for (const [key, u] of Object.entries(MUX)) {
   if (hasB === hasR) err(`${where}: cần đúng một trong bytesPer125us / rateKbps`);
   if (u.leafOk !== undefined && !(u.accepts || []).length) err(`${where}: leafOk chỉ dùng khi có accepts`);
   if (u.frame && !FR[u.frame]) err(`${where}: frame "${u.frame}" không tồn tại`);
+  if (u.tribSlots && !(u.accepts || []).some((a) => a.slots !== undefined)) err(`${where}: tribSlots nhưng không phương án nào có slots`);
   for (const [i, a] of (u.accepts || []).entries()) {
     const aw = `${where} › accepts[${i}] (${a.count}×${a.of})`;
     const ch = MUX[a.of];
     if (!ch) { err(`${aw}: không có unit "${a.of}"`); continue; }
     if (!(Number.isInteger(a.count) && a.count > 0)) { err(`${aw}: count sai`); continue; }
     const oh = a.overhead?.bytes || 0;
-    const childKbps = ch.rateKbps !== undefined ? ch.rateKbps : ch.bytesPer125us * 64;
+    const childKbps = a.carriedKbps !== undefined ? a.carriedKbps : ch.rateKbps !== undefined ? ch.rateKbps : ch.bytesPer125us * 64;
+    if (a.carriedKbps !== undefined && !(a.carriedKbps > 0 && a.carriedKbps <= (ch.rateKbps ?? ch.bytesPer125us * 64) * (1 + 1e-9)))
+      err(`${aw}: carriedKbps phải > 0 và ≤ tốc độ con`);
+    if (a.slots !== undefined) {
+      if ((ch.accepts || []).length && !ch.leafOk) err(`${aw}: con "${a.of}" vào TS phải là client hoặc leafOk`);
+      const ts = u.tribSlots;
+      if (!ts || !Number.isInteger(ts.n) || !(ts.kbps > 0)) { err(`${aw}: slots cần unit.tribSlots {n, kbps}`); continue; }
+      if (!Number.isInteger(a.slots) || a.slots < 1 || a.slots > ts.n) { err(`${aw}: slots sai`); continue; }
+      if (a.count !== Math.floor(ts.n / a.slots)) err(`${aw}: count phải = ⌊${ts.n}/${a.slots}⌋ = ${Math.floor(ts.n / a.slots)}`);
+      if (childKbps > a.slots * ts.kbps * (1 + 1e-9)) err(`${aw}: ${childKbps} kbps > ${a.slots} TS × ${ts.kbps} = ${a.slots * ts.kbps}`);
+      if (ts.n * ts.kbps > (hasB ? u.bytesPer125us * 64 : u.rateKbps) * (1 + 1e-9)) err(`${where}: tribSlots n × kbps vượt tốc độ unit`);
+      continue;
+    }
+    if (a.fit !== undefined && a.fit !== "le") err(`${aw}: fit chỉ nhận "le"`);
+    if (!hasB && a.fit === "le") {
+      const want = a.count * childKbps + (a.overhead?.kbps || 0);
+      if (want > u.rateKbps * (1 + 1e-9)) err(`${aw}: ${a.count}×${childKbps} + OH ${a.overhead?.kbps || 0} = ${want} > ${u.rateKbps}`);
+      if (a.overhead?.bytes) err(`${aw}: unit theo tốc độ dùng overhead.kbps, không dùng bytes`);
+      continue;
+    }
     if (!hasB) {
       const want = a.count * childKbps + (a.overhead?.kbps || 0);
       if (Math.abs(want - u.rateKbps) > 1e-6 * u.rateKbps) err(`${aw}: ${a.count}×${childKbps} + OH ${a.overhead?.kbps || 0} kbps = ${want} ≠ ${u.rateKbps}`);

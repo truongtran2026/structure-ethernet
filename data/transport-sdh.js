@@ -854,6 +854,8 @@ window.TLABS = window.TLABS || [];
       desc: "Chứa " + n + " VC-4 (= " + 63 * n + " E1). SOH ghép xen từ " + n + " STM-1 nhưng nhiều byte chỉ dùng một bản.",
       accepts: [{ of: "aug-" + n, count: 1, overhead: { bytes: 72 * n, name: "SOH", desc: "RSOH " + 27 * n + " byte + MSOH " + 45 * n + " byte." }, note: 2358 * n + " + " + 72 * n + " = " + 2430 * n + " byte (9×" + 270 * n + ")." }] });
   });
+  // GD3: STM-16/64/256 dùng làm client nguyên khối của OTN (AMP/BMP vào OPU1/OPU2/OPU3).
+  ["stm-16", "stm-64", "stm-256"].forEach(function (id) { M[id].leafOk = true; });
 
   // =====================================================================
   // TLABS

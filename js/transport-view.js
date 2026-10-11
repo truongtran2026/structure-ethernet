@@ -247,7 +247,9 @@
       var col = i + 2;
       if (d.band) {
         ruler += '<button type="button" class="tg-rc tg-rc--band" style="grid-row:1;grid-column:' + col + '" data-tband="' + d.c0 + '"' +
-          ' title="Cột ' + (d.c0 + 1) + '–' + (d.c1 + 1) + ' (' + (d.c1 - d.c0 + 1) + ' cột giống nhau) — bấm để bung">' +
+          ' title="Cột ' + (d.c0 + 1) + '–' + (d.c1 + 1) + (d.period
+            ? ' (' + (d.c1 - d.c0 + 1) + ' cột lặp lại đúng mẫu ' + d.period + ' cột ngay trước — ghép xen, ' + ((d.c1 - d.c0 + 1) / d.period) + ' lần nữa)'
+            : ' (' + (d.c1 - d.c0 + 1) + ' cột giống nhau)') + ' — bấm để bung">' +
           (d.c0 + 1) + '–' + (d.c1 + 1) + '</button>';
       } else if (d.runStart != null && d.runStart === d.c0 && comp) {
         ruler += '<button type="button" class="tg-rc tg-rc--fold" style="grid-row:1;grid-column:' + col + '" data-tunband="' + d.c0 + '" title="Nén lại dải bắt đầu ở cột ' + (d.c0 + 1) + '">⊟</button>';

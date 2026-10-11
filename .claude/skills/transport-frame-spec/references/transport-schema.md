@@ -101,6 +101,29 @@ hàng `r … r+h-1`. Dùng cho TUG-3 trong VC-4, TU-12 trong TUG-2…
 }
 ```
 
+### Mở rộng OTN (GD3)
+
+```js
+{
+  id: "opu2", kind: "opu", rateKbps: 238 / 237 * 9953280,
+  tribSlots: { n: 8, kbps: 238 / 237 * 9953280 / 8, size: "1,25G", note: "PT 21" },  // (tuỳ chọn) bể TS
+  accepts: [
+    { of: "stm-64", count: 1, fit: "le", mapping: "AMP", note: "…" },     // fit "le": count × con ≤ cha − overhead
+    { of: "odu0", count: 8, slots: 1, mapping: "GMP", note: "…" },         // slots: số TS mỗi con chiếm
+    { of: "odu1", count: 4, slots: 2, mapping: "AMP", note: "…" },
+    { of: "oduflex-fc800", count: 1, slots: 7, mapping: "GMP", note: "…" }
+  ]
+}
+```
+
+- `tribSlots` + các phương án có `slots` tạo thành **bể TS**: lab coi tất cả phương án có `slots` của
+  cùng unit là MỘT lựa chọn "ghép TS" và cho **trộn** các loại con, miễn tổng `slots` ≤ `tribSlots.n`.
+  `count` = ⌊n / slots⌋ (số tối đa khi chỉ dùng một loại). Phương án không có `slots` vẫn là lựa chọn riêng.
+- `fit: "le"` (chỉ cho cha theo tốc độ): count × con + overhead.kbps ≤ cha (ánh xạ có chèn/khoảng trống,
+  vd STM-16 vào OPU1, 100GbE vào OPU4). Không có `fit` thì phải bằng đúng như PDH.
+- `carriedKbps` (tuỳ chọn trên phương án): tốc độ thực sự mang sau transcode (1GbE TTT, 40GbE 1024B/1027B);
+  validator và lab dùng số này thay tốc độ con.
+
 Một unit không có `accepts` là điểm đầu (client). Các con của cùng một phương án là độc lập:
 VC-4 nhận 3×TUG-3, mỗi TUG-3 tự chọn phương án riêng (7×TUG-2 hoặc 1×TU-3).
 
@@ -129,6 +152,7 @@ VC-4 nhận 3×TUG-3, mỗi TUG-3 tự chọn phương án riêng (7×TUG-2 ho�
    - cha theo tốc độ (ghép PDH) → `parent.rateKbps = count × tốc độ con + overhead.kbps` (danh định; chèn bit
      bù sai lệch, ghi trong desc).
    - Con có `accepts` mà không `leafOk` thì không phải client.
+   - `fit: "le"` → `≤` thay vì `=`; `slots` → cần `tribSlots`, `count = ⌊n/slots⌋`, (carriedKbps ?? tốc độ con) ≤ slots × tribSlots.kbps; con phải là client hoặc leafOk.
 5. Mọi `of`, `frame`, `unit`, `roots`, `palette` trỏ tới id có thật; id duy nhất; `desc`/`summary` không rỗng.
 6. Mọi frame có `unit` thì kích thước khớp (unit theo tốc độ: `frame.rateKbps = unit.rateKbps`): `rows × cols × cellBits / 8 × 125 / periodUs = unit.bytesPer125us`
    (bỏ qua nếu unit có rateKbps).

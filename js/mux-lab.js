@@ -29,6 +29,8 @@
   function nm(id) { return L().nameOf(MUX(), id); }
   function n(x, d) { return TV().fmtNum(x, d == null ? 2 : d); }
   function pkey(p) { return p.join('.'); }
+  /** Giá trị lựa chọn từ thuộc tính/ô chọn: 'ts' (bể TS) hoặc số. */
+  function optVal(v) { return v === 'ts' ? 'ts' : +v; }
   function parsePath(s) { return s === '' || s == null ? [] : String(s).split('.').map(Number); }
 
   // ---------- trạng thái ----------
@@ -139,10 +141,28 @@
           esc((u.summary || '') + (max ? ' — tối đa ' + max + ' trong ' + nm(root) : ' — không ghép được vào ' + nm(root))) + '">' +
           '<span class="pal-name">' + esc(nm(id)) + '</span><span class="pal-size">' + esc(size) + '</span></button>';
       }).join('') + '</div>' +
-      '<p class="muted pal-hint">' + (L().isByteUnit(M, root)
+      '<p class="muted pal-hint">' + palHint(root) + '</p>';
+  }
+  /** Gốc có bể TS ở dưới (OTN) không. */
+  function poolUnder(root) {
+    var M = MUX(), seen = {}, q = [root];
+    while (q.length) {
+      var id = q.shift();
+      if (seen[id] || !M[id]) continue;
+      seen[id] = true;
+      if (L().hasPool(M, id)) return true;
+      (M[id].accepts || []).forEach(function (a) { if (L().autoOpen(M, id, a.of)) q.push(a.of); });
+    }
+    return false;
+  }
+  function palHint(root) {
+    var M = MUX();
+    if (poolUnder(root)) return 'Đơn vị tính theo kbit/s. OPU có <b>bể tributary slot (TS)</b>: chọn “Ghép TS” để trộn nhiều loại ODU, miễn còn đủ TS trống; ' +
+      'thả tín hiệu khách hàng thẳng vào khung — các bước trung gian tự dựng. ODU và tín hiệu SDH mặc định <b>nguyên khối</b>; đổi phương án ở ô chọn để mở xem bên trong.';
+    return (L().isByteUnit(M, root)
         ? 'Số byte là mỗi 125 µs (1 byte/125 µs = 64 kbit/s). Thả đơn vị bậc thấp thẳng vào hộp bậc cao — các bước trung gian tự dựng.'
         : 'Đơn vị PDH tính theo kbit/s: mỗi bậc ghép 4 nhánh bậc dưới + bit overhead/chèn. Thả bậc thấp vào bậc cao — các bậc giữa tự dựng.') +
-      ' Luồng PDH (E1, E3…) mặc định là <b>nguyên khối</b>; đổi phương án ở ô chọn của nó để mở xem bên trong.</p>';
+      ' Luồng PDH (E1, E3…) mặc định là <b>nguyên khối</b>; đổi phương án ở ô chọn của nó để mở xem bên trong.';
   }
 
   function countNodes(t) { var c = 0; (function w(x) { if (!x) return; c++; x.kids.forEach(w); })(t); return c; }
@@ -157,8 +177,44 @@
 
   function ohTxt(node) {
     var u = MUX()[node.u];
-    if (!u || !u.accepts || node.opt < 0) return '';
+    if (!u || !u.accepts || !L().chosen(node)) return '';
+    if (L().isTs(node)) {
+      var pi = L().poolInfo(MUX(), node.u);
+      return pi && pi.outsideKbps ? '+' + TV().fmtRate(pi.outsideKbps) + ' ngoài TS' : '';
+    }
     return L().ohLabel(u.accepts[node.opt]);
+  }
+  /** Nhãn lựa chọn: "1×STM-64" / "Ghép TS (32 × 1,25G, trộn ODU)". */
+  function choiceLabel(uid, c) {
+    if (c !== 'ts') { var a = MUX()[uid].accepts[c]; return a.count + '×' + nm(a.of); }
+    var pi = L().poolInfo(MUX(), uid);
+    return 'Ghép TS (' + pi.n + ' × ' + (pi.size || TV().fmtRate(pi.kbps)) + ', trộn ODU)';
+  }
+  function choiceTip(uid, c) {
+    if (c !== 'ts') { var a = MUX()[uid].accepts[c]; return (ohPhrase(a) || 'không thêm overhead') + (a.mapping ? ' · ' + a.mapping : '') + (a.fit === 'le' ? ' · có chèn/khoảng trống ánh xạ' : '') + (a.note ? ' — ' + a.note : ''); }
+    var pi = L().poolInfo(MUX(), uid);
+    return 'Bể ' + pi.n + ' tributary slot, mỗi TS ' + TV().fmtRate(pi.kbps) + (pi.note ? ' (' + pi.note + ')' : '') + ': ' +
+      L().slotOpts(MUX(), uid).map(function (s) { return nm(s.a.of) + ' ' + s.a.slots + ' TS' + (s.a.mapping ? ' ' + s.a.mapping : ''); }).join(', ') +
+      ' — trộn các loại, miễn tổng TS ≤ ' + pi.n + '.';
+  }
+  /** "1–2" / "13–19, 29, 30" (1-based). */
+  function tsList(ts) {
+    var a = (ts || []).map(function (x) { return x + 1; }).sort(function (x, y) { return x - y; }), out = [], i = 0;
+    while (i < a.length) {
+      var j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++;
+      out.push(j - i >= 2 ? a[i] + '–' + a[j] : j > i ? a[i] + ', ' + a[j] : String(a[i]));
+      i = j + 1;
+    }
+    return out.join(', ');
+  }
+  /** Màu con thứ i trong bể TS (góc vàng để các màu kề nhau tách bạch). */
+  function tsHue(i) { return Math.round((i * 137.508 + 25) % 360); }
+  /** Ghi chú transcode: "mang 40,117 Gbit/s" khi phương án cha có carriedKbps. */
+  function carriedNote(pa, uid) {
+    if (!pa || pa.carriedKbps == null) return '';
+    var line = L().unitKbps(MUX(), uid);
+    return '<span class="ch-tc" title="' + esc('Tốc độ đường dây ' + TV().fmtRate(line) + ' → tốc độ thực mang sau transcode ' + TV().fmtRate(pa.carriedKbps) + (pa.note ? ' (' + pa.note + ')' : '') + '. Dung lượng tính bằng tốc độ thực mang.') + '">' +
+      esc(TV().fmtRate(line)) + ' → mang ' + esc(TV().fmtRate(pa.carriedKbps)) + '</span>';
   }
   /** "+9 B VC-4 POH" / "+256 kbit/s FAS…" ('' nếu không có). */
   function ohPhrase(a) {
@@ -168,7 +224,8 @@
   function ohTitle(node, isRoot) {
     var M = MUX(), u = M[node.u];
     if (!u) return '';
-    if (!u.accepts || node.opt < 0) return (u.summary || '') + (u.leafOk && !isRoot ? '\nĐang dùng nguyên khối (client) — chọn phương án để mở xem bên trong.' : '');
+    if (!u.accepts || !L().chosen(node)) return (u.summary || '') + (u.leafOk && !isRoot ? '\nĐang dùng nguyên khối (client) — chọn phương án để mở xem bên trong.' : '');
+    if (L().isTs(node)) return nm(node.u) + ' = ' + choiceTip(node.u, 'ts');
     var a = u.accepts[node.opt];
     var oh = a.overhead || {};
     var ph = ohPhrase(a);
@@ -180,8 +237,9 @@
    * Một "hộp": gộp chuỗi bắt buộc 1×… thành một dòng (STM-1 › AUG-1 › AU-4 › VC-4), rồi vẽ các ô con.
    * node có thể null (ô trống của đơn vị su).
    */
-  function renderBox(node, su, path, depth, idxLabel, big) {
+  function renderBox(node, su, path, depth, idxLabel, big, ex) {
     var M = MUX();
+    ex = ex || {};
     var isNew = lb.lastPath && pkey(lb.lastPath).indexOf(pkey(path)) === 0 && lb.lastPath.length >= path.length;
     if (!node) {
       var canOpen = M[su] && M[su].accepts && M[su].accepts.length;
@@ -207,33 +265,55 @@
 
     var head = chain.map(function (c, i) {
       var u = M[c.node.u];
-      var multi = u && u.accepts && u.accepts.length > 1;
+      var multi = u && u.accepts && L().choices(M, c.node.u).length > 1;
       var isRootN = !c.path.length;
       var cli = !isRootN && L().isClient(M, c.node.u, c.node);
-      var canMono = u && u.leafOk && u.accepts && !isRootN; // PDH: chọn nguyên khối / phương án
+      var canMono = u && u.leafOk && u.accepts && !isRootN; // PDH/ODU: chọn nguyên khối / phương án
       var oh = ohTxt(c.node);
+      // phương án của cha chứa mắt xích này (để hiện tốc độ thực mang sau transcode)
+      var pa = i ? L().optObj(M, chain[i - 1].node.u, chain[i - 1].node.opt) : ex.pa;
       return (i ? '<span class="ch-sep" aria-hidden="true">›</span>' : '') +
         '<span class="ch-item k-' + (cli ? 'client' : u.kind) + '">' +
           '<button type="button" class="ch-name" data-lsel="' + esc(c.node.u) + '" title="' + esc(ohTitle(c.node, isRootN)) + '">' + esc(nm(c.node.u)) + '</button>' +
           (oh ? '<span class="ch-oh" title="' + esc(ohTitle(c.node, isRootN)) + '">' + esc(oh) + '</span>' : '') +
-          (canMono || (multi && c.node.opt >= 0) ? optSelect(c.node, c.path, canMono) : '') +
+          (cli ? carriedNote(pa, c.node.u) : '') +
+          (canMono || (multi && L().chosen(c.node)) ? optSelect(c.node, c.path, canMono) : '') +
         '</span>';
     }).join('');
 
-    var cls = 'lab-box' + (compact ? ' is-compact' : '') + (depth === 0 ? ' is-root' : '') + (isNew && lb.lastPath && pkey(lb.lastPath) === pkey(last.path) ? ' is-new' : '');
-    var tools = (path.length ? '<button type="button" class="box-x" data-lremove="' + pk + '" title="Gỡ ' + esc(nm(node.u)) + ' khỏi ô này" aria-label="Gỡ">×</button>' : '');
+    var cls = 'lab-box' + (compact ? ' is-compact' : '') + (depth === 0 ? ' is-root' : '') + (ex.ts ? ' is-tskid' : '') + (isNew && lb.lastPath && pkey(lb.lastPath) === pkey(last.path) ? ' is-new' : '');
+    var tsStyle = ex.ts ? ' style="--tsh:' + ex.hue + '"' : '';
+    var idxHtml = idxLabel ? '<span class="box-idx' + (ex.ts ? ' ts-tag' : '') + '"' + tsStyle + (ex.ts ? ' title="Chiếm ' + ex.ts.length + ' TS: #' + esc(tsList(ex.ts)) + '"' : '') + '>#' + idxLabel +
+      (ex.ts ? ' · TS ' + esc(tsList(ex.ts)) : '') + '</span>' : '';
+    var tools = (path.length ? '<button type="button" class="box-x" data-lremove="' + pk + '" title="Gỡ ' + esc(nm(node.u)) + (ex.ts ? ' — trả lại ' + ex.ts.length + ' TS' : ' khỏi ô này') + '" aria-label="Gỡ">×</button>' : '');
     if (compact) {
-      return '<div class="' + cls + '" data-drop="' + pk + '">' + (idxLabel ? '<span class="box-idx">#' + idxLabel + '</span>' : '') +
+      return '<div class="' + cls + '" data-drop="' + pk + '"' + tsStyle + '>' + idxHtml +
         '<span class="box-chain">' + head + '</span>' + tools + '</div>';
     }
 
     var body = '';
     var summary = '';
-    if (last.node.opt < 0 && lu && lu.accepts && !leafClient) {
-      body = '<div class="opt-pick"><span class="muted">Chọn cách lấp ' + esc(nm(last.node.u)) + ':</span> ' + lu.accepts.map(function (a, i) {
-        return '<button type="button" class="var-chip" data-lopt="' + pkey(last.path) + '" data-lval="' + i + '" title="' + esc((ohPhrase(a) || 'không thêm overhead') + (a.note ? ' — ' + a.note : '')) + '">' +
-          a.count + '×' + esc(nm(a.of)) + '</button>';
+    if (!L().chosen(last.node) && lu && lu.accepts && !leafClient) {
+      body = '<div class="opt-pick"><span class="muted">Chọn cách lấp ' + esc(nm(last.node.u)) + ':</span> ' + L().choices(M, last.node.u).map(function (c) {
+        return '<button type="button" class="var-chip" data-lopt="' + pkey(last.path) + '" data-lval="' + c + '" title="' + esc(choiceTip(last.node.u, c)) + '">' +
+          esc(choiceLabel(last.node.u, c)) + '</button>';
       }).join(' ') + '<span class="muted"> · hoặc thả thẳng đơn vị vào hộp này</span></div>';
+    } else if (lu && L().isTs(last.node)) {
+      var pi = L().poolInfo(M, last.node.u), pn = last.node, free = L().tsFree(M, pn);
+      var kc = {};
+      pn.kids.forEach(function (k) { kc[k.u] = (kc[k.u] || 0) + 1; });
+      summary = '<span class="box-sum">TS ' + (pi.n - free) + '/' + pi.n + (pn.kids.length ? ' · ' + esc(clientsTxt(kc)) : '') + '</span>';
+      if (!collapsed) {
+        body = tsBar(pn, pi, last.path) +
+          '<div class="box-kids ts-kids">' + pn.kids.map(function (k, i) {
+            return renderBox(k, k.u, last.path.concat(i), depth + 1, String(i + 1), big, { ts: k.ts || [], hue: tsHue(i), pa: L().slotOptFor(M, pn.u, k.u) });
+          }).join('') +
+          (free ? '<div class="lab-slot ts-free" data-drop="' + pkey(last.path) + '" role="button" tabindex="0" title="Thả ODU/tín hiệu vào bể TS của ' + esc(nm(pn.u)) + '">' +
+            '<span class="slot-name">' + free + ' TS trống</span><span class="slot-hint">thả ' + esc(L().slotOpts(M, pn.u).map(function (s) { return nm(s.a.of) + ' (' + s.a.slots + ')'; }).join(', ')) + ' hoặc tín hiệu khách hàng</span>' +
+            (lb.armed && L().reaches(M, pn.u, lb.armed) ? '<button type="button" class="slot-open" data-lfillat="' + pkey(last.path) + '" title="Lấp các TS trống bằng ' + esc(nm(lb.armed)) + '">lấp đầy bằng ' + esc(nm(lb.armed)) + '</button>' : '') +
+            '</div>' : '<div class="muted ts-full">' + esc(nm(pn.u)) + ' đã dùng hết ' + pi.n + ' TS — gỡ bớt con (×) để trả lại TS.</div>') +
+          '</div>';
+      }
     } else if (lu && lu.accepts && last.node.opt >= 0) {
       var a = lu.accepts[last.node.opt];
       var filled = last.node.kids.filter(Boolean).length;
@@ -241,11 +321,11 @@
       summary = '<span class="box-sum">' + filled + '/' + a.count + ' ' + esc(nm(a.of)) + (clientsTxt(cl) ? ' · ' + esc(clientsTxt(cl)) : '') + '</span>';
       if (!collapsed) {
         body = '<div class="box-kids' + (a.count > 4 ? ' is-many' : '') + '">' + last.node.kids.map(function (k, i) {
-          return renderBox(k, a.of, last.path.concat(i), depth + 1, a.count > 1 ? String(i + 1) : null, big);
+          return renderBox(k, a.of, last.path.concat(i), depth + 1, a.count > 1 ? String(i + 1) : null, big, { pa: a });
         }).join('') + '</div>';
       }
     }
-    var canCollapse = lu && lu.accepts && last.node.opt >= 0;
+    var canCollapse = lu && lu.accepts && L().chosen(last.node);
     if (leafClient && !compact) summary = '<span class="box-sum">nguyên khối · ' + esc(TV().fmtRate(L().unitKbps(M, last.node.u))) + '</span>';
     return '<div class="' + cls + '" data-drop="' + pk + '">' +
       '<div class="box-head">' +
@@ -256,11 +336,29 @@
   }
 
   function optSelect(node, path, canMono) {
-    var u = MUX()[node.u];
     return '<select class="ch-opt" data-loptsel="' + pkey(path) + '" title="Phương án lấp ' + esc(nm(node.u)) + ' (đổi sẽ xoá nội dung bên trong)">' +
-      (canMono ? '<option value="-1"' + (node.opt < 0 ? ' selected' : '') + '>Nguyên khối</option>' : '') +
-      u.accepts.map(function (a, i) { return '<option value="' + i + '"' + (i === node.opt ? ' selected' : '') + '>' + a.count + '×' + esc(nm(a.of)) + '</option>'; }).join('') +
+      (canMono ? '<option value="-1"' + (!L().chosen(node) ? ' selected' : '') + '>Nguyên khối</option>' : '') +
+      L().choices(MUX(), node.u).map(function (c) {
+        return '<option value="' + c + '"' + (c === node.opt ? ' selected' : '') + ' title="' + esc(choiceTip(node.u, c)) + '">' + esc(choiceLabel(node.u, c)) + '</option>';
+      }).join('') +
       '</select>';
+  }
+
+  /** Thanh n ô TS, tô theo con chiếm (xuống dòng được — OPU4 80 ô vẫn vừa màn hình hẹp). */
+  function tsBar(pn, pi, path) {
+    var owner = {};
+    pn.kids.forEach(function (k, i) { (k.ts || []).forEach(function (s) { owner[s] = i; }); });
+    var cells = '';
+    for (var s = 0; s < pi.n; s++) {
+      var i = owner[s];
+      cells += i == null
+        ? '<span class="ts-cell is-free" title="TS #' + (s + 1) + ': trống">' + (s + 1) + '</span>'
+        : '<span class="ts-cell" style="--tsh:' + tsHue(i) + '" title="TS #' + (s + 1) + ': ' + esc(nm(pn.kids[i].u)) + ' #' + (i + 1) + '">' + (s + 1) + '</span>';
+    }
+    var free = L().tsFree(MUX(), pn);
+    return '<div class="ts-wrap"><div class="ts-legend muted">Bể ' + pi.n + ' tributary slot × ' + esc(TV().fmtRate(pi.kbps)) + (pi.note ? ' · ' + esc(pi.note) : '') +
+      ' · đã dùng ' + (pi.n - free) + ', trống ' + free + ' · cấp TS trống thấp nhất, không cần liền kề</div>' +
+      '<div class="ts-bar" data-drop="' + pkey(path) + '" role="img" aria-label="' + esc('Tributary slot: ' + (pi.n - free) + '/' + pi.n + ' đã dùng') + '">' + cells + '</div></div>';
   }
 
   // ---------- tổng kết ----------
@@ -269,7 +367,7 @@
     var total = acc.totalKbps, byteMode = acc.byteBased;
     var segs = [
       { k: 'client', label: 'Tải khách hàng', v: acc.clientKbps },
-      { k: 'stuff', label: 'Chèn/bù tốc độ (stuff)', v: acc.justificationKbps },
+      { k: 'stuff', label: 'Chèn/bù tốc độ, khoảng trống ánh xạ', v: acc.justificationKbps },
       { k: 'oh', label: 'Overhead các cấp', v: acc.overheadKbps },
       { k: 'empty', label: 'Chưa dùng', v: acc.emptyKbps }
     ];
@@ -291,10 +389,15 @@
         byteCols(o.kbps) + '<td class="num">' + esc(n(o.kbps, 0)) + '</td>' +
         '<td class="barcell"><span class="hbar-track"><span class="hbar" style="width:' + (o.kbps / maxOh * 100) + '%"></span></span><span class="num">' + esc(n(o.kbps / total * 100)) + '%</span></td></tr>';
     }).join('');
+    var tcTxt = Object.keys(acc.transcoded).map(function (k) {
+      var x = acc.transcoded[k];
+      return x.count + ' ' + nm(k) + ': đường dây ' + TV().fmtRate(x.lineKbps) + ' → mang ' + TV().fmtRate(x.carriedKbps);
+    }).join('; ');
+    var freeTsTxt = acc.freeTs.map(function (f) { return nm(f.u) + ' ' + f.free + '/' + f.n + ' TS'; }).join(', ');
     var extra = [
-      ['Chèn bù tốc độ (justification)', acc.justificationKbps, 'Dung lượng bước ghép lớn hơn overhead + tổng nhánh (vd C-12 2176 kbit/s mang E1 2048 kbit/s).'],
-      ['Chưa dùng (ô trống)', acc.emptyKbps, 'Dung lượng chưa lấp.'],
-      ['Tải khách hàng', acc.clientKbps, clientsTxt(acc.clients) || 'chưa có']
+      ['Chèn bù tốc độ / khoảng trống ánh xạ (justification)', acc.justificationKbps, 'Dung lượng bước ghép lớn hơn overhead + tổng nhánh (vd C-12 2176 kbit/s mang E1 2048 kbit/s; STM-64 AMP trong OPU2; phần TS dư so với ODU).'],
+      ['Chưa dùng (ô trống' + (acc.freeTs.length ? ', TS trống' : '') + ')', acc.emptyKbps, 'Dung lượng chưa lấp.' + (freeTsTxt ? ' TS trống: ' + freeTsTxt + ' = ' + TV().fmtRate(acc.emptyTsKbps) + '.' : '')],
+      ['Tải khách hàng', acc.clientKbps, (clientsTxt(acc.clients) || 'chưa có') + (tcTxt ? ' · tính theo tốc độ thực mang sau transcode (' + tcTxt + ')' : '')]
     ].map(function (r) {
       return '<tr class="tr-sum"><td colspan="3">' + esc(r[0]) + ' <span class="muted">' + esc(r[2]) + '</span></td>' + byteCols(r[1]) +
         '<td class="num">' + esc(n(r[1])) + '</td><td class="num">' + esc(n(r[1] / total * 100)) + '%</td></tr>';
@@ -303,7 +406,8 @@
         (byteMode ? 'kbit/s và byte mỗi 125 µs · 1 byte/125 µs = 64 kbit/s' : 'kbit/s · client + overhead + chèn + trống = tốc độ khung') + '</span></div>' +
       '<div class="stats">' +
         '<div class="stat"><div class="stat-label">Tốc độ khung đích</div><div class="stat-value">' + esc(TV().fmtRate(total)) + '</div><div class="stat-sub">' + esc(byteMode ? n(total / 64, 0) + ' byte/125 µs' : n(total, 0) + ' kbit/s') + '</div></div>' +
-        '<div class="stat"><div class="stat-label">Tải khách hàng thực mang</div><div class="stat-value">' + esc(TV().fmtRate(acc.clientKbps)) + '</div><div class="stat-sub">' + esc(clientsTxt(acc.clients) || 'chưa thả gì') + '</div></div>' +
+        '<div class="stat"><div class="stat-label">Tải khách hàng thực mang</div><div class="stat-value">' + esc(TV().fmtRate(acc.clientKbps)) + '</div><div class="stat-sub">' + esc(clientsTxt(acc.clients) || 'chưa thả gì') +
+          (Math.abs(acc.clientLineKbps - acc.clientKbps) > 1e-6 ? ' · đường dây ' + esc(TV().fmtRate(acc.clientLineKbps)) + ' (transcode)' : '') + '</div></div>' +
         '<div class="stat"><div class="stat-label">Hiệu suất</div><div class="stat-value">' + esc(n(acc.efficiency)) + '%</div><div class="stat-sub">tải khách hàng / tốc độ khung</div></div>' +
         '<div class="stat"><div class="stat-label">Tổng overhead</div><div class="stat-value">' + esc(TV().fmtRate(acc.overheadKbps)) + '</div><div class="stat-sub">' + esc(byteMode ? n(acc.overheadKbps / 64, 0) + ' byte/125 µs' : 'cộng mọi cấp') + '</div></div>' +
       '</div>' + bar +
@@ -339,7 +443,8 @@
     var cl = clients.indexOf(lb.st.step.client) >= 0 ? lb.st.step.client : clients[0];
     var steps = L().stepsUp(M, root, cl) || [];
     var k = Math.max(1, Math.min(lb.st.step.n || 1, steps.length));
-    var clientK = L().unitKbps(M, cl);
+    // dung lượng tính bằng tốc độ thực mang (carriedKbps sau transcode) nếu bước đầu có
+    var clientK = steps[1] && steps[1].carriedKbps != null ? steps[1].carriedKbps : L().unitKbps(M, cl);
     var list = steps.slice(0, k).map(function (s, i) {
       var u = s.unit, oh = s.overhead || {};
       var max = L().maxCount(M, s.u, cl);
@@ -351,9 +456,10 @@
         '<div class="step-body"><div class="step-head"><button type="button" class="link-btn" data-lsel="' + esc(s.u) + '"><b>' + esc(nm(s.u)) + '</b></button>' +
           '<span class="muted">' + (u.bytesPer125us != null ? esc(n(s.bytes, 0)) + ' B/125 µs · ' + esc(TV().fmtRate(s.kbps)) : esc(TV().fmtRate(s.kbps))) + '</span>' +
           (fr ? '<a class="btn-ghost btn-sm" href="#t/' + esc(fr.id) + '">▦ Xem lưới</a>' : '') + '</div>' +
-          (i ? '<div class="step-desc">= ' + s.count + '×' + esc(nm(s.from)) +
+          (i ? '<div class="step-desc">= ' + (s.slots ? esc(nm(s.from)) + ' <span class="pill-ts">' + s.slots + ' TS / ' + s.pool.n + ' (tối đa ' + s.count + ')</span>' : s.count + '×' + esc(nm(s.from))) +
+            (s.carriedKbps != null ? ' <span class="pill-ts">transcode: mang ' + esc(TV().fmtRate(s.carriedKbps)) + '</span>' : '') +
             (ohl ? ' <span class="pill-oh">' + esc(ohl) + ' ' + esc(oh.name || 'overhead') + '</span>' : ' <span class="muted">(không thêm overhead)</span>') +
-            (s.justKbps > 0 ? ' <span class="pill-stuff">+' + esc(TV().fmtRate(s.justKbps)) + (L().isByteUnit(M, s.u) ? ' (' + n(s.justification) + ' B)' : '') + ' chèn bù tốc độ</span>' : '') +
+            (s.justKbps > 0 ? ' <span class="pill-stuff">+' + esc(TV().fmtRate(s.justKbps)) + (L().isByteUnit(M, s.u) ? ' (' + n(s.justification) + ' B)' : '') + (s.fit === 'le' ? ' khoảng trống ánh xạ' : s.slots ? ' ngoài phần TS dùng / chèn' : ' chèn bù tốc độ') + '</span>' : '') +
             (s.mapping ? ' <span class="muted">· ánh xạ ' + esc(s.mapping) + '</span>' : '') + '</div>' : '<div class="step-desc">Tín hiệu khách hàng — điểm bắt đầu.</div>') +
           (i ? '<div class="step-eff">Đầy ' + max + ' ' + esc(nm(cl)) + ' → tải khách hàng chiếm <b>' + esc(n(eff, 1)) + '%</b><span class="effbar"><span style="width:' + eff + '%"></span></span></div>' : '') +
         '</div></li>';
@@ -380,6 +486,7 @@
       '<li><b>Kéo</b> một đơn vị (E1, E3, TU-12…) vào ô trống hoặc vào một hộp. Trên điện thoại: bấm đơn vị rồi bấm ô.</li>' +
       '<li>Thả bậc thấp vào bậc cao: các bước trung gian tự dựng, thông báo nêu overhead từng bước.</li>' +
       '<li>Hộp có nhiều phương án (VC-4, TUG-3) có ô chọn — đổi phương án sẽ xoá nội dung bên trong hộp đó.</li>' +
+      '<li>OTN: OPU có lựa chọn <b>“Ghép TS”</b> — bể tributary slot cho trộn ODU0/ODU1/ODU2/ODUflex…; mỗi con được cấp các TS trống thấp nhất (thanh ô màu). Thiếu TS thì bị từ chối kèm số TS còn trống; gỡ con (×) trả lại TS.</li>' +
       '<li>Luồng PDH (E1, E2, E3, E4) mặc định là <b>nguyên khối</b> (client). Ô chọn của nó có “Nguyên khối (client)” và các phương án (vd 4×E2) — chọn để mở xem bên trong.</li>' +
       '<li>Bấm tên một đơn vị để xem chi tiết ở đây. Trạng thái tự lưu trong trình duyệt.</li></ol></div>';
   }
@@ -392,6 +499,9 @@
     var acc = (u.accepts || []).map(function (a) {
       var oh = a.overhead || {};
       return '<li><b>' + a.count + '×<a href="#" data-lunit="' + esc(a.of) + '">' + esc(nm(a.of)) + '</a></b>' +
+        (a.slots ? ' <span class="pill-ts">' + a.slots + ' TS mỗi cái</span>' : '') +
+        (a.fit === 'le' ? ' <span class="muted">(≤, có chèn/khoảng trống)</span>' : '') +
+        (a.carriedKbps != null ? ' <span class="pill-ts">mang ' + esc(TV().fmtRate(a.carriedKbps)) + ' sau transcode</span>' : '') +
         (ohPhrase(a) ? ' ' + esc(ohPhrase(a)) : ' <span class="muted">(không thêm overhead)</span>') +
         (a.mapping ? ' <span class="chip">' + esc(a.mapping) + '</span>' : '') +
         (oh.desc && oh.desc !== oh.name ? '<br><span class="muted">' + esc(oh.desc) + '</span>' : '') +
@@ -403,6 +513,8 @@
       '<dl class="kv">' +
         '<dt>Kích thước</dt><dd>' + (u.bytesPer125us == null ? esc(TV().fmtRate(u.rateKbps)) + ' <span class="muted">(≈ ' + esc(n(u.rateKbps / 64)) + ' B/125 µs)</span>'
           : esc(n(u.bytesPer125us, 0)) + ' byte/125 µs = ' + esc(TV().fmtRate(u.bytesPer125us * 64))) + '</dd>' +
+        (u.tribSlots ? '<dt>Tributary slot</dt><dd>' + esc(u.tribSlots.n + ' × ' + TV().fmtRate(L().poolInfo(M, id).kbps) + (u.tribSlots.note ? ' · ' + u.tribSlots.note : '')) +
+          ' <span class="muted">— các phương án có “TS mỗi cái” trộn được trong cùng ' + esc(nm(id)) + '</span></dd>' : '') +
         (u.leafOk ? '<dt>Dùng như</dt><dd>client nguyên khối (mặc định) hoặc mở theo một phương án bên dưới</dd>' : '') +
         (u.standard ? '<dt>Chuẩn</dt><dd>' + esc(u.standard) + '</dd>' : '') +
         (parents.length ? '<dt>Nằm trong</dt><dd>' + parents.map(function (p) { return '<a href="#" data-lunit="' + esc(p) + '">' + esc(nm(p)) + '</a>'; }).join(', ') + '</dd>' : '') +
@@ -427,10 +539,19 @@
       for (var i = res.path.length - 1; i >= path.length; i--) {
         var nd = L().getNode(t, res.path.slice(0, i));
         if (!nd) continue;
+        if (L().isTs(nd)) {
+          // bước vào bể TS: con chiếm k TS
+          var kid = nd.kids[res.path[i]], pi = L().poolInfo(M, nd.u), sa = L().slotOptFor(M, nd.u, kid.u) || {};
+          var spare = kid.ts.length * pi.kbps - L().childRate(M, sa, null);
+          steps.push('<b>' + esc(nm(nd.u)) + '</b> <span class="pill-ts">' + kid.ts.length + ' TS (#' + esc(tsList(kid.ts)) + '), còn ' + L().tsFree(M, nd) + '/' + pi.n + ' trống</span>' +
+            (spare > 1e-6 ? ' <span class="pill-stuff">+' + esc(TV().fmtRate(spare)) + ' chèn</span>' : ''));
+          continue;
+        }
         var a = M[nd.u].accepts[nd.opt], ph = ohPhrase(a);
-        var just = L().unitKbps(M, nd.u) - L().ohKbps(a) - a.count * L().unitKbps(M, a.of);
+        var just = L().unitKbps(M, nd.u) - L().ohKbps(a) - a.count * L().childRate(M, a, null);
         steps.push('<b>' + esc(nm(nd.u)) + '</b>' + (ph ? ' <span class="pill-oh">' + esc(ph) + '</span>' : '') +
-          (just > 1e-9 ? ' <span class="pill-stuff">+' + esc(L().isByteUnit(M, nd.u) ? n(just / 64 / a.count) + ' B' : TV().fmtRate(just / a.count)) + ' chèn</span>' : ''));
+          (a.carriedKbps != null ? ' <span class="pill-ts">transcode → ' + esc(TV().fmtRate(a.carriedKbps)) + '</span>' : '') +
+          (just > 1e-9 ? ' <span class="pill-stuff">+' + esc(L().isByteUnit(M, nd.u) ? n(just / 64 / a.count) + ' B' : TV().fmtRate(just / a.count)) + (a.fit === 'le' ? ' khoảng trống ánh xạ' : ' chèn') + '</span>' : ''));
       }
       lb.msg = { ok: true, html: 'Đã thêm <b>' + esc(nm(X)) + '</b>' + (steps.length ? ': ' + esc(nm(X)) + ' → ' + steps.join(' → ') : '') };
       lb.lastPath = res.path;
@@ -463,8 +584,17 @@
       var p = parsePath(b.getAttribute('data-lremove'));
       var nd = L().getNode(tree(), p);
       L().remove(tree(), p);
-      lb.msg = { ok: true, html: 'Đã gỡ ' + esc(nd ? nm(nd.u) : '') + '.' }; lb.lastPath = null;
+      lb.msg = { ok: true, html: 'Đã gỡ ' + esc(nd ? nm(nd.u) : '') + (nd && nd.ts ? ' — trả lại ' + nd.ts.length + ' TS (#' + esc(tsList(nd.ts)) + ')' : '') + '.' }; lb.lastPath = null;
       save(); render(); return;
+    }
+    if ((b = t.closest('[data-lfillat]'))) {
+      e.stopPropagation();
+      var X2 = lb.armed, fp = parsePath(b.getAttribute('data-lfillat'));
+      var c2 = X2 ? L().fill(MUX(), tree(), fp, X2) : 0;
+      var pn = L().getNode(tree(), fp);
+      lb.msg = c2 ? { ok: true, html: 'Đã lấp thêm <b>' + c2 + ' ' + esc(nm(X2)) + '</b> vào bể TS ' + esc(nm(pn.u)) + '.' }
+        : { ok: false, html: 'Không còn chỗ cho ' + esc(nm(X2)) + ' — ' + esc(L().explainReject(MUX(), pn.u, X2, pn)) };
+      lb.lastPath = null; save(); render(); return;
     }
     if ((b = t.closest('[data-linst]'))) {
       e.stopPropagation();
@@ -472,7 +602,7 @@
       save(); render(); return;
     }
     if ((b = t.closest('[data-lopt]'))) {
-      L().setOption(MUX(), tree(), parsePath(b.getAttribute('data-lopt')), +b.getAttribute('data-lval'));
+      L().setOption(MUX(), tree(), parsePath(b.getAttribute('data-lopt')), optVal(b.getAttribute('data-lval')));
       lb.lastPath = null; save(); render(); return;
     }
     if ((b = t.closest('[data-lcollapse]'))) {
@@ -496,7 +626,7 @@
     if (!lb.active) return;
     var s = e.target;
     if (s.matches && s.matches('[data-loptsel]')) {
-      var sp = parsePath(s.getAttribute('data-loptsel')), sv = +s.value;
+      var sp = parsePath(s.getAttribute('data-loptsel')), sv = optVal(s.value);
       var sn = L().getNode(tree(), sp);
       L().setOption(MUX(), tree(), sp, sv);
       lb.msg = { ok: true, html: sv < 0 ? 'Đã đưa ' + esc(sn ? nm(sn.u) : '') + ' về <b>nguyên khối</b> (client) — nội dung bên trong đã được xoá.'

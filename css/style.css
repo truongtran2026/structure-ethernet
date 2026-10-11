@@ -702,6 +702,24 @@ button { font: inherit; color: inherit; }
 .pill-oh, .pill-stuff { font-family: var(--mono); font-size: .74rem; padding: 0 6px; border-radius: 99px; white-space: nowrap; }
 .pill-oh { background: var(--accent-soft); color: var(--accent); }
 .pill-stuff { background: var(--warn-bg); color: var(--warn); }
+/* bể tributary slot (OTN): thanh n ô, tô theo con (--tsh = sắc độ); xuống dòng để 80 ô vừa màn hình hẹp */
+.pill-ts { font-family: var(--mono); font-size: .74rem; padding: 0 6px; border-radius: 99px; white-space: nowrap; background: var(--surface-2); border: 1px solid var(--border-strong); }
+.ch-tc { font-family: var(--mono); font-size: .66rem; opacity: .9; border-left: 1px solid var(--kd); padding-left: 4px; }
+.ts-wrap { margin-top: 6px; }
+.ts-legend { font-size: .74rem; margin-bottom: 3px; }
+.ts-bar { display: flex; flex-wrap: wrap; gap: 2px; max-width: 100%; }
+.ts-cell {
+  flex: 0 0 auto; width: 22px; height: 20px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: .6rem; font-variant-numeric: tabular-nums;
+  background: hsl(var(--tsh, 210) 70% 78%); border: 1px solid hsl(var(--tsh, 210) 55% 40%); color: #14181f;
+}
+.ts-cell.is-free { background: transparent; border: 1px dashed var(--border-strong); color: var(--muted); }
+.ts-tag { padding: 0 6px; border-radius: 99px; background: hsl(var(--tsh, 210) 70% 78%); border: 1px solid hsl(var(--tsh, 210) 55% 40%); color: #14181f; white-space: nowrap; }
+.lab-box.is-tskid { border-left: 4px solid hsl(var(--tsh, 210) 55% 50%); }
+.ts-kids { flex-direction: row; }
+.ts-free { border-style: dotted; }
+.ts-full { font-size: .78rem; align-self: center; }
+@media (max-width: 520px) { .ts-cell { width: 18px; height: 18px; font-size: .55rem; } }
 .lab-h3 { font-size: .95rem; margin: 16px 0 6px; }
 .sbar { display: flex; gap: 2px; height: 26px; margin: 14px 0 4px; }
 .sbar-seg { min-width: 3px; }

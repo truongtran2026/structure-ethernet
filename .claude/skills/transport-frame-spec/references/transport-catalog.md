@@ -10,8 +10,60 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD1 | SDH: khung + đơn vị ghép + lab SDH | xong 2026-10-11 (review G.707 01/2007 ĐẠT vòng 2) |
 | GD1b | Ghép chuỗi liền kề VC-4-4c/16c/64c/256c | xong 2026-10-11 (review: sửa trích dẫn §11.1, WIS 64B/66B) |
 | GD2 | PDH: E1 (khung, đa khung CRC-4), E2/E3/E4 (chèn bit), lab PDH → SDH | xong 2026-10-11 (review G.704/742/751/707: bit đúng, sửa 3 mô tả) |
-| GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | chờ |
+| GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | xong 2026-10-11 (review G.709 02/2012 + Amd.4: 2 vòng, vá 3 trích dẫn; QA ĐẠT) |
 | Sau | OTUCn/FlexO; Ethernet qua truyền dẫn (GFP-F, VCAT/LCAS, GMP, FlexE); máy tính tốc độ; quiz | chờ |
+
+## GD3 — OTN (file mới `data/transport-otn.js`; sửa nhỏ `data/transport-sdh.js`) — ITU-T G.709
+
+Chuỗi: client → OPUk (ánh xạ) → ODUk (+ ODU OH) → OTUk (+ FA/OTU OH + FEC). Khung OTUk luôn 4 × 4080 byte:
+cột 1–14 OH (hàng 1: FA OH cột 1–7, OTU OH cột 8–14; hàng 2–4: ODU OH), cột 15–16 OPU OH, cột 17–3824
+OPU payload (3808 cột), cột 3825–4080 FEC RS(255,239) (256 cột). Tỉ lệ: OPUk payload : ODUk : OTUk =
+3808 : 3824 : 4080 = 238 : 239 : 255. Tốc độ ghi bằng biểu thức (vd `255 / 237 * 9953280`), không làm tròn.
+
+### Unit (TMUX) — theo tốc độ (rateKbps), family `otn`
+
+| id | kind | rateKbps (biểu thức) | accepts |
+| --- | --- | --- | --- |
+| `1gbe` | client | 1250000 | — (1000BASE-X 8B/10B) |
+| `10gbe` | client | 10312500 | — (10GBASE-R 64B/66B) |
+| `40gbe` | client | 41250000 | — |
+| `100gbe` | client | 103125000 | — |
+| `fc-800` | client | 8500000 | — (Fibre Channel 8GFC) |
+| `opu0` | opu | 238/239 × 1244160 | 1×1gbe GMP, `fit: "le"`, `carriedKbps` 1171875 (TTT 15/16) |
+| `odu0` | odu | 1244160 | 1×opu0 + OH (kbps = hiệu) · `leafOk` |
+| `opu1` | opu | 2488320 | 1×stm-16 AMP `fit: "le"` · hoặc TS: `tribSlots` n 2 (PT 20), odu0 `slots` 1 AMP |
+| `odu1` / `otu1` | odu / otu | 239/238 × opu1 / 255/239 × odu1 | 1×cấp dưới + OH (otu: OH = 256 cột FEC; FA/OTU OH nằm sẵn ở hàng 1 cột 1–14 của khung ODU) · odu `leafOk` |
+| `opu2` | opu | 238/237 × 9953280 | 1×stm-64 AMP/BMP `fit` · hoặc TS n 8 (PT 21): odu0 1 GMP, odu1 2 AMP, oduflex-fc800 7 GMP |
+| `odu2` / `otu2` | | 239/238 × / 255/239 × | như trên |
+| `opu2e` | opu | 238/237 × 10312500 | 1×10gbe BMP `fit` (G.709 §17.2.4, Bảng 7-2/7-3; chỉ khung OTU2e nằm ngoài G.709 — G.Sup43, IaDI) |
+| `odu2e` / `otu2e` | | | như trên |
+| `opu3` | opu | 238/236 × 39813120 | 1×stm-256 AMP `fit` · 1×40gbe GMP `fit`, `carriedKbps` = 41250000 × 64/66 × 1027/1024 · TS n 32: odu0 1, odu1 2 AMP, odu2 8 AMP, odu2e 9 GMP, oduflex-fc800 7 GMP |
+| `odu3` / `otu3` | | | |
+| `opu4` | opu | 238/227 × 99532800 | 1×100gbe GMP `fit` · TS n 80 (dung lượng TS tính trên 3800 cột, 8 cột fixed stuff 3817–3824): odu0 1, odu1 2, odu2 8, odu2e 8, odu3 31, oduflex-fc800 7 (đều GMP) |
+| `odu4` / `otu4` | | | |
+| `oduflex-fc800` | odu | 239/238 × 8500000 | 1×fc-800 BMP (ODUflex(CBR): OPUflex = tốc độ client) · `leafOk` |
+
+`stm-16`, `stm-64`, `stm-256` (transport-sdh.js): thêm `leafOk: true` để dùng làm client OTN.
+Kiểm chứng trước (orchestrator): ODU1/TS OPU2 = 1,99996; ODU2/TS OPU3 = 7,9997; ODU2e/TS OPU3 = 8,29 → 9;
+ODU3/TS OPU4 = 30,97 → 31; FC-800 ODUflex/TS = 6,83 (OPU2), 6,56 (OPU4) → 7.
+
+### Frame (TFRAMES), family `otn`
+
+| id | category | Lưới | Chu kỳ | Ghi chú |
+| --- | --- | --- | --- | --- |
+| `otu2` | Khung OTUk | 4×4080 byte | 4·4080·8·1000 / rate | Chi tiết từng byte (OPU OH kiểu AMP; otu4 dùng biến thể GMP): FAS (OA1×3 0xF6, OA2×3 0x28), MFAS (đa khung 256), SM (TTI/BIP-8/byte 3 bitFields BEI/BIAE·BDI·IAE·RES), GCC0, OTU RES/OSMC theo bản G.709 đang trích; ODU OH: RES, PM&TCM, TCM ACT, TCM1–6, FTFL, PM, EXP, GCC1/2, APS/PCC, RES; PM byte 3 bitFields; OPU OH chung (JC/RES, PSI, NJO); payload; FEC. `multiframe` 256 (TTI 64 byte, PSI 256). unit `otu2` |
+| `otu1`, `otu2e`, `otu3`, `otu4` | Khung OTUk | 4×4080 | theo tốc độ | Sinh bằng hàm cùng bố cục `otu2`, đổi chu kỳ/tốc độ/ghi chú (OTU4: FEC bắt buộc §11.1, OPU OH kiểu GMP; OTU2e: G.Sup43, OPU2e BMP PT 0x03) |
+| `opu1-amp` | Ánh xạ vào OPU | 4×3810 (cột 15–3824) | = OTU1 | OPU1 chở STM-16 AMP (§17.2): JC hàng 1–3 cột 16, NJO hàng 4 cột 16, PJO hàng 4 cột 17, PSI; bitFields JC; không gán `unit` (unit opu1 = chỉ payload) — unit `opu1`.frame trỏ tới |
+| `opu2-ts` | Ánh xạ vào OPU | 4×3810 | = OTU2 | OPU2 PT 21, 8 TS 1,25G ghép xen theo cột (step 8 từ cột 17); OH JC theo TS xoay vòng MFAS mod 8 (`multiframe` 8, `perFrame`), PSI (PT + MSI), OMFI không dùng ở OPU2 |
+| `opu4-100ge` | Ánh xạ vào OPU | 4×3810 | = OTU4 | OPU4 chở 100GbE GMP (§17.7.5): JC1–JC6 ở hàng 1–3 cột 15–16, PSI, payload 3800 cột + 8 cột fixed stuff 3817–3824 |
+
+### Lab (TLABS)
+
+- `otn`: "Ghép kênh OTN", family otn, roots `otu1`, `otu2`, `otu2e`, `otu3`, `otu4`; palette `1gbe`, `stm-16`,
+  `fc-800`, `10gbe`, `stm-64`, `40gbe`, `stm-256`, `100gbe`, `odu0`, `odu1`, `oduflex-fc800`, `odu2`, `odu2e`, `odu3`.
+- Điểm học chính: trộn ODU0/ODU1/ODU2/ODUflex trong cùng OPU theo tributary slot; từ chối có giải thích
+  (vd "ODU2e cần 9 TS trong OPU3, còn 6 TS trống"; "10GbE không vào OPU2 — dùng OTU2e hoặc ODU2e");
+  thấy vì sao 40GbE phải transcode mới vừa OPU3.
 
 ## GD2 — PDH + ánh xạ PDH → SDH (file `data/transport-pdh.js`; sửa nhỏ `data/transport-sdh.js`)
 
