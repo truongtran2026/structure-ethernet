@@ -1,13 +1,14 @@
-# Structure Ethernet
+# Frame Structure (frame-structure.vercel.app)
 
-Ứng dụng web tĩnh (mở `index.html` bằng nhấp đúp) giúp học cấu trúc header Ethernet và các biến thể
-(VLAN, QinQ, PBB, MPLS, L2VPN/L3VPN, GRE, VXLAN, PPPoE…), thu gọn/bung theo từng cấp tới từng bit.
+Ứng dụng web tĩnh (mở `index.html` bằng nhấp đúp) giúp học cấu trúc khung: mảng IP/Ethernet (VLAN, QinQ,
+PBB, MPLS, L2VPN/L3VPN, GRE, IPsec, VXLAN, PPPoE…) và mảng Truyền dẫn (PDH, SDH, OTN) kèm lab ghép kênh,
+thu gọn/bung theo từng cấp tới từng bit/byte.
 
-## Harness: Ethernet Header Visualizer
+## Harness: Frame Structure
 
-**Mục tiêu:** dữ liệu header chính xác theo chuẩn + giao diện học tập thu gọn/bung theo cấp.
+**Mục tiêu:** dữ liệu khung chính xác theo chuẩn (RFC/IEEE/ITU-T) + giao diện học tập thu gọn/bung theo cấp.
 
-**Điều kiện gọi:** mọi yêu cầu xây, mở rộng, sửa dữ liệu hoặc giao diện của ứng dụng này → dùng skill
+**Điều kiện gọi:** mọi yêu cầu xây, mở rộng, sửa dữ liệu hoặc giao diện của ứng dụng này (cả mảng IP lẫn Truyền dẫn) → dùng skill
 `ethernet-header-orchestrator`. Câu hỏi kiến thức đơn thuần có thể trả lời trực tiếp.
 
 **Lịch sử thay đổi:**
@@ -22,3 +23,4 @@
 | 2026-10-10 | Thêm StackNode `role` (link/delivery/encap/passenger) + `roleNote`; validator bắt buộc role | protocol-header-spec, data, UI | Người dùng muốn nhóm theo vai trò đóng gói (Outer IP / GRE / Inner) cho dễ nhớ |
 | 2026-10-10 | Thêm header esp/esp-trailer/esp-icv + stack gre-ipsec-transport, gre-ipsec-tunnel (compareTo gre-ipv4) | data, catalog | Người dùng yêu cầu GRE over IPsec |
 | 2026-10-09 | Thêm `effort` cho 4 agent; frontend-dev mặc định sonnet; bảng chọn model theo loại việc | agents, orchestrator | Tối ưu token: lần chạy đầu ~1/3 token Opus dùng cho việc sửa theo danh sách/cơ học |
+| 2026-10-11 | Thêm agent transport-expert, skill transport-frame-spec (schema lưới 2D + cây ghép, validator số học), references/transport-ui.md; mở rộng reviewer/QA/frontend/orchestrator | Toàn bộ | Mở rộng sang Truyền dẫn PDH/SDH/OTN; đổi tên miền frame-structure.vercel.app |

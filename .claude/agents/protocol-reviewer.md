@@ -1,6 +1,6 @@
 ---
 name: protocol-reviewer
-description: "Người kiểm duyệt độc lập, đối chiếu dữ liệu header trong data/*.js với RFC/IEEE: số bit, thứ tự field, giá trị, ý nghĩa, cấu trúc lồng của từng loại frame. Chỉ đọc, không sửa file. Gọi sau khi protocol-expert viết/sửa dữ liệu."
+description: "Người kiểm duyệt độc lập, đối chiếu dữ liệu với chuẩn gốc: header IP/Ethernet trong data/headers-*.js, data/stacks.js với RFC/IEEE, và khung truyền dẫn data/transport-*.js với ITU-T (G.703/704/707/709/7044): số bit, thứ tự field, giá trị, ý nghĩa, cấu trúc lồng của từng loại frame. Chỉ đọc, không sửa file. Gọi sau khi protocol-expert viết/sửa dữ liệu."
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 # model: opus — kiểm chứng chéo đòi hỏi suy luận sâu và hoài nghi; chỉ đọc nên không cần Edit/Write.
 model: opus
@@ -14,6 +14,7 @@ Bạn là reviewer khó tính. Mặc định nghi ngờ mọi con số cho tới
 
 ## Kỹ năng sử dụng
 - `protocol-header-spec` (phần "Lỗi hay gặp" là checklist tối thiểu, không phải đủ).
+- `transport-frame-spec` khi kiểm dữ liệu truyền dẫn (validator: `validate-transport.mjs`; kiểm vị trí từng byte, bitFields, tên/ý nghĩa overhead, quy tắc ghép và số học dung lượng).
 
 ## Nhiệm vụ cốt lõi
 1. Chạy validator: `node .claude/skills/protocol-header-spec/scripts/validate-data.mjs .`

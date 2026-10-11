@@ -1,6 +1,6 @@
 ---
 name: ethernet-header-orchestrator
-description: "Điều phối đội agent xây/cập nhật ứng dụng trực quan hoá cấu trúc header Ethernet (802.3, VLAN, QinQ, PBB, MPLS, L2VPN/L3VPN, VPLS, GRE, VXLAN, PPPoE, IP/TCP/UDP). Dùng khi người dùng yêu cầu dựng ứng dụng, thêm giao thức/loại frame mới, sửa dữ liệu header sai, đổi giao diện, chạy lại, cập nhật, bổ sung, kiểm tra lại, 'chỉ sửa phần dữ liệu MPLS', 'làm lại giao diện', 'cải thiện kết quả trước'. Câu hỏi kiến thức đơn thuần về header (vd. 'VLAN tag bao nhiêu byte?') thì trả lời trực tiếp, không cần skill này."
+description: "Điều phối đội agent xây/cập nhật ứng dụng frame-structure: cấu trúc header IP/Ethernet (802.3, VLAN, QinQ, PBB, MPLS, L2VPN/L3VPN, GRE, IPsec, VXLAN, PPPoE, IP/TCP/UDP) và khung truyền dẫn PDH/SDH/OTN kèm lab ghép kênh (VC-12…STM-N, ODUk/ODUflex). Dùng khi người dùng yêu cầu dựng ứng dụng, thêm giao thức/loại frame mới, sửa dữ liệu header sai, đổi giao diện, chạy lại, cập nhật, bổ sung, kiểm tra lại, 'chỉ sửa phần dữ liệu MPLS', 'làm lại giao diện', 'cải thiện kết quả trước'. Câu hỏi kiến thức đơn thuần về header (vd. 'VLAN tag bao nhiêu byte?') thì trả lời trực tiếp, không cần skill này."
 ---
 
 # Điều phối: Ethernet Header Visualizer
@@ -25,6 +25,11 @@ với cùng agentType; mặc định dùng Agent.
 | `frontend-dev` | header-visualizer-ui | `index.html`, `css/style.css`, `js/model.js`, `js/app.js` |
 | `protocol-reviewer` (chỉ đọc) | protocol-header-spec | danh sách phát hiện → `_workspace/03_protocol-reviewer_findings.md` |
 | `qa-inspector` | cả hai | `_workspace/04_qa-inspector_report.md` |
+| `transport-expert` | transport-frame-spec | `data/transport-*.js` (TFRAMES, TMUX, TLABS) |
+
+Mảng Truyền dẫn (PDH/SDH/OTN) chạy cùng quy trình bước 1–6 nhưng thay protocol-expert bằng
+`transport-expert`, validator bằng `validate-transport.mjs`, hợp đồng bằng `transport-schema.md` +
+`transport-catalog.md` (có lộ trình giai đoạn). protocol-reviewer kiểm cả hai mảng.
 
 ### Chọn model theo loại việc (tối ưu token)
 
@@ -34,7 +39,7 @@ Frontmatter của agent là mặc định. Orchestrator truyền `model` (và `e
 
 | Loại việc | Agent | model | effort |
 | --- | --- | --- | --- |
-| Viết dữ liệu cho giao thức/loại frame MỚI | protocol-expert | opus | medium |
+| Viết dữ liệu cho giao thức/loại frame MỚI | protocol-expert / transport-expert | opus | medium |
 | Sửa dữ liệu theo danh sách lỗi đã ghi rõ "đúng phải là…" | protocol-expert | sonnet | low |
 | Thay đổi cơ học trên dữ liệu (thêm cờ, đổi tên id, đồng bộ giá trị) | protocol-expert | sonnet | low |
 | Kiểm duyệt nội dung giao thức | protocol-reviewer | opus | high |

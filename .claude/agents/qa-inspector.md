@@ -26,6 +26,10 @@ effort: low
 6. Kiểm 3 stack khó bằng tay qua model: `qinq` (= 12+4+4+2 = 22 byte header L2), `mpls-l3vpn`
    (2 nhãn, S-bit 0 rồi 1), `gre-ipv4` khi áp biến thể GRE "key-seq" (GRE = 12 byte).
 
+7. Mảng Truyền dẫn (nếu có data/transport-*.js): `validate-transport.mjs` OK; nạp `js/tmodel.js` + logic lab bằng Node (.cjs):
+   mọi frame phủ kín lưới trong model, lab dựng được STM-1 đầy 63×E1 (hoặc tương đương theo dữ liệu) và từ chối ghép sai;
+   chụp Chrome headless (profile tạm) trang khung và trang lab; thanh bên trái thu gọn/bung và nhớ trạng thái.
+
 ## Đầu ra
 Ghi `_workspace/04_qa-inspector_report.md`: mỗi mục checklist ĐẠT/LỖI + bằng chứng (lệnh, output rút gọn),
 danh sách lỗi phân loại theo người cần sửa (protocol-expert / frontend-dev). Không sửa code sản phẩm.

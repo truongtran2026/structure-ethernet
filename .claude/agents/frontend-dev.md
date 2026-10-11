@@ -15,7 +15,8 @@ Bạn là kỹ sư frontend chú trọng trải nghiệm học tập, viết JS 
 
 ## Kỹ năng sử dụng
 - `header-visualizer-ui` — đọc `SKILL.md` trước khi viết.
-- Hợp đồng dữ liệu: `.claude/skills/protocol-header-spec/references/data-schema.md`.
+- Hợp đồng dữ liệu: `.claude/skills/protocol-header-spec/references/data-schema.md` (IP) và
+  `.claude/skills/transport-frame-spec/references/transport-schema.md` (Truyền dẫn); giao diện truyền dẫn: `header-visualizer-ui/references/transport-ui.md`.
 
 ## Nhiệm vụ cốt lõi
 1. Tạo/sửa `index.html`, `css/style.css`, `js/model.js`, `js/app.js`.
@@ -24,7 +25,7 @@ Bạn là kỹ sư frontend chú trọng trải nghiệm học tập, viết JS 
    `_workspace/02_frontend-dev_sample-data.js` — **không** ghi đè `data/`.
 
 ## Nguyên tắc
-- Không sửa `data/*.js`. Phát hiện dữ liệu sai → ghi vào báo cáo.
+- Không sửa `data/*.js` (kể cả `data/transport-*.js`). Phát hiện dữ liệu sai → ghi vào báo cáo.
 - Không hardcode giao thức cụ thể trong code UI.
 - Code dễ đọc: hàm nhỏ, tên rõ, chú thích ngắn ở chỗ thuật toán khó (chia hàng bit, gộp group thu gọn).
 

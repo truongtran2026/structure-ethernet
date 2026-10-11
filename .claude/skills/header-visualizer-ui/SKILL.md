@@ -1,9 +1,11 @@
 ---
 name: header-visualizer-ui
-description: "Cách xây và sửa giao diện web trực quan hoá cấu trúc header Ethernet/giao thức mạng: cây thu gọn/bung theo cấp (stack → nhóm → header → nhóm field → field), sơ đồ bit 32-bit kiểu RFC, thanh frame map theo byte, panel chi tiết field, bật/tắt field optional. Dùng khi tạo/sửa index.html, css/, js/app.js hoặc khi người dùng muốn đổi cách hiển thị, thêm tính năng xem. Không dùng để sửa nội dung giao thức (dùng protocol-header-spec)."
+description: "Cách xây và sửa giao diện web trực quan hoá cấu trúc khung: mảng IP/Ethernet (header) và mảng Truyền dẫn PDH/SDH/OTN (lưới byte 2 chiều, phòng thí nghiệm ghép kênh kéo thả), cùng thanh điều hướng dạng cây nhớ trạng thái. Với mảng IP: cây thu gọn/bung theo cấp (stack → nhóm → header → nhóm field → field), sơ đồ bit 32-bit kiểu RFC, thanh frame map theo byte, panel chi tiết field, bật/tắt field optional. Dùng khi tạo/sửa index.html, css/, js/app.js hoặc khi người dùng muốn đổi cách hiển thị, thêm tính năng xem. Không dùng để sửa nội dung giao thức (dùng protocol-header-spec)."
 ---
 
 # Giao diện trực quan hoá header
+
+> Mảng Truyền dẫn, thanh điều hướng nhiều mảng và lab ghép kênh: đọc `references/transport-ui.md`.
 
 Mục tiêu sư phạm: người học **nhìn tổng thể trước, bung chi tiết sau**. Mọi quyết định giao diện phục vụ
 việc trả lời 3 câu hỏi: "frame này gồm những header nào?", "mỗi header bao nhiêu byte, nằm ở đâu?",
