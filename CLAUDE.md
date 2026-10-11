@@ -24,3 +24,4 @@ thu gọn/bung theo từng cấp tới từng bit/byte.
 | 2026-10-10 | Thêm header esp/esp-trailer/esp-icv + stack gre-ipsec-transport, gre-ipsec-tunnel (compareTo gre-ipv4) | data, catalog | Người dùng yêu cầu GRE over IPsec |
 | 2026-10-09 | Thêm `effort` cho 4 agent; frontend-dev mặc định sonnet; bảng chọn model theo loại việc | agents, orchestrator | Tối ưu token: lần chạy đầu ~1/3 token Opus dùng cho việc sửa theo danh sách/cơ học |
 | 2026-10-11 | Thêm agent transport-expert, skill transport-frame-spec (schema lưới 2D + cây ghép, validator số học), references/transport-ui.md; mở rộng reviewer/QA/frontend/orchestrator | Toàn bộ | Mở rộng sang Truyền dẫn PDH/SDH/OTN; đổi tên miền frame-structure.vercel.app |
+| 2026-10-11 | GD1 SDH: data/transport-sdh.js (11 khung, 24 đơn vị, lab), giao diện cây điều hướng + lưới byte + lab kéo thả; skill thêm bài học G.707 (NPI bỏ, STM-256 64 A1/A2, M0/M1) | data, UI, transport-frame-spec | Giai đoạn 1 mảng Truyền dẫn |

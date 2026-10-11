@@ -1,6 +1,8 @@
 /*
  * app.js — phần VẼ giao diện. Chỉ đọc model từ EthViz.buildModel; không hardcode giao thức.
  * Cấp thu gọn: stack-group (sgroup) → header → group field → field.
+ * Chạy dưới thanh điều hướng chung (js/nav.js): nav gọi IPView.init() rồi IPView.show(stackId);
+ * thanh bên trái, định tuyến hash và giao diện sáng/tối do nav.js lo.
  */
 (function () {
   'use strict';
@@ -16,8 +18,6 @@
     { n: 3, label: 'Bung tất cả', hint: 'Hiện mọi field và bit' }
   ];
   var STORE_PREFIX = 'ethviz.v1.';
-  var THEMES = ['auto', 'light', 'dark'];
-  var THEME_LABEL = { auto: '◐ Tự động', light: '☀ Sáng', dark: '☾ Tối' };
 
   var GROUPBY_KEY = 'ethviz.groupBy';
   var GROUPBY = [
@@ -27,7 +27,7 @@
 
   var app = {
     stacks: [], headers: {}, current: null, state: null, model: null, query: '',
-    hl: null, focusPath: null, groupBy: 'struct', runs: [], roleParent: {}
+    hl: null, focusPath: null, groupBy: 'struct', runs: [], roleParent: {}, active: false
   };
 
   // ---------- tiện ích ----------
@@ -110,48 +110,23 @@
     while (p) { setOpen(p, true); p = parentOf(p); }
   }
 
-  // ---------- khởi động ----------
-  function boot() {
-    var load = window.__ethvizLoad || { failed: [], errors: [] };
-    var root = $('#app');
-    if (!window.EthViz) {
-      showFatal('Không nạp được <code>js/model.js</code>. Kiểm tra file có tồn tại cạnh <code>index.html</code>.');
-      return;
-    }
+  // ---------- khởi động (nav.js gọi) ----------
+  function init() {
+    if (!window.EthViz) throw new Error('Không nạp được js/model.js');
     app.headers = window.HEADERS || {};
     app.stacks = (Array.isArray(window.STACKS) ? window.STACKS : []).filter(function (s) { return s && s.id; });
-    app.load = load;
+    app.load = window.__ethvizLoad || { failed: [], errors: [] };
     app.groupBy = storeGet(GROUPBY_KEY) === 'role' ? 'role' : 'struct';
-    initTheme();
-    root.hidden = false;
-    var bootEl = $('#boot'); if (bootEl) bootEl.hidden = true;
     bindEvents();
-    renderSidebar();
+  }
+
+  function showStack(id) {
+    app.active = true;
     if (!app.stacks.length) { renderEmpty(); return; }
-    showStack(idFromHash() || app.stacks[0].id, true);
-  }
-
-  function showFatal(html) {
-    var b = $('#boot');
-    if (b) { b.hidden = false; b.innerHTML = '<div class="alert alert--error"><strong>Không khởi động được.</strong> ' + html + '</div>'; }
-  }
-
-  function idFromHash() {
-    var id = decodeURIComponent((location.hash || '').replace(/^#/, ''));
-    return app.stacks.some(function (s) { return s.id === id; }) ? id : null;
-  }
-
-  function showStack(id, replace) {
     var st = app.stacks.filter(function (s) { return s.id === id; })[0] || app.stacks[0];
     app.current = st;
     app.state = loadState(st.id);
     app.focusPath = null;
-    if (('#' + st.id) !== location.hash) {
-      if (replace && history.replaceState) history.replaceState(null, '', '#' + st.id);
-      else location.hash = st.id;
-    }
-    document.body.classList.remove('nav-open');
-    markActiveStack();
     render();
     var main = $('#main'); if (main) main.scrollTop = 0;
     window.scrollTo(0, 0);
@@ -178,55 +153,6 @@
     });
   }
   function runOf(headerPath) { return app.model.index[app.roleParent[headerPath]] || null; }
-
-  // ---------- sidebar ----------
-  function stackMatches(st, q) {
-    if (!q) return true;
-    var hay = [st.id, st.name, st.summary, st.category];
-    (function walk(list) {
-      (list || []).forEach(function (sn) {
-        if (!sn) return;
-        if (sn.children) { hay.push(sn.group); walk(sn.children); return; }
-        hay.push(sn.header, sn.label);
-        var h = app.headers[sn.header];
-        if (h) hay.push(h.name, h.short);
-      });
-    })(st.tree);
-    return hay.join(' \u0001 ').toLowerCase().indexOf(q) >= 0;
-  }
-
-  function renderSidebar() {
-    var q = app.query.trim().toLowerCase();
-    var cats = [];
-    var byCat = {};
-    app.stacks.forEach(function (st) {
-      if (!stackMatches(st, q)) return;
-      var c = st.category || 'Khác';
-      if (!byCat[c]) { byCat[c] = []; cats.push(c); }
-      byCat[c].push(st);
-    });
-    var html = cats.map(function (c) {
-      return '<div class="nav-cat"><h3 class="nav-cat-title">' + esc(c) + '</h3><ul>' +
-        byCat[c].map(function (st) {
-          var bytes = '';
-          try { bytes = num(EthViz.buildModel(st, {}, app.headers, app.stacks).totals.frameBytes) + ' B'; } catch (e) { bytes = '!'; }
-          return '<li><a class="nav-item" href="#' + attr(encodeURIComponent(st.id)) + '" data-stack="' + attr(st.id) + '">' +
-            '<span class="nav-name">' + esc(st.name || st.id) + '</span><span class="nav-meta" title="Kích thước frame mặc định (cấu hình gốc của stack, không tính preamble/SFD; chỉnh sửa trong trang không làm đổi số này)">' + esc(bytes) + '</span></a></li>';
-        }).join('') + '</ul></div>';
-    }).join('');
-    if (!html) html = '<p class="muted nav-empty">' + (app.stacks.length ? 'Không có kết quả cho “' + esc(app.query) + '”.' : 'Chưa có stack nào.') + '</p>';
-    $('#nav').innerHTML = html;
-    markActiveStack();
-  }
-
-  function markActiveStack() {
-    var nav = $('#nav'); if (!nav) return;
-    Array.prototype.forEach.call(nav.querySelectorAll('.nav-item'), function (a) {
-      var on = app.current && a.getAttribute('data-stack') === app.current.id;
-      a.classList.toggle('is-active', on);
-      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
-    });
-  }
 
   function renderEmpty() {
     $('#alerts').innerHTML = loadAlerts();
@@ -972,55 +898,31 @@
     });
   }
 
-  // ---------- giao diện: theme ----------
-  function initTheme() {
-    var t = storeGet('ethviz.theme');
-    applyTheme(THEMES.indexOf(t) >= 0 ? t : 'auto');
-  }
-  function applyTheme(t) {
-    app.theme = t;
-    if (t === 'auto') document.documentElement.removeAttribute('data-theme');
-    else document.documentElement.setAttribute('data-theme', t);
-    var b = $('#theme-btn');
-    if (b) { b.textContent = THEME_LABEL[t]; b.title = 'Giao diện: ' + THEME_LABEL[t] + ' — bấm để đổi'; }
-  }
-
   // ---------- sự kiện ----------
   function bindEvents() {
     document.addEventListener('click', onClick);
     document.addEventListener('change', onChange);
     document.addEventListener('mouseover', function (e) {
+      if (!app.active) return;
       var t = e.target.closest && e.target.closest('[data-hl]');
       var p = t ? t.getAttribute('data-hl') : null;
       if (p !== app.hl) { app.hl = p; applyHighlight(p); }
     });
-    document.addEventListener('mouseleave', function () { app.hl = null; applyHighlight(null); });
+    document.addEventListener('mouseleave', function () { if (app.active) { app.hl = null; applyHighlight(null); } });
     $('#tree').addEventListener('keydown', onTreeKey);
     $('#tree').addEventListener('focusin', function (e) {
       var row = e.target.closest('.row');
       if (row) { app.hl = row.getAttribute('data-hl'); applyHighlight(app.hl); }
     });
-    $('#search').addEventListener('input', function (e) { app.query = e.target.value; renderSidebar(); });
-    window.addEventListener('resize', layoutRoleBand);
-    window.addEventListener('hashchange', function () {
-      var id = idFromHash();
-      if (id && (!app.current || id !== app.current.id)) showStack(id, true);
-    });
+    window.addEventListener('resize', function () { if (app.active && app.model) layoutRoleBand(); });
   }
 
   function onClick(e) {
     var t = e.target;
     if (!t.closest) return;
     var btn;
-    if ((btn = t.closest('#theme-btn'))) { var t2 = THEMES[(THEMES.indexOf(app.theme) + 1) % THEMES.length]; applyTheme(t2); storeSet('ethviz.theme', t2); return; }
-    if ((btn = t.closest('#menu-btn'))) {
-      var on = document.body.classList.toggle('nav-open');
-      btn.setAttribute('aria-expanded', String(on));
-      if (on) $('#search').focus();
-      return;
-    }
-    if (t.closest('#scrim')) { document.body.classList.remove('nav-open'); return; }
-    if (!app.model) return;
+    // chỉ xử lý khi mảng IP đang hiển thị, và chỉ trong vùng của nó (+ panel chi tiết)
+    if (!app.active || !app.model || !(t.closest('#view-ip') || t.closest('#detail'))) return;
     if ((btn = t.closest('[data-level]'))) { setLevel(Number(btn.getAttribute('data-level'))); return; }
     if ((btn = t.closest('[data-groupby]'))) { setGroupBy(btn.getAttribute('data-groupby')); return; }
     if ((btn = t.closest('.fm-role'))) { select(btn.getAttribute('data-run'), roleMode() ? { reveal: true } : { showDetail: true }); return; }
@@ -1053,6 +955,7 @@
 
   function onChange(e) {
     var t = e.target;
+    if (!app.active) return;
     if (t.matches && t.matches('[data-action="var"]')) setVar(t.getAttribute('data-hp'), t.getAttribute('data-id'), t.value);
   }
 
@@ -1084,13 +987,14 @@
     e.preventDefault();
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeBoot);
-  else safeBoot();
+  /** Ẩn mảng IP (nav chuyển sang mảng khác): ngừng nhận sự kiện. */
+  function hide() { app.active = false; app.hl = null; }
 
-  function safeBoot() {
-    try { boot(); } catch (err) {
-      showFatal('Lỗi: ' + esc(err && err.message) + '. Mở Console (F12) để xem chi tiết.');
-      if (window.console) console.error(err);
-    }
-  }
+  window.IPView = {
+    init: init,
+    show: showStack,
+    hide: hide,
+    stacks: function () { return app.stacks; },
+    current: function () { return app.current; }
+  };
 })();

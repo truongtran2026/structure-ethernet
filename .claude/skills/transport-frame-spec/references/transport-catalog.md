@@ -7,7 +7,7 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 
 | Giai đoạn | Nội dung | Trạng thái |
 | --- | --- | --- |
-| GD1 | SDH: khung + đơn vị ghép + lab SDH | đang làm |
+| GD1 | SDH: khung + đơn vị ghép + lab SDH | xong 2026-10-11 (review G.707 01/2007 ĐẠT vòng 2) |
 | GD2 | PDH: E1 (khung, đa khung CRC-4), E2/E3/E4 (chèn bit), lab PDH → SDH | chờ |
 | GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | chờ |
 | Sau | OTUCn/FlexO; Ethernet qua truyền dẫn (GFP-F, VCAT/LCAS, GMP, FlexE); máy tính tốc độ; quiz | chờ |
@@ -25,7 +25,7 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | `stm-256` | Khung STM-N | 9×69120 | 125 µs | như trên |
 | `vc-4` | Container bậc cao | 9×261 | 125 µs | POH (1 cột: J1,B3,C2,G1,F2,H4,F3,K3,N1, bitFields cho G1, C2) + C-4 (260 cột) |
 | `vc-4-tug3` | Container bậc cao | 9×261 | 125 µs | VC-4 chứa 3×TUG-3: POH + 2 cột fixed stuff + 3 TUG-3 ghép xen (step 3) |
-| `tug-3` | Container bậc thấp | 9×86 | 125 µs | Cột NPI/fixed stuff + 7 TUG-2 ghép xen (step 7) |
+| `tug-3` | Container bậc thấp | 9×86 | 125 µs | 2 cột fixed stuff (NPI đã bỏ khỏi chuẩn) + 7 TUG-2 ghép xen (step 7) |
 | `tu-3` | Container bậc thấp | 9×86 | 125 µs | H1/H2/H3 + fixed stuff + VC-3 (9×85 với POH) |
 | `tug-2` | Container bậc thấp | 9×12 | 125 µs | 3 TU-12 ghép xen (step 3) |
 | `tu-12` | Container bậc thấp | 9×4 | 125 µs | Byte V1/V2/V3/V4 (theo khung trong đa khung 500 µs) + 35 byte VC-12; đa khung 4; bitFields V5 |
@@ -46,7 +46,7 @@ Mỗi frame có `unit` trỏ TMUX tương ứng (stm-1…, vc-4, tug-3, tu-3, tu
 | `c-3` | container | 756 | 1×e3 |
 | `vc-3` | vc | 765 | 1×c-3 + POH 9 |
 | `tu-3` | tu | 774 | 1×vc-3 + pointer 3 (H1–H3) + fixed stuff 6 |
-| `tug-3` | tug | 774 | 7×tug-2 + 18 (NPI + fixed stuff) · hoặc 1×tu-3 |
+| `tug-3` | tug | 774 | 7×tug-2 + 18 (fixed stuff) · hoặc 1×tu-3 |
 | `c-4` | container | 2340 | 1×e4 |
 | `vc-4` | vc | 2349 | 1×c-4 + POH 9 · hoặc 3×tug-3 + POH 9 + fixed stuff 18 |
 | `au-4` | au | 2358 | 1×vc-4 + pointer 9 |

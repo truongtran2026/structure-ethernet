@@ -3,15 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cấu trúc Header Ethernet</title>
+  <title>Frame Structure — Cấu trúc khung</title>
   <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" href="css/style.css">
   <script>
     // Ghi nhận file script không nạp được / lỗi cú pháp để app hiện thông báo thay vì trắng trang.
-    window.__ethvizLoad = { failed: [], errors: [] };
+    window.__ethvizLoad = { failed: [], errors: [], optional: [] };
     window.addEventListener('error', function (e) {
       var t = e.target;
-      if (t && t.tagName === 'SCRIPT') { window.__ethvizLoad.failed.push(t.getAttribute('src')); return; }
+      if (t && t.tagName === 'SCRIPT') {
+        // script có data-optional (dữ liệu mảng chưa có) → chỉ ẩn mảng đó, không báo lỗi
+        (t.hasAttribute('data-optional') ? window.__ethvizLoad.optional : window.__ethvizLoad.failed).push(t.getAttribute('src'));
+        return;
+      }
       if (e.message) {
         var f = (e.filename || '').split('/').pop();
         window.__ethvizLoad.errors.push((f ? f + ':' + e.lineno + ' — ' : '') + e.message);
@@ -21,10 +25,10 @@
 </head>
 <body>
   <header class="topbar">
-    <button type="button" id="menu-btn" class="icon-btn menu-btn" aria-controls="sidebar" aria-expanded="false" title="Danh sách frame">☰</button>
+    <button type="button" id="menu-btn" class="icon-btn menu-btn" aria-controls="sidebar" aria-expanded="false" title="Danh mục khung">☰</button>
     <a class="brand" href="#" aria-label="Trang đầu">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-      <span class="brand-text">Cấu trúc Header Ethernet<small>Học từng header, từng bit</small></span>
+      <span class="brand-text">Frame Structure — Cấu trúc khung<small>IP/Ethernet · Truyền dẫn PDH/SDH/OTN · từng bit, từng byte</small></span>
     </a>
     <button type="button" id="theme-btn" class="btn-ghost theme-btn">◐ Tự động</button>
     <!-- Chỉ có ý nghĩa khi chạy trên Vercel (middleware.js); mở bằng file:// thì ẩn. -->
@@ -32,27 +36,31 @@
     <script>if (location.protocol !== "file:") document.getElementById("logout-btn").hidden = false;</script>
   </header>
 
-  <div id="boot" class="boot">Đang khởi động… Nếu dòng này không biến mất, kiểm tra <code>js/app.js</code> và mở Console (F12).</div>
+  <div id="boot" class="boot">Đang khởi động… Nếu dòng này không biến mất, kiểm tra <code>js/nav.js</code>, <code>js/app.js</code> và mở Console (F12).</div>
   <noscript><div class="boot">Ứng dụng cần bật JavaScript.</div></noscript>
 
   <div id="app" class="layout" hidden>
-    <aside id="sidebar" class="sidebar" aria-label="Danh sách loại frame">
+    <aside id="sidebar" class="sidebar" aria-label="Danh mục khung">
       <label class="search">
-        <span class="sr-only">Tìm loại frame</span>
-        <input id="search" type="search" placeholder="Tìm: VLAN, MPLS, GRE…" autocomplete="off">
+        <span class="sr-only">Tìm loại khung</span>
+        <input id="search" type="search" placeholder="Tìm: VLAN, MPLS, GRE, STM-1, VC-12…" autocomplete="off">
       </label>
-      <nav id="nav" class="nav"></nav>
+      <nav id="nav" class="nav" aria-label="Cây danh mục"></nav>
     </aside>
     <div id="scrim" class="scrim" aria-hidden="true"></div>
 
     <main id="main" class="main">
       <div id="alerts" class="alerts" aria-live="polite"></div>
-      <section id="stack-head" class="stack-head"></section>
-      <section id="framemap" class="card framemap" aria-label="Bản đồ frame"></section>
-      <section class="card tree-card" aria-labelledby="tree-title">
-        <div class="section-title"><h2 id="tree-title">Cấu trúc chi tiết</h2><span class="muted">▸ bung · ▾ thu gọn</span></div>
-        <div id="tree" class="tree" role="tree" aria-labelledby="tree-title"></div>
-      </section>
+      <div id="view-ip" class="view">
+        <section id="stack-head" class="stack-head"></section>
+        <section id="framemap" class="card framemap" aria-label="Bản đồ frame"></section>
+        <section class="card tree-card" aria-labelledby="tree-title">
+          <div class="section-title"><h2 id="tree-title">Cấu trúc chi tiết</h2><span class="muted">▸ bung · ▾ thu gọn</span></div>
+          <div id="tree" class="tree" role="tree" aria-labelledby="tree-title"></div>
+        </section>
+      </div>
+      <div id="view-t" class="view" hidden></div>
+      <div id="view-lab" class="view" hidden></div>
     </main>
 
     <aside id="detail" class="detail" aria-label="Chi tiết" aria-live="polite"></aside>
@@ -62,7 +70,13 @@
   <script src="data/headers-l3l4.js"></script>
   <script src="data/headers-tunnel.js"></script>
   <script src="data/stacks.js"></script>
+  <!-- Mảng Truyền dẫn: thiếu file thì mảng đó tự ẩn -->
+  <script src="data/transport-sdh.js" data-optional></script>
   <script src="js/model.js"></script>
+  <script src="js/tmodel.js"></script>
+  <script src="js/nav.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/transport-view.js"></script>
+  <script src="js/mux-lab.js"></script>
 </body>
 </html>

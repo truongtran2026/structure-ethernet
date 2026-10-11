@@ -32,7 +32,7 @@ là một khái niệm sai. Luôn để validator chứng minh, không tin trí 
 
 - Thuật ngữ chuẩn giữ tiếng Anh (RSOH, MSOH, POH, NDF…), giải thích tiếng Việt, câu đầu là chức năng.
 - Phân biệt rõ cái **cố định** (SOH ở cột 1–9) và cái **trôi theo con trỏ** (VC-4 trong AU-4): lưới
-  vẽ VC-4 ở vị trí con trỏ = 0 để dễ học, `desc` phải nói rõ thực tế VC trôi.
+  vẽ VC ở vị trí cố định dễ học (VC-4 căn hàng 1 cột 10 ⇔ con trỏ AU-4 = 522; TU-12 ở con trỏ 0), `desc` phải nói rõ giá trị con trỏ tương ứng và thực tế VC trôi.
 - Đa khung (VC-12 500 µs, OTN MFAS 256) mô tả trong `multiframe` và `desc`, không vẽ 4 lưới.
 - Byte trống/dự trữ vẫn phải là region (kind `reserved`) để lưới phủ kín — ghi đúng ký hiệu chuẩn
   (X quốc gia, Δ phụ thuộc môi trường, * không xáo trộn).
@@ -43,7 +43,9 @@ là một khái niệm sai. Luôn để validator chứng minh, không tin trí 
 - AU-4 pointer: H1 Y Y H2 1* 1* H3 H3 H3 (Y = 1001SS11, 1* = 0xFF). H1H2: NDF 4 bit, SS 2 bit, 10 bit giá trị (0–782, bit I/D xen kẽ).
 - VC-4 POH: J1, B3, C2, G1, F2, H4, F3, K3, N1 (từ trên xuống).
 - VC-12 POH theo đa khung: V5, J2, N2, K4; con trỏ TU-12: V1, V2, V3, V4.
-- TUG-3 từ 7×TUG-2: 2 cột đầu là NPI + fixed stuff (18 byte). VC-4 từ 3×TUG-3: POH + 2 cột fixed stuff.
+- TUG-3 từ 7×TUG-2: 2 cột đầu (18 byte) đều là fixed stuff — NPI đã bị bỏ khỏi G.707 hiện hành (chỉ nhắc như lịch sử). VC-4 từ 3×TUG-3: POH + 2 cột fixed stuff.
+- STM-N không phải lúc nào cũng 3N A1/A2: STM-256 chỉ có 64 A1 + 64 A2 (§9.2.2.1). STM-64/256 dùng M0 + M1 cho MS-REI. J0: 1 hoặc 16 byte (64 byte chỉ J1).
+- AUG-N ghép xen theo khối N byte, không phải từng byte. Ghi số mục G.707 theo bản 01/2007 (vd khung cơ bản §6.2, SOH §9.2, TUG-3 §7.2.3).
 - Một VC-4 chứa 63 VC-12 = 3 TUG-3 × 7 TUG-2 × 3 TU-12.
 - Tốc độ: STM-1 155,52 Mbit/s; STM-N = N × 155,52.
 

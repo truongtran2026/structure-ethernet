@@ -64,7 +64,7 @@ function escapeHtml(s) {
 function loginPage(next, error, status = 200) {
   const html = `<!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Đăng nhập · Cấu trúc Header Ethernet</title>
+<title>Đăng nhập · Frame Structure</title>
 <style>
 :root{--bg:#f5f6f8;--surface:#fff;--border:#dde1e7;--text:#1b2230;--muted:#5f6b7c;--accent:#2856d6;--err:#b42318;--err-bg:#fdecea;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#11151c;--surface:#1a2029;--border:#2c3440;--text:#e6e9ee;--muted:#9aa5b4;--accent:#7b9dff;--err:#ff8a80;--err-bg:#3a1d1b;color-scheme:dark}}
@@ -80,7 +80,7 @@ button{width:100%;margin-top:20px;padding:10px;border:0;border-radius:8px;backgr
 </style></head><body>
 <form class="card" method="post" action="/login">
   <div class="mark" aria-hidden="true"><i style="background:#3b6fd8"></i><i style="background:#8250d8;width:4px"></i><i style="background:#2f9445"></i><i style="background:#d0475a;width:4px"></i></div>
-  <h1>Cấu trúc Header Ethernet</h1>
+  <h1>Frame Structure — Cấu trúc khung</h1>
   <p>Đăng nhập để xem nội dung.</p>
   ${error ? `<div class="err" role="alert">${escapeHtml(error)}</div>` : ""}
   <input type="hidden" name="next" value="${escapeHtml(next)}">
