@@ -44,7 +44,7 @@
   function tree() {
     var r = lb.st.root;
     var t = lb.st.trees[r];
-    if (!t || t.u !== r) t = lb.st.trees[r] = L().newNode(MUX(), r);
+    if (!t || t.u !== r || !Array.isArray(t.kids)) t = lb.st.trees[r] = L().newRoot(MUX(), r);
     return t;
   }
 
@@ -98,7 +98,7 @@
           var on = r === lb.st.root;
           return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-lroot="' + esc(r) + '" aria-pressed="' + on + '">' + esc(nm(r)) + '</button>';
         }).join('') + '</div>' +
-        '<span class="muted lab-rate">' + esc(TV().fmtRate(L().unitBytes(M, lb.st.root) * 64)) + ' · ' + esc(n(L().unitBytes(M, lb.st.root), 0)) + ' byte/125 µs</span>' +
+        '<span class="muted lab-rate">' + esc(TV().fmtRate(L().unitKbps(M, lb.st.root))) + (L().isByteUnit(M, lb.st.root) ? ' · ' + esc(n(L().unitBytes(M, lb.st.root), 0)) + ' byte/125 µs' : '') + '</span>' +
         '<button type="button" class="btn-ghost' + (lb.confirmClear ? ' is-danger' : '') + '" data-laction="clear">' + (lb.confirmClear ? 'Bấm lần nữa để xoá hết' : 'Xoá hết') + '</button>' +
         '</div></section>' +
       '<div class="lab-grid">' +
@@ -133,13 +133,16 @@
       '<div class="pal-list">' + items.map(function (id) {
         var u = M[id], client = L().isClient(M, id);
         var max = L().maxCount(M, root, id);
-        var size = client ? TV().fmtRate(u.rateKbps) : n(u.bytesPer125us, 0) + ' B';
+        var size = u.bytesPer125us != null ? n(u.bytesPer125us, 0) + ' B' : TV().fmtRate(u.rateKbps);
         return '<button type="button" class="pal-item k-' + (client ? 'client' : u.kind) + (lb.armed === id ? ' is-armed' : '') + (max ? '' : ' is-na') +
           '" draggable="true" data-lpal="' + esc(id) + '" aria-pressed="' + (lb.armed === id) + '" title="' +
           esc((u.summary || '') + (max ? ' — tối đa ' + max + ' trong ' + nm(root) : ' — không ghép được vào ' + nm(root))) + '">' +
           '<span class="pal-name">' + esc(nm(id)) + '</span><span class="pal-size">' + esc(size) + '</span></button>';
       }).join('') + '</div>' +
-      '<p class="muted pal-hint">Số byte là mỗi 125 µs (1 byte/125 µs = 64 kbit/s). Thả E1 thẳng vào TUG-2, TUG-3, VC-4… — các bước trung gian tự dựng.</p>';
+      '<p class="muted pal-hint">' + (L().isByteUnit(M, root)
+        ? 'Số byte là mỗi 125 µs (1 byte/125 µs = 64 kbit/s). Thả đơn vị bậc thấp thẳng vào hộp bậc cao — các bước trung gian tự dựng.'
+        : 'Đơn vị PDH tính theo kbit/s: mỗi bậc ghép 4 nhánh bậc dưới + bit overhead/chèn. Thả bậc thấp vào bậc cao — các bậc giữa tự dựng.') +
+      ' Luồng PDH (E1, E3…) mặc định là <b>nguyên khối</b>; đổi phương án ở ô chọn của nó để mở xem bên trong.</p>';
   }
 
   function countNodes(t) { var c = 0; (function w(x) { if (!x) return; c++; x.kids.forEach(w); })(t); return c; }
@@ -147,7 +150,7 @@
   /** Đếm client trong cây con: { e1: 3, … }. */
   function clientsIn(node) {
     var out = {}, M = MUX();
-    (function w(x) { if (!x) return; if (L().isClient(M, x.u)) out[x.u] = (out[x.u] || 0) + 1; x.kids.forEach(w); })(node);
+    (function w(x, isRoot) { if (!x) return; if (!isRoot && L().isClient(M, x.u, x)) { out[x.u] = (out[x.u] || 0) + 1; return; } x.kids.forEach(function (k) { w(k, false); }); })(node, true);
     return out;
   }
   function clientsTxt(c) { return Object.keys(c).map(function (k) { return c[k] + ' ' + nm(k); }).join(' + '); }
@@ -155,15 +158,21 @@
   function ohTxt(node) {
     var u = MUX()[node.u];
     if (!u || !u.accepts || node.opt < 0) return '';
-    var a = u.accepts[node.opt], b = (a.overhead && a.overhead.bytes) || 0;
-    return b ? '+' + n(b, 0) + ' B' : '';
+    return L().ohLabel(u.accepts[node.opt]);
   }
-  function ohTitle(node) {
-    var u = MUX()[node.u];
-    if (!u || !u.accepts || node.opt < 0) return u ? u.summary || '' : '';
+  /** "+9 B VC-4 POH" / "+256 kbit/s FAS…" ('' nếu không có). */
+  function ohPhrase(a) {
+    var lb2 = L().ohLabel(a);
+    return lb2 ? lb2 + ' ' + ((a.overhead && a.overhead.name) || 'overhead') : '';
+  }
+  function ohTitle(node, isRoot) {
+    var M = MUX(), u = M[node.u];
+    if (!u) return '';
+    if (!u.accepts || node.opt < 0) return (u.summary || '') + (u.leafOk && !isRoot ? '\nĐang dùng nguyên khối (client) — chọn phương án để mở xem bên trong.' : '');
     var a = u.accepts[node.opt];
     var oh = a.overhead || {};
-    return nm(node.u) + ' = ' + a.count + '×' + nm(a.of) + (oh.bytes ? ' + ' + oh.bytes + ' B ' + (oh.name || 'overhead') : '') +
+    var ph = ohPhrase(a);
+    return nm(node.u) + ' = ' + a.count + '×' + nm(a.of) + (ph ? ' + ' + ph : '') +
       (a.mapping ? ' · ánh xạ ' + a.mapping : '') + (oh.desc && oh.desc !== oh.name ? '\n' + oh.desc : '') + (a.note ? '\n' + a.note : '');
   }
 
@@ -178,7 +187,7 @@
       var canOpen = M[su] && M[su].accepts && M[su].accepts.length;
       return '<div class="lab-slot" data-drop="' + pkey(path) + '" role="button" tabindex="0" title="Ô trống ' + esc(nm(su)) + ' — thả đơn vị vào đây">' +
         '<span class="slot-name">' + esc(nm(su)) + (idxLabel ? ' <small>#' + idxLabel + '</small>' : '') + '</span><span class="slot-hint">trống</span>' +
-        (canOpen && (M[su].accepts.length > 1) ? '<button type="button" class="slot-open" data-linst="' + pkey(path) + '" title="Tạo ' + esc(nm(su)) + ' để chọn phương án">chọn phương án</button>' : '') +
+        (canOpen && !M[su].leafOk && (M[su].accepts.length > 1) ? '<button type="button" class="slot-open" data-linst="' + pkey(path) + '" title="Tạo ' + esc(nm(su)) + ' để chọn phương án">chọn phương án</button>' : '') +
         '</div>';
     }
     // chuỗi 1×
@@ -190,7 +199,7 @@
     }
     var last = chain[chain.length - 1];
     var lu = M[last.node.u];
-    var leafClient = L().isClient(M, last.node.u);
+    var leafClient = last.path.length > 0 && L().isClient(M, last.node.u, last.node);
     var pk = pkey(path);
     var collapsedDefault = big && depth >= 2;
     var collapsed = lb.st.collapsed[pk] != null ? lb.st.collapsed[pk] : collapsedDefault;
@@ -199,12 +208,15 @@
     var head = chain.map(function (c, i) {
       var u = M[c.node.u];
       var multi = u && u.accepts && u.accepts.length > 1;
+      var isRootN = !c.path.length;
+      var cli = !isRootN && L().isClient(M, c.node.u, c.node);
+      var canMono = u && u.leafOk && u.accepts && !isRootN; // PDH: chọn nguyên khối / phương án
       var oh = ohTxt(c.node);
       return (i ? '<span class="ch-sep" aria-hidden="true">›</span>' : '') +
-        '<span class="ch-item k-' + (L().isClient(M, c.node.u) ? 'client' : u.kind) + '">' +
-          '<button type="button" class="ch-name" data-lsel="' + esc(c.node.u) + '" title="' + esc(ohTitle(c.node)) + '">' + esc(nm(c.node.u)) + '</button>' +
-          (oh ? '<span class="ch-oh" title="' + esc(ohTitle(c.node)) + '">' + esc(oh) + '</span>' : '') +
-          (multi && c.node.opt >= 0 ? optSelect(c.node, c.path) : '') +
+        '<span class="ch-item k-' + (cli ? 'client' : u.kind) + '">' +
+          '<button type="button" class="ch-name" data-lsel="' + esc(c.node.u) + '" title="' + esc(ohTitle(c.node, isRootN)) + '">' + esc(nm(c.node.u)) + '</button>' +
+          (oh ? '<span class="ch-oh" title="' + esc(ohTitle(c.node, isRootN)) + '">' + esc(oh) + '</span>' : '') +
+          (canMono || (multi && c.node.opt >= 0) ? optSelect(c.node, c.path, canMono) : '') +
         '</span>';
     }).join('');
 
@@ -217,12 +229,12 @@
 
     var body = '';
     var summary = '';
-    if (last.node.opt < 0 && lu && lu.accepts) {
+    if (last.node.opt < 0 && lu && lu.accepts && !leafClient) {
       body = '<div class="opt-pick"><span class="muted">Chọn cách lấp ' + esc(nm(last.node.u)) + ':</span> ' + lu.accepts.map(function (a, i) {
-        return '<button type="button" class="var-chip" data-lopt="' + pkey(last.path) + '" data-lval="' + i + '" title="' + esc((a.overhead && a.overhead.bytes ? '+' + a.overhead.bytes + ' B ' + (a.overhead.name || '') : 'không thêm overhead') + (a.note ? ' — ' + a.note : '')) + '">' +
+        return '<button type="button" class="var-chip" data-lopt="' + pkey(last.path) + '" data-lval="' + i + '" title="' + esc((ohPhrase(a) || 'không thêm overhead') + (a.note ? ' — ' + a.note : '')) + '">' +
           a.count + '×' + esc(nm(a.of)) + '</button>';
       }).join(' ') + '<span class="muted"> · hoặc thả thẳng đơn vị vào hộp này</span></div>';
-    } else if (lu && lu.accepts) {
+    } else if (lu && lu.accepts && last.node.opt >= 0) {
       var a = lu.accepts[last.node.opt];
       var filled = last.node.kids.filter(Boolean).length;
       var cl = clientsIn(last.node);
@@ -234,6 +246,7 @@
       }
     }
     var canCollapse = lu && lu.accepts && last.node.opt >= 0;
+    if (leafClient && !compact) summary = '<span class="box-sum">nguyên khối · ' + esc(TV().fmtRate(L().unitKbps(M, last.node.u))) + '</span>';
     return '<div class="' + cls + '" data-drop="' + pk + '">' +
       '<div class="box-head">' +
         (canCollapse ? '<button type="button" class="caret" data-lcollapse="' + pk + '" data-lstate="' + (collapsed ? 1 : 0) + '" aria-expanded="' + !collapsed + '" title="Thu gọn/bung">' + (collapsed ? '▸' : '▾') + '</button>' : '') +
@@ -242,9 +255,10 @@
       '</div>' + body + '</div>';
   }
 
-  function optSelect(node, path) {
+  function optSelect(node, path, canMono) {
     var u = MUX()[node.u];
     return '<select class="ch-opt" data-loptsel="' + pkey(path) + '" title="Phương án lấp ' + esc(nm(node.u)) + ' (đổi sẽ xoá nội dung bên trong)">' +
+      (canMono ? '<option value="-1"' + (node.opt < 0 ? ' selected' : '') + '>Nguyên khối</option>' : '') +
       u.accepts.map(function (a, i) { return '<option value="' + i + '"' + (i === node.opt ? ' selected' : '') + '>' + a.count + '×' + esc(nm(a.of)) + '</option>'; }).join('') +
       '</select>';
   }
@@ -252,49 +266,53 @@
   // ---------- tổng kết ----------
   function renderTotals(t) {
     var M = MUX(), acc = L().account(M, t);
-    var total = acc.totalBytes;
+    var total = acc.totalKbps, byteMode = acc.byteBased;
     var segs = [
-      { k: 'client', label: 'Tải khách hàng', b: acc.clientBytes },
-      { k: 'stuff', label: 'Chèn/bù tốc độ (stuff)', b: acc.justification },
-      { k: 'oh', label: 'Overhead các cấp', b: acc.overheadBytes },
-      { k: 'empty', label: 'Chưa dùng', b: acc.empty }
+      { k: 'client', label: 'Tải khách hàng', v: acc.clientKbps },
+      { k: 'stuff', label: 'Chèn/bù tốc độ (stuff)', v: acc.justificationKbps },
+      { k: 'oh', label: 'Overhead các cấp', v: acc.overheadKbps },
+      { k: 'empty', label: 'Chưa dùng', v: acc.emptyKbps }
     ];
-    var bar = '<div class="sbar" role="img" aria-label="' + esc(segs.map(function (s) { return s.label + ' ' + n(s.b / total * 100) + '%'; }).join(', ')) + '">' +
-      segs.filter(function (s) { return s.b > 1e-9; }).map(function (s) {
-        var pct = s.b / total * 100;
-        return '<span class="sbar-seg sb-' + s.k + '" style="flex-grow:' + s.b + '" title="' + esc(s.label + ': ' + n(s.b) + ' byte/125 µs = ' + TV().fmtRate(s.b * 64) + ' (' + n(pct) + '%)') + '">' +
-          '</span>';
+    function sizeTxt(k) { return TV().fmtRate(k) + (byteMode ? ' = ' + n(k / 64) + ' byte/125 µs' : ''); }
+    var bar = '<div class="sbar" role="img" aria-label="' + esc(segs.map(function (s) { return s.label + ' ' + n(s.v / total * 100) + '%'; }).join(', ')) + '">' +
+      segs.filter(function (s) { return s.v > 1e-9; }).map(function (s) {
+        return '<span class="sbar-seg sb-' + s.k + '" style="flex-grow:' + s.v + '" title="' + esc(s.label + ': ' + sizeTxt(s.v) + ' (' + n(s.v / total * 100) + '%)') + '"></span>';
       }).join('') + '</div>' +
       '<div class="legend">' + segs.map(function (s) {
-        return '<span class="lg-item"><span class="lg-sw sb-' + s.k + '"></span>' + esc(s.label) + ' <b>' + esc(n(s.b / total * 100, 1)) + '%</b></span>';
+        return '<span class="lg-item"><span class="lg-sw sb-' + s.k + '"></span>' + esc(s.label) + ' <b>' + esc(n(s.v / total * 100, 1)) + '%</b></span>';
       }).join('') + '</div>';
-    // cột chồng theo cấp: mỗi cấp một thanh = overhead cấp đó (so với khung)
-    var maxOh = Math.max.apply(null, acc.overhead.map(function (o) { return o.bytes; }).concat([1]));
+    // mỗi cấp một thanh = overhead cấp đó (so với khung)
+    var maxOh = Math.max.apply(null, acc.overhead.map(function (o) { return o.kbps; }).concat([1]));
+    var byteCols = function (k) { return byteMode ? '<td class="num">' + esc(n(k / 64)) + '</td>' : ''; };
     var rows = acc.overhead.map(function (o) {
-      var pct = o.bytes / total * 100;
+      var each = o.kbpsEach ? (o.unitBytes ? n(o.bytesEach, 0) + ' B' : TV().fmtRate(o.kbpsEach)) : '';
       return '<tr><td><button type="button" class="link-btn" data-lsel="' + esc(o.u) + '">' + esc(nm(o.u)) + '</button></td><td class="num">' + o.count + '</td>' +
-        '<td>' + (o.bytesEach ? esc(n(o.bytesEach, 0) + ' B') + (o.ohName ? ' <span class="muted">' + esc(o.ohName) + '</span>' : '') : '<span class="muted">0</span>') + '</td>' +
-        '<td class="num">' + esc(n(o.bytes, 0)) + '</td><td class="num">' + esc(n(o.bytes * 64, 0)) + '</td>' +
-        '<td class="barcell"><span class="hbar-track"><span class="hbar" style="width:' + (o.bytes / maxOh * 100) + '%"></span></span><span class="num">' + esc(n(pct)) + '%</span></td></tr>';
+        '<td>' + (each ? esc(each) + (o.ohName ? ' <span class="muted">' + esc(o.ohName) + '</span>' : '') : '<span class="muted">0</span>') + '</td>' +
+        byteCols(o.kbps) + '<td class="num">' + esc(n(o.kbps, 0)) + '</td>' +
+        '<td class="barcell"><span class="hbar-track"><span class="hbar" style="width:' + (o.kbps / maxOh * 100) + '%"></span></span><span class="num">' + esc(n(o.kbps / total * 100)) + '%</span></td></tr>';
     }).join('');
     var extra = [
-      ['Chèn bù tốc độ (justification)', acc.justification, 'Container lớn hơn tín hiệu khách hàng một chút (vd C-12 34 B mang E1 = 32 B/125 µs).'],
-      ['Chưa dùng (ô trống)', acc.empty, 'Dung lượng chưa lấp.'],
-      ['Tải khách hàng', acc.clientBytes, clientsTxt(acc.clients) || 'chưa có']
+      ['Chèn bù tốc độ (justification)', acc.justificationKbps, 'Dung lượng bước ghép lớn hơn overhead + tổng nhánh (vd C-12 2176 kbit/s mang E1 2048 kbit/s).'],
+      ['Chưa dùng (ô trống)', acc.emptyKbps, 'Dung lượng chưa lấp.'],
+      ['Tải khách hàng', acc.clientKbps, clientsTxt(acc.clients) || 'chưa có']
     ].map(function (r) {
-      return '<tr class="tr-sum"><td colspan="3">' + esc(r[0]) + ' <span class="muted">' + esc(r[2]) + '</span></td><td class="num">' + esc(n(r[1])) + '</td><td class="num">' + esc(n(r[1] * 64)) + '</td><td class="num">' + esc(n(r[1] / total * 100)) + '%</td></tr>';
+      return '<tr class="tr-sum"><td colspan="3">' + esc(r[0]) + ' <span class="muted">' + esc(r[2]) + '</span></td>' + byteCols(r[1]) +
+        '<td class="num">' + esc(n(r[1])) + '</td><td class="num">' + esc(n(r[1] / total * 100)) + '%</td></tr>';
     }).join('');
-    return '<div class="section-title"><h2>Tổng kết ' + esc(nm(t.u)) + '</h2><span class="muted">byte mỗi 125 µs · 1 byte/125 µs = 64 kbit/s</span></div>' +
+    return '<div class="section-title"><h2>Tổng kết ' + esc(nm(t.u)) + '</h2><span class="muted">' +
+        (byteMode ? 'kbit/s và byte mỗi 125 µs · 1 byte/125 µs = 64 kbit/s' : 'kbit/s · client + overhead + chèn + trống = tốc độ khung') + '</span></div>' +
       '<div class="stats">' +
-        '<div class="stat"><div class="stat-label">Tốc độ khung đích</div><div class="stat-value">' + esc(TV().fmtRate(acc.totalKbps)) + '</div><div class="stat-sub">' + esc(n(total, 0)) + ' byte/125 µs</div></div>' +
+        '<div class="stat"><div class="stat-label">Tốc độ khung đích</div><div class="stat-value">' + esc(TV().fmtRate(total)) + '</div><div class="stat-sub">' + esc(byteMode ? n(total / 64, 0) + ' byte/125 µs' : n(total, 0) + ' kbit/s') + '</div></div>' +
         '<div class="stat"><div class="stat-label">Tải khách hàng thực mang</div><div class="stat-value">' + esc(TV().fmtRate(acc.clientKbps)) + '</div><div class="stat-sub">' + esc(clientsTxt(acc.clients) || 'chưa thả gì') + '</div></div>' +
         '<div class="stat"><div class="stat-label">Hiệu suất</div><div class="stat-value">' + esc(n(acc.efficiency)) + '%</div><div class="stat-sub">tải khách hàng / tốc độ khung</div></div>' +
-        '<div class="stat"><div class="stat-label">Tổng overhead</div><div class="stat-value">' + esc(n(acc.overheadBytes, 0)) + ' B</div><div class="stat-sub">' + esc(TV().fmtRate(acc.overheadBytes * 64)) + '</div></div>' +
+        '<div class="stat"><div class="stat-label">Tổng overhead</div><div class="stat-value">' + esc(TV().fmtRate(acc.overheadKbps)) + '</div><div class="stat-sub">' + esc(byteMode ? n(acc.overheadKbps / 64, 0) + ' byte/125 µs' : 'cộng mọi cấp') + '</div></div>' +
       '</div>' + bar +
       '<h3 class="lab-h3">Overhead theo cấp</h3>' +
-      '<div class="tbl-wrap"><table class="values lab-table"><thead><tr><th>Cấp</th><th class="num">Số lượng</th><th>Overhead mỗi cái</th><th class="num">Byte/125 µs</th><th class="num">kbit/s</th><th>% khung</th></tr></thead><tbody>' +
+      '<div class="tbl-wrap"><table class="values lab-table"><thead><tr><th>Cấp</th><th class="num">Số lượng</th><th>Overhead mỗi cái</th>' +
+        (byteMode ? '<th class="num">Byte/125 µs</th>' : '') + '<th class="num">kbit/s</th><th>% khung</th></tr></thead><tbody>' +
         rows + extra +
-        '<tr class="tr-total"><td colspan="3"><b>Tổng</b></td><td class="num"><b>' + esc(n(total, 0)) + '</b></td><td class="num"><b>' + esc(n(total * 64, 0)) + '</b></td><td class="num">100%</td></tr>' +
+        '<tr class="tr-total"><td colspan="3"><b>Tổng</b></td>' + (byteMode ? '<td class="num"><b>' + esc(n(total / 64, 0)) + '</b></td>' : '') +
+        '<td class="num"><b>' + esc(n(total, 0)) + '</b></td><td class="num">100%</td></tr>' +
       '</tbody></table></div>';
   }
 
@@ -316,25 +334,26 @@
   // ---------- đóng gói từng bước ----------
   function renderSteps() {
     var M = MUX(), root = lb.st.root;
-    var clients = (lb.lab.palette || []).filter(function (id) { return M[id] && L().isClient(M, id) && L().pathDown(M, root, id); });
+    var clients = (lb.lab.palette || []).filter(function (id) { return M[id] && id !== root && L().isClient(M, id) && L().pathDown(M, root, id); });
     if (!clients.length) return '';
     var cl = clients.indexOf(lb.st.step.client) >= 0 ? lb.st.step.client : clients[0];
     var steps = L().stepsUp(M, root, cl) || [];
     var k = Math.max(1, Math.min(lb.st.step.n || 1, steps.length));
-    var clientB = L().unitBytes(M, cl);
+    var clientK = L().unitKbps(M, cl);
     var list = steps.slice(0, k).map(function (s, i) {
       var u = s.unit, oh = s.overhead || {};
       var max = L().maxCount(M, s.u, cl);
-      var eff = s.bytes ? max * clientB / s.bytes * 100 : 0;
+      var eff = s.kbps ? max * clientK / s.kbps * 100 : 0;
       var fr = u.frame && window.TFRAMES && window.TFRAMES[u.frame];
+      var ohl = i ? L().ohLabel({ overhead: oh }) : '';
       return '<li class="step' + (i === k - 1 ? ' is-cur' : '') + '">' +
         '<span class="step-n">' + (i + 1) + '</span>' +
         '<div class="step-body"><div class="step-head"><button type="button" class="link-btn" data-lsel="' + esc(s.u) + '"><b>' + esc(nm(s.u)) + '</b></button>' +
-          '<span class="muted">' + (u.rateKbps ? esc(TV().fmtRate(u.rateKbps)) + ' = ' + esc(n(s.bytes)) + ' B/125 µs' : esc(n(s.bytes, 0)) + ' B/125 µs · ' + esc(TV().fmtRate(s.bytes * 64))) + '</span>' +
+          '<span class="muted">' + (u.bytesPer125us != null ? esc(n(s.bytes, 0)) + ' B/125 µs · ' + esc(TV().fmtRate(s.kbps)) : esc(TV().fmtRate(s.kbps))) + '</span>' +
           (fr ? '<a class="btn-ghost btn-sm" href="#t/' + esc(fr.id) + '">▦ Xem lưới</a>' : '') + '</div>' +
           (i ? '<div class="step-desc">= ' + s.count + '×' + esc(nm(s.from)) +
-            (oh.bytes ? ' <span class="pill-oh">+' + n(oh.bytes, 0) + ' B ' + esc(oh.name || 'overhead') + '</span>' : ' <span class="muted">(không thêm overhead)</span>') +
-            (s.justification > 0 ? ' <span class="pill-stuff">+' + n(s.justification) + ' B chèn bù tốc độ</span>' : '') +
+            (ohl ? ' <span class="pill-oh">' + esc(ohl) + ' ' + esc(oh.name || 'overhead') + '</span>' : ' <span class="muted">(không thêm overhead)</span>') +
+            (s.justKbps > 0 ? ' <span class="pill-stuff">+' + esc(TV().fmtRate(s.justKbps)) + (L().isByteUnit(M, s.u) ? ' (' + n(s.justification) + ' B)' : '') + ' chèn bù tốc độ</span>' : '') +
             (s.mapping ? ' <span class="muted">· ánh xạ ' + esc(s.mapping) + '</span>' : '') + '</div>' : '<div class="step-desc">Tín hiệu khách hàng — điểm bắt đầu.</div>') +
           (i ? '<div class="step-eff">Đầy ' + max + ' ' + esc(nm(cl)) + ' → tải khách hàng chiếm <b>' + esc(n(eff, 1)) + '%</b><span class="effbar"><span style="width:' + eff + '%"></span></span></div>' : '') +
         '</div></li>';
@@ -361,6 +380,7 @@
       '<li><b>Kéo</b> một đơn vị (E1, E3, TU-12…) vào ô trống hoặc vào một hộp. Trên điện thoại: bấm đơn vị rồi bấm ô.</li>' +
       '<li>Thả bậc thấp vào bậc cao: các bước trung gian tự dựng, thông báo nêu overhead từng bước.</li>' +
       '<li>Hộp có nhiều phương án (VC-4, TUG-3) có ô chọn — đổi phương án sẽ xoá nội dung bên trong hộp đó.</li>' +
+      '<li>Luồng PDH (E1, E2, E3, E4) mặc định là <b>nguyên khối</b> (client). Ô chọn của nó có “Nguyên khối (client)” và các phương án (vd 4×E2) — chọn để mở xem bên trong.</li>' +
       '<li>Bấm tên một đơn vị để xem chi tiết ở đây. Trạng thái tự lưu trong trình duyệt.</li></ol></div>';
   }
 
@@ -368,12 +388,11 @@
     var M = MUX(), u = M[id];
     if (!u) return;
     lb.sel = id;
-    var client = L().isClient(M, id);
     var fr = u.frame && window.TFRAMES && window.TFRAMES[u.frame];
     var acc = (u.accepts || []).map(function (a) {
       var oh = a.overhead || {};
       return '<li><b>' + a.count + '×<a href="#" data-lunit="' + esc(a.of) + '">' + esc(nm(a.of)) + '</a></b>' +
-        (oh.bytes ? ' + ' + n(oh.bytes, 0) + ' B ' + esc(oh.name || 'overhead') : ' <span class="muted">(không thêm overhead)</span>') +
+        (ohPhrase(a) ? ' ' + esc(ohPhrase(a)) : ' <span class="muted">(không thêm overhead)</span>') +
         (a.mapping ? ' <span class="chip">' + esc(a.mapping) + '</span>' : '') +
         (oh.desc && oh.desc !== oh.name ? '<br><span class="muted">' + esc(oh.desc) + '</span>' : '') +
         (a.note ? '<br><span class="muted">' + esc(a.note) + '</span>' : '') + '</li>';
@@ -382,13 +401,14 @@
     document.getElementById('detail').innerHTML = '<div class="detail-card"><span class="eyebrow">Đơn vị ghép · ' + esc(u.kind) + '</span>' +
       '<h2>' + esc(u.name) + '</h2>' + (u.summary ? '<p class="lead">' + esc(u.summary) + '</p>' : '') +
       '<dl class="kv">' +
-        '<dt>Kích thước</dt><dd>' + (client ? esc(TV().fmtRate(u.rateKbps)) + ' <span class="muted">(≈ ' + esc(n(u.rateKbps / 64)) + ' B/125 µs)</span>'
+        '<dt>Kích thước</dt><dd>' + (u.bytesPer125us == null ? esc(TV().fmtRate(u.rateKbps)) + ' <span class="muted">(≈ ' + esc(n(u.rateKbps / 64)) + ' B/125 µs)</span>'
           : esc(n(u.bytesPer125us, 0)) + ' byte/125 µs = ' + esc(TV().fmtRate(u.bytesPer125us * 64))) + '</dd>' +
+        (u.leafOk ? '<dt>Dùng như</dt><dd>client nguyên khối (mặc định) hoặc mở theo một phương án bên dưới</dd>' : '') +
         (u.standard ? '<dt>Chuẩn</dt><dd>' + esc(u.standard) + '</dd>' : '') +
         (parents.length ? '<dt>Nằm trong</dt><dd>' + parents.map(function (p) { return '<a href="#" data-lunit="' + esc(p) + '">' + esc(nm(p)) + '</a>'; }).join(', ') + '</dd>' : '') +
       '</dl>' + (u.desc ? '<p>' + esc(u.desc) + '</p>' : '') +
       (acc ? '<h3>Cách lấp (phương án)</h3><ul class="plain unit-acc">' + acc + '</ul>' : '<p class="muted">Tín hiệu khách hàng — điểm bắt đầu của cây ghép.</p>') +
-      (fr ? '<p><a class="btn-ghost btn-link" href="#t/' + esc(fr.id) + '">▦ Xem lưới byte ' + esc(fr.name) + '</a></p>' : '') + '</div>';
+      (fr ? '<p><a class="btn-ghost btn-link" href="#t/' + esc(fr.id) + '">▦ Xem lưới ' + (fr.grid && fr.grid.cellBits === 1 ? 'bit ' : 'byte ') + esc(fr.name) + '</a></p>' : '') + '</div>';
     if (!quiet && window.matchMedia && window.matchMedia('(max-width: 1240px)').matches) {
       var d = document.getElementById('detail'); if (d.scrollIntoView) d.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -407,10 +427,10 @@
       for (var i = res.path.length - 1; i >= path.length; i--) {
         var nd = L().getNode(t, res.path.slice(0, i));
         if (!nd) continue;
-        var a = M[nd.u].accepts[nd.opt], oh = (a.overhead && a.overhead.bytes) || 0;
-        var just = L().isClient(M, a.of) ? L().unitBytes(M, nd.u) - oh - a.count * L().unitBytes(M, a.of) : 0;
-        steps.push('<b>' + esc(nm(nd.u)) + '</b>' + (oh ? ' <span class="pill-oh">+' + n(oh, 0) + ' B ' + esc((a.overhead && a.overhead.name) || '') + '</span>' : '') +
-          (just > 0 ? ' <span class="pill-stuff">+' + n(just / a.count) + ' B chèn</span>' : ''));
+        var a = M[nd.u].accepts[nd.opt], ph = ohPhrase(a);
+        var just = L().unitKbps(M, nd.u) - L().ohKbps(a) - a.count * L().unitKbps(M, a.of);
+        steps.push('<b>' + esc(nm(nd.u)) + '</b>' + (ph ? ' <span class="pill-oh">' + esc(ph) + '</span>' : '') +
+          (just > 1e-9 ? ' <span class="pill-stuff">+' + esc(L().isByteUnit(M, nd.u) ? n(just / 64 / a.count) + ' B' : TV().fmtRate(just / a.count)) + ' chèn</span>' : ''));
       }
       lb.msg = { ok: true, html: 'Đã thêm <b>' + esc(nm(X)) + '</b>' + (steps.length ? ': ' + esc(nm(X)) + ' → ' + steps.join(' → ') : '') };
       lb.lastPath = res.path;
@@ -427,7 +447,7 @@
     if ((b = t.closest('[data-laction="clear"]'))) {
       if (!lb.confirmClear) { lb.confirmClear = true; render(); return; }
       lb.confirmClear = false;
-      lb.st.trees[lb.st.root] = L().newNode(MUX(), lb.st.root); lb.st.collapsed = {};
+      lb.st.trees[lb.st.root] = L().newRoot(MUX(), lb.st.root); lb.st.collapsed = {};
       lb.msg = { ok: true, html: 'Đã xoá hết ' + esc(nm(lb.st.root)) + '.' }; lb.lastPath = null;
       save(); render(); return;
     }
@@ -476,8 +496,11 @@
     if (!lb.active) return;
     var s = e.target;
     if (s.matches && s.matches('[data-loptsel]')) {
-      L().setOption(MUX(), tree(), parsePath(s.getAttribute('data-loptsel')), +s.value);
-      lb.msg = { ok: true, html: 'Đã đổi phương án — nội dung cũ bên trong đã được xoá.' }; lb.lastPath = null;
+      var sp = parsePath(s.getAttribute('data-loptsel')), sv = +s.value;
+      var sn = L().getNode(tree(), sp);
+      L().setOption(MUX(), tree(), sp, sv);
+      lb.msg = { ok: true, html: sv < 0 ? 'Đã đưa ' + esc(sn ? nm(sn.u) : '') + ' về <b>nguyên khối</b> (client) — nội dung bên trong đã được xoá.'
+        : 'Đã đổi phương án — nội dung cũ bên trong đã được xoá.' }; lb.lastPath = sv < 0 ? null : sp;
       save(); render();
     }
   }

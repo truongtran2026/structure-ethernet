@@ -46,9 +46,17 @@ window.TLABS   = window.TLABS   || [];   // các phòng thí nghiệm ghép kên
   values: [{ v: "0xF6", m: "…" }],     // (tuỳ chọn)
   bitFields: [{ name: "…", abbr: "…", bits: 4, desc: "…" }],  // (tuỳ chọn) chia bit; tổng = số ô × cellBits
   repeat: "×3N",                       // (tuỳ chọn) chú thích lặp ở STM-N
+  perFrame: [                          // (tuỳ chọn) nghĩa thay đổi theo khung trong đa khung (cần frame.multiframe)
+    { frames: [0, 2, 4], abbr: "FAS", name: "…", desc: "…", bitFields: [/* tổng = số ô × cellBits */] }
+  ],
   children: [ /* Region[] — nếu có, PHẢI phủ kín đúng các ô của cha */ ]
 }
 ```
+
+`perFrame`: mỗi phần tử áp cho các khung (0-based) trong `frames`; mọi chỉ số < `multiframe.frames`.
+Nên phủ đủ mọi khung của đa khung (khung không có nghĩa riêng thì dùng `name`/`desc` của region).
+`periodUs` được phép là số thập phân (PDH: E2 = 848 bit / 8448 kbit/s ≈ 100,379 µs) — ghi bằng biểu thức
+`848 * 1000 / 8448` để chính xác. `cellBits: 1` cho khung tính theo bit (E2/E3/E4).
 
 `rect` với `step > 1` mô tả cột ghép xen: vùng gồm các cột `c, c+step, …, c+(w-1)*step`,
 hàng `r … r+h-1`. Dùng cho TUG-3 trong VC-4, TU-12 trong TUG-2…
@@ -76,14 +84,17 @@ hàng `r … r+h-1`. Dùng cho TUG-3 trong VC-4, TU-12 trong TUG-2…
   kind: "tug",                    // client | container | vc | tu | tug | au | aug | stm | odu | opu | otu
   level: 30,                      // thứ tự từ bé đến lớn (để lab sắp palette)
   bytesPer125us: 108,             // kích thước trung bình mỗi 125 µs (SDH) — rateKbps = bytes × 64
-  rateKbps: 2048,                 // CHỈ cho client không chia được theo byte (E1, E3, E4, Ethernet…)
+  rateKbps: 2048,                 // cho đơn vị không chia được theo byte (PDH, Ethernet…) — chọn đúng một trong hai
+  leafOk: true,                   // (tuỳ chọn, chỉ khi có accepts) dùng được như client nguyên khối (không cần lấp con);
+                                  // lab mặc định là nguyên khối, người dùng có thể chọn phương án accepts để xem bên trong
   frame: "tug-2",                 // (tuỳ chọn) id TFRAMES để mở lưới
   standard: "ITU-T G.707 §7.1",
   summary: "…",                   // 1 câu
   desc: "…",                      // 2–4 câu
   accepts: [                      // cách lấp đơn vị này — các PHƯƠNG ÁN thay thế nhau, chọn đúng một
     { of: "tu-12", count: 3,
-      overhead: { bytes: 0, name: "", desc: "" },      // overhead/chèn thêm ở bước này (bytes / 125 µs)
+      overhead: { bytes: 0, name: "", desc: "" },      // overhead ở bước này: bytes/125 µs (đơn vị byte)
+                                                       // hoặc kbps (đơn vị tốc độ, vd E2: { kbps: 256 })
       mapping: "",                                     // (tuỳ chọn) kiểu ánh xạ: asynchronous, byte-sync, GMP, AMP, BMP…
       note: "…" }
   ]
@@ -113,10 +124,14 @@ VC-4 nhận 3×TUG-3, mỗi TUG-3 tự chọn phương án riêng (7×TUG-2 ho�
    (kiểm bằng bitmap từng ô, hỗ trợ `step`). Region gốc phủ kín toàn lưới.
 3. `bitFields` (nếu có): tổng bit = số ô × cellBits.
 4. Unit: với mỗi phương án `accepts`:
-   - con là unit theo byte → `parent.bytesPer125us = count × child.bytesPer125us + overhead.bytes`;
-   - con là client (`rateKbps`) → `count × child.rateKbps ≤ (parent.bytesPer125us − overhead.bytes) × 64`.
+   - cha và con đều theo byte → `parent.bytesPer125us = count × child.bytesPer125us + overhead.bytes`;
+   - cha theo byte, con theo tốc độ → `count × child.rateKbps ≤ (parent.bytesPer125us − overhead.bytes) × 64`;
+   - cha theo tốc độ (ghép PDH) → `parent.rateKbps = count × tốc độ con + overhead.kbps` (danh định; chèn bit
+     bù sai lệch, ghi trong desc).
+   - Con có `accepts` mà không `leafOk` thì không phải client.
 5. Mọi `of`, `frame`, `unit`, `roots`, `palette` trỏ tới id có thật; id duy nhất; `desc`/`summary` không rỗng.
-6. Mọi frame có `unit` thì kích thước khớp: `rows × cols × cellBits / 8 × 125 / periodUs = unit.bytesPer125us`
+6. Mọi frame có `unit` thì kích thước khớp (unit theo tốc độ: `frame.rateKbps = unit.rateKbps`): `rows × cols × cellBits / 8 × 125 / periodUs = unit.bytesPer125us`
    (bỏ qua nếu unit có rateKbps).
+7. `perFrame`: chỉ số khung hợp lệ, bitFields đủ bit.
 
 Chạy: `node .claude/skills/transport-frame-spec/scripts/validate-transport.mjs .`

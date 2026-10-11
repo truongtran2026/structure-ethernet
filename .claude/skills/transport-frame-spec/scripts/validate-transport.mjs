@@ -43,7 +43,7 @@ for (const [key, f] of Object.entries(FR)) {
   if (![g.rows, g.cols, g.cellBits].every((x) => Number.isInteger(x) && x > 0)) { err(`${where}: grid sai`); continue; }
   const bits = g.rows * g.cols * g.cellBits;
   const rate = (bits * 1000) / f.periodUs;
-  if (Math.abs(rate - f.rateKbps) > 1e-6) err(`${where}: rateKbps = ${f.rateKbps} nhưng tính được ${rate}`);
+  if (Math.abs(rate - f.rateKbps) > 1e-6 * Math.max(1, f.rateKbps)) err(`${where}: rateKbps = ${f.rateKbps} nhưng tính được ${rate}`);
   table.push([key, `${g.rows}×${g.cols}`, f.rateKbps]);
 
   const total = g.rows * g.cols;
@@ -71,6 +71,17 @@ for (const [key, f] of Object.entries(FR)) {
         if (sum !== cs.length * g.cellBits) err(`${rw}: bitFields = ${sum} bit, cần ${cs.length * g.cellBits}`);
         for (const b of rg.bitFields) if (!b.name || !b.desc || !(b.bits > 0)) err(`${rw}: bitField thiếu name/desc/bits`);
       }
+      for (const pf of rg.perFrame || []) {
+        const mf = f.multiframe?.frames;
+        if (!mf) { err(`${rw}: perFrame cần frame.multiframe`); break; }
+        if (!Array.isArray(pf.frames) || !pf.frames.length || pf.frames.some((k) => !Number.isInteger(k) || k < 0 || k >= mf))
+          err(`${rw}: perFrame.frames phải là chỉ số 0..${mf - 1}`);
+        if (!pf.name && !pf.abbr) err(`${rw}: perFrame thiếu name/abbr`);
+        if (pf.bitFields) {
+          const sum = pf.bitFields.reduce((s, b) => s + (b.bits || 0), 0);
+          if (sum !== cs.length * g.cellBits) err(`${rw}: perFrame ${pf.abbr || pf.name} bitFields = ${sum} bit, cần ${cs.length * g.cellBits}`);
+        }
+      }
       if (rg.children?.length) checkTiling(rg.children, new Set(cs), `region "${rg.id}"`);
     }
     if (seen.size !== parentSet.size) err(`${where}: các region trong ${label} phủ ${seen.size}/${parentSet.size} ô (thiếu ${parentSet.size - seen.size})`);
@@ -78,6 +89,8 @@ for (const [key, f] of Object.entries(FR)) {
   if (!f.regions?.length) err(`${where}: không có regions`);
   else checkTiling(f.regions, new Set(Array.from({ length: total }, (_, i) => i)), "lưới");
   if (f.unit && !MUX[f.unit]) err(`${where}: unit "${f.unit}" không có trong TMUX`);
+  if (f.unit && MUX[f.unit]?.rateKbps !== undefined && Math.abs(MUX[f.unit].rateKbps - f.rateKbps) > 1e-6 * f.rateKbps)
+    err(`${where}: rateKbps ${f.rateKbps} ≠ unit "${f.unit}" ${MUX[f.unit].rateKbps}`);
   if (f.unit && MUX[f.unit]?.bytesPer125us !== undefined) {
     const b = (bits / 8) * (125 / f.periodUs);
     if (Math.abs(b - MUX[f.unit].bytesPer125us) > 1e-9) err(`${where}: ${b} byte/125µs ≠ unit "${f.unit}" ${MUX[f.unit].bytesPer125us}`);
@@ -92,6 +105,7 @@ for (const [key, u] of Object.entries(MUX)) {
   for (const k of ["name", "summary", "desc"]) if (!u[k]) err(`${where}: thiếu ${k}`);
   const hasB = u.bytesPer125us !== undefined, hasR = u.rateKbps !== undefined;
   if (hasB === hasR) err(`${where}: cần đúng một trong bytesPer125us / rateKbps`);
+  if (u.leafOk !== undefined && !(u.accepts || []).length) err(`${where}: leafOk chỉ dùng khi có accepts`);
   if (u.frame && !FR[u.frame]) err(`${where}: frame "${u.frame}" không tồn tại`);
   for (const [i, a] of (u.accepts || []).entries()) {
     const aw = `${where} › accepts[${i}] (${a.count}×${a.of})`;
@@ -99,7 +113,14 @@ for (const [key, u] of Object.entries(MUX)) {
     if (!ch) { err(`${aw}: không có unit "${a.of}"`); continue; }
     if (!(Number.isInteger(a.count) && a.count > 0)) { err(`${aw}: count sai`); continue; }
     const oh = a.overhead?.bytes || 0;
-    if (!hasB) { err(`${aw}: unit có accepts phải tính theo bytesPer125us`); continue; }
+    const childKbps = ch.rateKbps !== undefined ? ch.rateKbps : ch.bytesPer125us * 64;
+    if (!hasB) {
+      const want = a.count * childKbps + (a.overhead?.kbps || 0);
+      if (Math.abs(want - u.rateKbps) > 1e-6 * u.rateKbps) err(`${aw}: ${a.count}×${childKbps} + OH ${a.overhead?.kbps || 0} kbps = ${want} ≠ ${u.rateKbps}`);
+      if (a.overhead?.bytes) err(`${aw}: unit theo tốc độ dùng overhead.kbps, không dùng bytes`);
+      continue;
+    }
+    if (a.overhead?.kbps) err(`${aw}: unit theo byte dùng overhead.bytes, không dùng kbps`);
     if (ch.bytesPer125us !== undefined) {
       const want = a.count * ch.bytesPer125us + oh;
       if (Math.abs(want - u.bytesPer125us) > 1e-9) err(`${aw}: ${a.count}×${ch.bytesPer125us} + OH ${oh} = ${want} ≠ ${u.bytesPer125us}`);

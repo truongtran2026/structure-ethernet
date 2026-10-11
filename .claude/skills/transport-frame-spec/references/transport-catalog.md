@@ -9,9 +9,43 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | --- | --- | --- |
 | GD1 | SDH: khung + đơn vị ghép + lab SDH | xong 2026-10-11 (review G.707 01/2007 ĐẠT vòng 2) |
 | GD1b | Ghép chuỗi liền kề VC-4-4c/16c/64c/256c | xong 2026-10-11 (review: sửa trích dẫn §11.1, WIS 64B/66B) |
-| GD2 | PDH: E1 (khung, đa khung CRC-4), E2/E3/E4 (chèn bit), lab PDH → SDH | chờ |
+| GD2 | PDH: E1 (khung, đa khung CRC-4), E2/E3/E4 (chèn bit), lab PDH → SDH | xong 2026-10-11 (review G.704/742/751/707: bit đúng, sửa 3 mô tả) |
 | GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | chờ |
 | Sau | OTUCn/FlexO; Ethernet qua truyền dẫn (GFP-F, VCAT/LCAS, GMP, FlexE); máy tính tốc độ; quiz | chờ |
+
+## GD2 — PDH + ánh xạ PDH → SDH (file `data/transport-pdh.js`; sửa nhỏ `data/transport-sdh.js`)
+
+### Unit (TMUX) — theo tốc độ (rateKbps), ghép có chèn bit
+
+| id | kind | rateKbps | accepts | leafOk |
+| --- | --- | --- | --- | --- |
+| `ds0` | client | 64 | — (kênh 64 kbit/s / khe thời gian) | — |
+| `e1` | pdh | 2048 | 30×ds0 + 128 kbps (TS0 + TS16 CAS) · hoặc 31×ds0 + 64 kbps (TS0, CCS/không CAS) | có |
+| `e2` | pdh | 8448 | 4×e1 + 256 kbps (G.742: FAS, cảnh báo, Cj, cơ hội chèn) | có |
+| `e3` | pdh | 34368 | 4×e2 + 576 kbps (G.751) | có |
+| `e4` | pdh | 139264 | 4×e3 + 1792 kbps (G.751) | có |
+
+`e1`, `e3`, `e4` HIỆN ĐÃ CÓ trong transport-sdh.js (kind client): **chuyển** định nghĩa sang
+transport-pdh.js (giữ nguyên id, rateKbps; đổi kind thành `pdh`, thêm accepts + `leafOk: true`), xoá
+bản cũ trong transport-sdh.js. Nạp transport-pdh.js TRƯỚC transport-sdh.js (index.html: frontend lo).
+Như vậy lab SDH vẫn thả E1/E3/E4 như cũ (nguyên khối), và có thể mở xem bên trong.
+
+### Frame (TFRAMES), family `pdh` trừ khi ghi khác
+
+| id | category | Lưới | Chu kỳ | Ghi chú |
+| --- | --- | --- | --- | --- |
+| `e1` | Khung PDH | 1×32 byte | 125 µs | TS0 perFrame FAS (khung chẵn: Si + 0011011) / NFAS (khung lẻ: Si, 1, A, Sa4–Sa8); đa khung CRC-4 16 khung (Si = C1–C4 / MFAS 001011 + E); TS16 CAS (khung 0: 0000 X Y X X; khung 1–15: abcd của 2 kênh); TS1–15, TS17–31 |
+| `e2` | Khung PDH | 4×212 bit | 848000/8448 µs | G.742: FAS 1111010000, A, N, bit nhánh ghép xen (step 4), Cj1–Cj3, cơ hội chèn |
+| `e3` | Khung PDH | 4×384 bit | 1536000/34368 µs | G.751 §1.4 Bảng 1: FAS 1111010000, A, N, Cj, cơ hội chèn |
+| `e4` | Khung PDH | 6×488 bit | 2928000/139264 µs | G.751 §1.5 Bảng 2: FAS 111110100000, A, N×3, Cj1–Cj5, cơ hội chèn |
+| `vc-12-e1` | (family sdh) Ánh xạ PDH→SDH | 4×35 byte | 500 µs | VC-12 đa khung chở E1 không đồng bộ (G.707 §10.1.4.1): V5, J2, N2, K4, byte R cố định, C1/C2 (điều khiển chèn), S1/S2 (cơ hội chèn), byte dữ liệu; unit `vc-12` |
+| `vc-3-e3` | (family sdh) Ánh xạ PDH→SDH | 9×85 byte | 125 µs | VC-3 chở E3 không đồng bộ (G.707 §10.1.2.2): POH + 3 khung con T1–T3, C1/C2, S1/S2; unit `vc-3` |
+| `vc-4-e4` | (family sdh) Ánh xạ PDH→SDH | 9×261 byte | 125 µs | VC-4 chở E4 (G.707 §10.1.1.1): POH + 20 khối/hàng W X Y Y Y X Y Y Z …; unit `vc-4` |
+
+### Lab (TLABS)
+
+- `pdh`: "Ghép kênh PDH", family pdh, roots `e4`, `e3`, `e2`, `e1`; palette `ds0`, `e1`, `e2`, `e3`.
+- `sdh`: palette thêm `e2` (để thấy E2 không có đường vào SDH — từ chối có giải thích) và giữ nguyên phần còn lại.
 
 ## GD1 — SDH (file `data/transport-sdh.js`)
 
@@ -56,7 +90,7 @@ Mỗi frame có `unit` trỏ TMUX tương ứng (stm-1…, vc-4, tug-3, tu-3, tu
 | `stm-1` | stm | 2430 | 1×aug-1 + SOH 72 |
 | `stm-4` / `stm-16` / `stm-64` / `stm-256` | stm | 2430×N | 1×aug-N + SOH 72N |
 
-### GD1b — Ghép chuỗi liền kề VC-4-Xc (X = 4, 16, 64, 256) — G.707 §8.1.7 / §8.2
+### GD1b — Ghép chuỗi liền kề VC-4-Xc (X = 4, 16, 64, 256) — G.707 §11.1 (con trỏ §8.1.2, §8.1.7)
 
 Byte/125 µs (validator kiểm):
 

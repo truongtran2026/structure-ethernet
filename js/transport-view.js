@@ -34,10 +34,26 @@
   function storeGet(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function storeSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* bỏ qua */ } }
   function n(x, d) { return T().fmtNum(x, d); }
-  function bytesTxt(b) { return Number.isInteger(b) ? n(b, 0) + ' byte' : n(b * 8, 0) + ' bit'; }
+  /** Khung tính theo bit (cellBits ≠ 8, vd E2/E3/E4) → luôn ghi bit. */
+  function bitMode() { return !!(tv.fm && tv.fm.cellBits !== 8); }
+  function bytesTxt(b) { return !bitMode() && Number.isInteger(b) ? n(b, 0) + ' byte' : n(b * 8, 0) + ' bit'; }
+  function unitWord() { return bitMode() ? 'bit' : 'byte'; }
+  /** Chu kỳ khung: thập phân gọn (100,38 µs; 125 µs). */
+  function periodTxt(us) { return n(us, Number.isInteger(us) ? 0 : 2) + ' µs'; }
+  /** Nhãn/tên/mô tả hiệu lực của region theo khung đang chọn trong đa khung. */
+  function eff(node) { return T().effRegion(node.region, tv.state ? tv.state.mf : null); }
+  /** "0, 2, 4 … 14" / "1–15" — rút gọn danh sách khung. */
+  function framesTxt(fr) {
+    var a = (fr || []).slice().sort(function (x, y) { return x - y; });
+    if (a.length <= 3) return a.join(', ');
+    var d = a[1] - a[0], even = a.every(function (v, i) { return !i || v - a[i - 1] === d; });
+    if (even && d === 1) return a[0] + '–' + a[a.length - 1];
+    if (even) return a[0] + ', ' + a[1] + ', ' + a[2] + ' … ' + a[a.length - 1] + (d === 2 ? (a[0] % 2 ? ' (lẻ)' : ' (chẵn)') : '');
+    return a.join(', ');
+  }
 
   // ---------- trạng thái ----------
-  function defaultState() { return { level: 1, open: {}, selected: null, zoom: 'm', compress: null, bands: {} }; }
+  function defaultState() { return { level: 1, open: {}, selected: null, zoom: 'm', compress: null, bands: {}, mf: null }; }
   function loadState(id) {
     var s = storeGet(STORE_PREFIX + id), d = defaultState();
     if (!s || typeof s !== 'object') return d;
@@ -67,7 +83,9 @@
     document.getElementById('detail').addEventListener('click', function (e) {
       if (!tv.active) return;
       var a = e.target.closest && e.target.closest('[data-tgoto]');
-      if (a) { e.preventDefault(); select(a.getAttribute('data-tgoto'), true); }
+      if (a) { e.preventDefault(); select(a.getAttribute('data-tgoto'), true); return; }
+      var m = e.target.closest && e.target.closest('[data-tmf]');
+      if (m) { var v = m.getAttribute('data-tmf'); tv.state.mf = v === 'all' ? null : +v; save(); render(); }
     });
     window.addEventListener('resize', function () {
       if (tv.active && tv.state && tv.state.zoom === 'fit') { clearTimeout(tv.rz); tv.rz = setTimeout(renderGrid, 120); }
@@ -83,6 +101,8 @@
     tv.fm = T().buildFrame(f);
     tv.state = loadState(f.id);
     if (tv.state.selected && !tv.fm.byId[tv.state.selected]) tv.state.selected = null;
+    var nmf = T().perFrameCount(tv.fm);
+    if (tv.state.mf != null && !(tv.state.mf >= 0 && tv.state.mf < nmf)) tv.state.mf = null;
     tv.focusId = null;
     render();
   }
@@ -96,8 +116,8 @@
     document.getElementById('alerts').innerHTML = alerts;
     view.innerHTML =
       '<section class="stack-head">' + renderHead() + '</section>' +
-      '<section class="card tg-card" aria-label="Lưới byte">' +
-        '<div class="section-title"><h2>Lưới byte</h2><span class="muted" id="tg-hint"></span></div>' +
+      '<section class="card tg-card" aria-label="Lưới ' + unitWord() + '">' +
+        '<div class="section-title"><h2>Lưới ' + unitWord() + (tv.state.mf != null ? ' · khung ' + tv.state.mf : '') + '</h2><span class="muted" id="tg-hint"></span></div>' +
         '<div class="tg-scroll" id="tg-scroll"></div>' + renderLegend() +
       '</section>' +
       '<section class="card" aria-labelledby="tt-title">' +
@@ -136,13 +156,14 @@
         '<h1 class="stack-title">' + esc(f.name || f.id) + '</h1>' +
         (f.summary ? '<p class="stack-summary">' + esc(f.summary) + '</p>' : '') + '</div>' +
       '<div class="stats">' +
-        stat('Lưới', s.rows + ' × ' + n(s.cols, 0), (s.cellBits === 8 || tv.fm.cellBits === 8 ? 'hàng × cột byte' : 'hàng × cột ô ' + tv.fm.cellBits + ' bit')) +
-        stat('Byte mỗi khung', n(s.bytes, 2), n(s.bytes * 8, 0) + ' bit') +
-        stat('Chu kỳ', n(f.periodUs, 3) + ' µs', n(perSec, 2) + ' khung/giây') +
+        stat('Lưới', s.rows + ' × ' + n(s.cols, 0), tv.fm.cellBits === 8 ? 'hàng × cột byte' : tv.fm.cellBits === 1 ? 'hàng × cột bit' : 'hàng × cột ô ' + tv.fm.cellBits + ' bit') +
+        (bitMode() ? stat('Bit mỗi khung', n(s.bits, 0), '= ' + n(s.bytes, 2) + ' byte')
+          : stat('Byte mỗi khung', n(s.bytes, 2), n(s.bytes * 8, 0) + ' bit')) +
+        stat('Chu kỳ', periodTxt(f.periodUs), n(perSec, 2) + ' khung/giây', n(f.periodUs, 6) + ' µs') +
         stat('Tốc độ', TV.fmtRate(f.rateKbps), n(f.rateKbps, 3) + ' kbit/s', 'byte/khung × 8 × số khung mỗi giây') +
-        stat('Overhead', n(s.overheadPct, 2) + '%', n(s.overheadBytes, 2) + ' byte không phải tải tin/nhánh',
+        stat('Overhead', n(s.overheadPct, 2) + '%', bytesTxt(s.overheadBytes) + ' không phải tải tin/nhánh',
           'Ô có kind khác payload/tributary ở cấp chi tiết nhất') +
-        (f.multiframe ? stat('Đa khung', (f.multiframe.frames || '?') + ' khung', f.multiframe.frames ? n(f.multiframe.frames * f.periodUs, 0) + ' µs' : '', f.multiframe.note) : '') +
+        (f.multiframe ? stat('Đa khung', (f.multiframe.frames || '?') + ' khung', f.multiframe.frames ? periodTxt(f.multiframe.frames * f.periodUs) : '', f.multiframe.note) : '') +
       '</div>' +
       (f.detail || f.multiframe ? '<details class="stack-detail"><summary>Giải thích khung này</summary>' +
         (f.detail ? '<p>' + esc(f.detail) + '</p>' : '') +
@@ -155,7 +176,23 @@
           (forced ? ' disabled title="Lưới quá rộng (' + tv.fm.cols + ' cột) — luôn nén"' : ' title="Gộp các cột giống nhau ở mọi hàng thành một dải"') + '>' +
           (comp ? '☑' : '☐') + ' Nén cột</button>' +
         '<button type="button" class="btn-ghost" data-taction="reset" title="Xoá trạng thái thu gọn/chọn/cỡ ô của khung này">Khôi phục mặc định</button>' +
-      '</div>';
+      '</div>' + renderMfBar();
+  }
+
+  /** Thanh chọn khung trong đa khung (chỉ khi có region perFrame). */
+  function renderMfBar() {
+    var N = T().perFrameCount(tv.fm);
+    if (!N) return '';
+    var cur = tv.state.mf;
+    var btn = function (v, label, tip) {
+      var on = v === cur;
+      return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-tmf="' + (v == null ? 'all' : v) + '" aria-pressed="' + on + '" title="' + esc(tip) + '">' + esc(label) + '</button>';
+    };
+    var items = [btn(null, 'Tất cả', 'Nhãn chung, không theo khung')];
+    for (var k = 0; k < N; k++) items.push(btn(k, String(k), 'Khung ' + k + ' trong đa khung ' + N + ' khung' + (k % 2 ? ' (lẻ)' : ' (chẵn)')));
+    return '<div class="toolbar mf-bar" role="toolbar" aria-label="Khung trong đa khung">' +
+      '<span class="toolbar-label">Khung trong đa khung</span><div class="seg-group">' + items.join('') + '</div>' +
+      '<span class="muted">' + (cur == null ? 'ô có nghĩa đổi theo khung đánh dấu ⟳ — chọn một khung để xem nghĩa riêng' : 'đang xem khung ' + cur + '/' + (N - 1) + ' (0-based)') + '</span></div>';
   }
 
   function kindCls(node) {
@@ -204,7 +241,8 @@
 
     // thước cột
     var every = dim.cw < 6 ? 30 : dim.cw < 12 ? 10 : dim.cw < 20 ? 5 : 1;
-    var ruler = '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ cột">h\\c</span>';
+    var ruler = bitMode() ? '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ bit (cột = vị trí bit trong hàng)">bit</span>'
+      : '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ cột">h\\c</span>';
     dcols.forEach(function (d, i) {
       var col = i + 2;
       if (d.band) {
@@ -228,14 +266,16 @@
       var wpx = 0, bandIn = false;
       for (var x = 0; x < p.w; x++) { var dc = dcols[p.dc + x]; wpx += dc.band ? dim.bw : dim.cw; if (dc.band) bandIn = true; }
       var hpx = p.h * dim.rh;
-      var label = node.abbr;
+      var ef = eff(node), pf = !!node.region.perFrame;
+      var label = ef.abbr + (pf && tv.state.mf == null ? ' ⟳' : '');
       var fitsH = wpx >= label.length * 6.4 + 6 && hpx >= 13;
       var fitsV = !fitsH && hpx >= label.length * 6.4 + 6 && wpx >= 13;
       var c0 = dcols[p.dc].c0, c1 = dcols[p.dc + p.w - 1].c1;
-      var tip = (collapsed ? 'Nhóm ' : '') + node.abbr + (node.name !== node.abbr ? ' — ' + node.name : '') +
+      var tip = (collapsed ? 'Nhóm ' : '') + ef.abbr + (ef.name !== ef.abbr ? ' — ' + ef.name : '') +
+        (pf ? (tv.state.mf == null ? ' · nghĩa đổi theo khung trong đa khung' : ' · khung ' + tv.state.mf) : '') +
         ' · ' + T().rectText(node.region.rect) + ' · ' + bytesTxt(node.bytes) + ' · ' + TV.fmtRate(node.kbps) +
         (bandIn ? ' · khối này gồm cột ' + (c0 + 1) + '–' + (c1 + 1) + ' (đã nén)' : '') + (collapsed ? ' — bấm để bung' : '');
-      return '<button type="button" class="tp ' + kindCls(node) + (collapsed ? ' is-collapsed' : '') + (bandIn ? ' has-band' : '') + (wpx > 360 ? ' is-wide' : '') +
+      return '<button type="button" class="tp ' + kindCls(node) + (collapsed ? ' is-collapsed' : '') + (pf ? ' has-pf' : '') + (bandIn ? ' has-band' : '') + (wpx > 360 ? ' is-wide' : '') +
         (tv.state.selected === node.id ? ' is-sel' : '') + '" style="grid-row:' + (p.r + 2) + ' / span ' + p.h + ';grid-column:' + (p.dc + 2) + ' / span ' + p.w + '"' +
         ' data-rg="' + esc(node.id) + '" data-anc="' + esc(anc) + '"' + (collapsed ? ' data-texpand="1"' : '') + ' title="' + esc(tip) + '" tabindex="-1">' +
         (fitsH || fitsV ? '<span class="tp-l' + (fitsV ? ' is-vert' : '') + '">' + (collapsed && fitsH && wpx > label.length * 6.4 + 20 ? '⊞ ' : '') + esc(label) + '</span>' : '') +
@@ -247,8 +287,9 @@
     var hint = document.getElementById('tg-hint');
     if (hint) {
       var bands = dcols.filter(function (d) { return d.band; }).length;
-      hint.textContent = fm.rows + ' hàng × ' + fm.cols + ' cột' + (bands ? ' · ' + bands + ' dải cột đang nén (bấm số cột ở thước để bung)' : '') +
-        ' · bấm khối ⊞ để bung · VC trong lưới vẽ ở vị trí cố định để dễ học (thực tế trôi theo con trỏ)';
+      var hasPtr = fm.list.some(function (x) { return x.kind === 'pointer'; });
+      hint.textContent = fm.rows + ' hàng × ' + fm.cols + (bitMode() ? ' bit' : ' cột') + (bands ? ' · ' + bands + ' dải cột đang nén (bấm số cột ở thước để bung)' : '') +
+        ' · bấm khối ⊞ để bung' + (hasPtr ? ' · VC trong lưới vẽ ở vị trí cố định để dễ học (thực tế trôi theo con trỏ)' : '');
     }
     applyHl();
   }
@@ -276,8 +317,9 @@
         (canOpen ? '<button type="button" class="caret" data-taction="toggle" tabindex="-1" aria-hidden="true">' + (open ? '▾' : '▸') + '</button>'
           : '<span class="caret caret--none" aria-hidden="true"></span>') +
         '<span class="swatch ' + kindCls(x) + '" aria-hidden="true"></span>' +
-        '<span class="row-name"><span class="nm">' + esc(x.abbr) + '</span>' +
-          (x.name !== x.abbr ? '<span class="abbr">' + esc(x.name) + '</span>' : '') +
+        '<span class="row-name"><span class="nm">' + esc(eff(x).abbr) + '</span>' +
+          (eff(x).name !== eff(x).abbr ? '<span class="abbr">' + esc(eff(x).name) + '</span>' : '') +
+          (x.region.perFrame ? '<span class="badge badge--range" title="Nghĩa thay đổi theo khung trong đa khung">⟳ theo khung</span>' : '') +
           '<span class="dash">–</span><b class="sz">' + esc(bytesTxt(x.bytes)) + '</b>' +
           '<span class="chip">' + esc(T().KIND_LABEL[x.kind] || x.kind) + '</span>' +
           (x.region.repeat ? '<span class="badge badge--range">' + esc(x.region.repeat) + '</span>' : '') +
@@ -301,11 +343,12 @@
 
   function help() {
     return '<div class="detail-empty"><h2>Cách dùng</h2><ol>' +
-      '<li>Mỗi ô của lưới là một byte; màu theo loại (đồng bộ, SOH, con trỏ, POH, tải tin…).</li>' +
-      '<li><b>Cấp hiển thị</b>: thu gọn thành vài khối lớn hoặc bung tới từng byte; bấm khối ⊞ để bung riêng khối đó.</li>' +
+      '<li>Mỗi ô của lưới là một ' + unitWord() + '; màu theo loại (đồng bộ, SOH, con trỏ, POH, tải tin…).</li>' +
+      (T().perFrameCount(tv.fm) ? '<li>Khung có <b>đa khung</b>: chọn “Khung 0 … ' + (T().perFrameCount(tv.fm) - 1) + '” để xem nghĩa riêng của các ô đánh dấu ⟳ ở từng khung.</li>' : '') +
+      '<li><b>Cấp hiển thị</b>: thu gọn thành vài khối lớn hoặc bung tới từng byte (khung PDH E2–E4: từng bit); bấm khối ⊞ để bung riêng khối đó.</li>' +
       '<li>Khung rộng được <b>nén cột</b>: các cột giống hệt nhau gộp thành một dải; bấm số cột ở thước để bung.</li>' +
       '<li>Rê chuột lên một nhánh ghép xen (TUG/TU) để thấy mọi cột của nó sáng lên.</li>' +
-      '<li>Chọn một khối hoặc một dòng ở cây để xem vị trí, số byte, tốc độ riêng và cấu trúc bit.</li></ol></div>';
+      '<li>Chọn một khối hoặc một dòng ở cây để xem vị trí, số ' + unitWord() + ', tốc độ riêng và cấu trúc bit.</li></ol></div>';
   }
 
   function detailFrame() {
@@ -318,9 +361,9 @@
       (f.summary ? '<p class="lead">' + esc(f.summary) + '</p>' : '') +
       dl([
         ['Lưới', esc(s.rows + ' hàng × ' + s.cols + ' cột (ô ' + tv.fm.cellBits + ' bit)')],
-        ['Kích thước', esc(n(s.bytes, 2) + ' byte / ' + n(f.periodUs, 3) + ' µs')],
+        ['Kích thước', esc((bitMode() ? n(s.bits, 0) + ' bit' : n(s.bytes, 2) + ' byte') + ' / ' + periodTxt(f.periodUs))],
         ['Tốc độ', esc(T().fmtRate(f.rateKbps))],
-        ['Overhead', esc(n(s.overheadPct, 2) + '% (' + n(s.overheadBytes, 2) + ' byte)')],
+        ['Overhead', esc(n(s.overheadPct, 2) + '% (' + bytesTxt(s.overheadBytes) + ')')],
         f.multiframe ? ['Đa khung', esc((f.multiframe.frames || '?') + ' khung' + (f.multiframe.note ? ' — ' + f.multiframe.note : ''))] : null,
         u ? ['Đơn vị ghép', esc(u.name) + (u.summary ? ' — ' + esc(u.summary) : '')] : null,
         f.standard ? ['Chuẩn', esc(f.standard)] : null
@@ -330,43 +373,59 @@
   }
 
   function detailRegion(x) {
-    var rg = x.region, fm = tv.fm;
+    var rg = x.region, fm = tv.fm, e = eff(x), mf = tv.state.mf;
     var crumbs = T().ancestry(fm, x.idx).slice(0, -1).map(function (i) {
       var a = fm.list[i];
-      return '<a href="#" data-tgoto="' + esc(a.id) + '">' + esc(a.abbr) + '</a>';
+      return '<a href="#" data-tgoto="' + esc(a.id) + '">' + esc(eff(a).abbr) + '</a>';
     });
     var html = (crumbs.length ? '<nav class="crumbs">' + esc(tv.frame.name) + ' › ' + crumbs.join(' › ') + '</nav>' : '<nav class="crumbs">' + esc(tv.frame.name) + '</nav>') +
-      '<span class="eyebrow"><span class="swatch ' + kindCls(x) + '"></span>' + esc(T().KIND_LABEL[x.kind] || x.kind) + '</span>' +
-      '<h2>' + esc(x.abbr) + (x.name !== x.abbr ? ' <span class="abbr">— ' + esc(x.name) + '</span>' : '') + '</h2>' +
+      '<span class="eyebrow"><span class="swatch ' + kindCls(x) + '"></span>' + esc(T().KIND_LABEL[x.kind] || x.kind) +
+        (rg.perFrame ? ' · ' + (mf == null ? 'nghĩa đổi theo khung' : 'khung ' + mf) : '') + '</span>' +
+      '<h2>' + esc(e.abbr) + (e.name !== e.abbr ? ' <span class="abbr">— ' + esc(e.name) + '</span>' : '') + '</h2>' +
       dl([
         ['Vị trí', esc(T().rectText(rg.rect))],
-        ['Số byte', esc(bytesTxt(x.bytes) + ' mỗi khung (' + x.cells + ' ô)')],
+        [bitMode() ? 'Số bit' : 'Số byte', esc(bytesTxt(x.bytes) + ' mỗi khung (' + x.cells + ' ô)')],
         ['Tốc độ riêng', esc(T().fmtRate(x.kbps)) + ' <span class="muted">= ' + esc(x.cells + ' × ' + fm.cellBits + ' bit × ' + n(1e6 / tv.frame.periodUs, 2) + '/s') + '</span>'],
         rg.repeat ? ['Lặp ở STM-N', esc(rg.repeat)] : null,
-        rg.rect.step > 1 ? ['Ghép xen', esc('mỗi ' + rg.rect.step + ' cột lấy 1 cột (byte-interleave)')] : null
+        rg.rect.step > 1 ? ['Ghép xen', esc('mỗi ' + rg.rect.step + ' cột lấy 1 cột (' + (bitMode() ? 'bit' : 'byte') + '-interleave)')] : null
       ]) +
-      (rg.desc ? '<p>' + esc(rg.desc) + '</p>' : '');
-    if (rg.values && rg.values.length) {
+      (e.desc ? '<p>' + esc(e.desc) + '</p>' : '') +
+      (e.pf && rg.desc && rg.desc !== e.desc ? '<p class="muted">Chung: ' + esc(rg.desc) + '</p>' : '');
+    if (e.values && e.values.length) {
       html += '<h3>Giá trị đáng nhớ</h3><div class="tbl-wrap"><table class="values"><thead><tr><th>Giá trị</th><th>Ý nghĩa</th></tr></thead><tbody>' +
-        rg.values.map(function (v) { return '<tr><td><code>' + esc(v.v) + '</code></td><td>' + esc(v.m) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+        e.values.map(function (v) { return '<tr><td><code>' + esc(v.v) + '</code></td><td>' + esc(v.m) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
-    if (rg.bitFields && rg.bitFields.length) {
-      var pos = 1;
-      html += '<h3>Cấu trúc bit</h3>' + bitStrip(rg.bitFields) +
-        '<div class="tbl-wrap"><table class="values"><thead><tr><th>Bit</th><th>Trường</th><th>Ý nghĩa</th></tr></thead><tbody>' +
-        rg.bitFields.map(function (b) {
-          var a = pos, z = pos + b.bits - 1; pos = z + 1;
-          return '<tr><td><code>' + (a === z ? a : a + '–' + z) + '</code></td><td><b>' + esc(b.abbr || b.name) + '</b>' +
-            (b.abbr && b.abbr !== b.name ? '<br><span class="muted">' + esc(b.name) + '</span>' : '') + '</td><td>' + esc(b.desc) + '</td></tr>';
-        }).join('') + '</tbody></table></div><p class="muted var-hint">Bit đánh số 1–8 từ bit có trọng số lớn nhất (quy ước ITU-T).</p>';
+    if (e.bitFields && e.bitFields.length) html += bitTable(e.bitFields, mf != null && rg.perFrame ? 'Cấu trúc bit — khung ' + mf : 'Cấu trúc bit');
+    if (rg.perFrame && rg.perFrame.length) {
+      html += '<h3>Nghĩa theo từng khung</h3><div class="tbl-wrap"><table class="values pf-table"><thead><tr><th>Khung</th><th>Nhãn</th><th>Ý nghĩa</th></tr></thead><tbody>' +
+        rg.perFrame.map(function (p) {
+          var on = mf != null && (p.frames || []).indexOf(mf) >= 0;
+          var first = (p.frames || [])[0];
+          return '<tr' + (on ? ' class="is-cur"' : '') + '><td><button type="button" class="link-btn" data-tmf="' + first + '" title="Xem khung ' + first + '">' + esc(framesTxt(p.frames)) + '</button></td>' +
+            '<td><b>' + esc(p.abbr || rg.abbr || '') + '</b>' + (p.bitFields ? '<br><code class="pf-bits">' + esc(p.bitFields.map(function (b) { return b.abbr || b.name; }).join(' ')) + '</code>' : '') + '</td>' +
+            '<td>' + (p.name ? '<b>' + esc(p.name) + '</b><br>' : '') + '<span class="muted">' + esc(p.desc || '') + '</span></td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        (mf != null ? '<p><button type="button" class="btn-ghost btn-sm" data-tmf="all">Xem nhãn chung (Tất cả)</button></p>' : '<p class="muted var-hint">Chọn khung ở thanh “Khung trong đa khung” hoặc bấm số khung trong bảng.</p>');
     }
     if (x.children.length) {
       html += '<h3>Gồm</h3><ul class="plain">' + x.children.map(function (i) {
         var c = fm.list[i];
-        return '<li><a href="#" data-tgoto="' + esc(c.id) + '">' + esc(c.abbr) + '</a> <span class="muted">' + esc(bytesTxt(c.bytes) + ' · ' + T().fmtRate(c.kbps)) + '</span></li>';
+        return '<li><a href="#" data-tgoto="' + esc(c.id) + '">' + esc(eff(c).abbr) + '</a> <span class="muted">' + esc(bytesTxt(c.bytes) + ' · ' + T().fmtRate(c.kbps)) + '</span></li>';
       }).join('') + '</ul>';
     }
     return html;
+  }
+
+  function bitTable(bfs, title) {
+    var pos = 1, total = bfs.reduce(function (s, b) { return s + b.bits; }, 0);
+    return '<h3>' + esc(title) + '</h3>' + bitStrip(bfs) +
+      '<div class="tbl-wrap"><table class="values"><thead><tr><th>Bit</th><th>Trường</th><th>Ý nghĩa</th></tr></thead><tbody>' +
+      bfs.map(function (b) {
+        var a = pos, z = pos + b.bits - 1; pos = z + 1;
+        return '<tr><td><code>' + (a === z ? a : a + '–' + z) + '</code></td><td><b>' + esc(b.abbr || b.name) + '</b>' +
+          (b.abbr && b.abbr !== b.name ? '<br><span class="muted">' + esc(b.name) + '</span>' : '') + '</td><td>' + esc(b.desc) + '</td></tr>';
+      }).join('') + '</tbody></table></div><p class="muted var-hint">' +
+      (total === 8 ? 'Bit đánh số 1–8 từ bit có trọng số lớn nhất (quy ước ITU-T).' : 'Bit đánh số từ 1 theo thứ tự truyền.') + '</p>';
   }
 
   /** Dải bit nhỏ minh hoạ bitFields (mỗi hàng 8 bit). */
@@ -436,6 +495,10 @@
     var t = e.target; if (!t.closest) return;
     var b;
     if ((b = t.closest('[data-tlevel]'))) { tv.state.level = +b.getAttribute('data-tlevel'); tv.state.open = {}; save(); render(); return; }
+    if ((b = t.closest('[data-tmf]'))) {
+      var v = b.getAttribute('data-tmf');
+      tv.state.mf = v === 'all' ? null : +v; save(); render(); return;
+    }
     if ((b = t.closest('[data-tzoom]'))) { tv.state.zoom = b.getAttribute('data-tzoom'); save(); render(); return; }
     if ((b = t.closest('[data-taction="compress"]'))) { tv.state.compress = !compressOn(); tv.state.bands = {}; save(); render(); return; }
     if ((b = t.closest('[data-taction="reset"]'))) { tv.state = defaultState(); save(); render(); return; }

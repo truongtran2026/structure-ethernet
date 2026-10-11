@@ -559,26 +559,201 @@ window.TLABS = window.TLABS || [];
   };
 
   // =====================================================================
+  // Ánh xạ PDH → SDH (G.707 §10.1): E1 → VC-12, E3 → VC-3, E4 → VC-4 (không đồng bộ)
+  // Đối chiếu hình 10-3, 10-5, 10-8 của G.707 (01/2007; cùng hình trong bản 10/2000).
+  // =====================================================================
+  var MAP_CAT = "Ánh xạ PDH → SDH";
+
+  // ---------- E1 → VC-12 (G.707 §10.1.4.1, Hình 10-8) ----------
+  var K4_BITS = [
+    { name: "Extended signal label", abbr: "ESL", bits: 1, desc: "Bit 1: nhãn tín hiệu mở rộng – khi V5 L1L2L3 = 101, nhãn thật gửi dần qua chuỗi 32 bit của bit này." },
+    { name: "LO virtual concatenation", abbr: "VCAT", bits: 1, desc: "Bit 2: kênh overhead ghép chuỗi ảo bậc thấp (VC-12-Xv, LCAS)." },
+    { name: "LO path APS", abbr: "APS", bits: 2, desc: "Bit 3–4: báo hiệu bảo vệ tự động mức luồng bậc thấp." },
+    { name: "Enhanced RDI", abbr: "E-RDI", bits: 3, desc: "Bit 5–7: RDI nâng cao (tuỳ chọn) – cùng bit RDI của V5 phân biệt lỗi server / connectivity / payload." },
+    { name: "LO path data link", abbr: "DL", bits: 1, desc: "Bit 8: dự trữ cho kênh dữ liệu luồng bậc thấp." }
+  ];
+  var VC12_C_O = [
+    { name: "Justification control C1", abbr: "C1", bits: 1, desc: "Một trong 3 bit C1 (khung 2, 3, 4) điều khiển S1: C1C1C1 = 000 → S1 là bit dữ liệu; 111 → S1 là bit chèn. Biểu quyết đa số 2/3." },
+    { name: "Justification control C2", abbr: "C2", bits: 1, desc: "Một trong 3 bit C2 điều khiển S2 theo cùng quy tắc." },
+    { name: "Overhead bits", abbr: "OOOO", bits: 4, desc: "Bit O – dự trữ cho kênh truyền thông overhead tương lai (8 bit O mỗi đa khung)." },
+    { name: "Fixed stuff", abbr: "RR", bits: 2, desc: "Bit chèn cố định R, không mang thông tin." }
+  ];
+  F["vc-12-e1"] = {
+    id: "vc-12-e1", name: "VC-12 mang E1 (không đồng bộ)", family: "sdh", category: MAP_CAT, order: 10,
+    standard: "ITU-T G.707 §10.1.4.1 (Hình 10-8), §9.3.2 (POH VC-12)",
+    summary: "VC-12 đa khung 500 µs (4 × 35 byte) chở một E1 2,048 Mbit/s ánh xạ không đồng bộ, có bit chèn C/S.",
+    detail: "Mỗi hàng là một khung con 125 µs của đa khung VC-12 (140 byte/500 µs). Cột 1 là byte POH V5, J2, N2, K4; 34 cột còn lại là C-12 (136 byte). Trong C-12: 1023 bit dữ liệu D, 6 bit điều khiển chèn (C1, C2 mỗi loại 3 bit), 2 bit cơ hội chèn S1, S2, 8 bit overhead O, còn lại là bit chèn cố định R. E1 danh định cần 1024 bit mỗi 500 µs, nên dung lượng 1023–1025 bit (tuỳ S1, S2 có mang dữ liệu không) cho phép bù lệch tần số cả hai chiều (chèn dương/âm) – E1 chạy ±50 ppm vẫn vừa. Đầu thu biểu quyết đa số 3 bit C để quyết định S là dữ liệu hay bit chèn; giá trị bit S khi là bit chèn không xác định. Nhãn V5 L1L2L3 = 010 (asynchronous). VC-12 sau đó nằm trong TU-12 và trôi theo con trỏ V1V2 (lưới này không vẽ byte V1–V4).",
+    grid: { rows: 4, cols: 35, cellBits: 8 }, periodUs: 500, rateKbps: 2240, unit: "vc-12",
+    multiframe: { frames: 4, note: "Mỗi hàng của lưới là một khung 125 µs trong đa khung 500 µs; vị trí khung xác định bằng H4 của VC-4 (TU-12) và con trỏ V1V2 (V5)." },
+    regions: [
+      R("poh", "POH", "VC-12 POH (V5, J2, N2, K4)", "poh", [0, 0, 4, 1],
+        "Overhead luồng bậc thấp: mỗi khung 125 µs một byte, đi xuyên suốt từ điểm ánh xạ E1 tới điểm tách E1.", {
+          children: [
+            R("v5", "V5", "V5 – BIP-2, REI, RFI, signal label, RDI", "poh", [0, 0, 1, 1],
+              "Byte đầu VC-12 (con trỏ TU-12 V1V2 chỉ vào đây): giám sát lỗi BIP-2, báo lỗi ngược REI/RDI, nhãn tín hiệu L1L2L3 = 010 cho E1 không đồng bộ.", { bitFields: V5_BITS }),
+            R("j2", "J2", "J2 – LO path trace", "poh", [1, 0, 1, 1],
+              "Vết luồng bậc thấp: chuỗi 16 byte (có CRC-7) định danh điểm truy nhập, kiểm tra nối đúng luồng (lỗi → LP-TIM)."),
+            R("n2", "N2", "N2 – LO tandem connection", "poh", [2, 0, 1, 1],
+              "Giám sát kết nối nối tiếp bậc thấp (TCM, G.707 Annex E) cho từng đoạn của nhà khai thác."),
+            R("k4", "K4", "K4 – extended label, VCAT, APS, E-RDI", "poh", [3, 0, 1, 1],
+              "Nhãn mở rộng, ghép chuỗi ảo bậc thấp, APS bậc thấp, RDI nâng cao.", { bitFields: K4_BITS })
+          ] }),
+      R("c12", "C-12", "C-12 (136 byte/500 µs) mang E1", "payload", [0, 1, 4, 34],
+        "Container C-12 với ánh xạ không đồng bộ E1: khung 1: R + 32 D + R; khung 2–3: byte C1C2OOOORR + 32 D + R; khung 4: byte C1C2RRRRRS1 + S2DDDDDDD + 31 D + R (G.707 §10.1.4.1, Hình 10-8).", {
+          children: [
+            R("f1-r1", "R", "Fixed stuff byte", "stuff", [0, 1, 1, 1], "Byte chèn cố định RRRRRRRR (khung 1, sau V5)."),
+            R("f1-d", "32 D", "32 byte dữ liệu E1", "payload", [0, 2, 1, 32], "256 bit dữ liệu E1."),
+            R("f1-r2", "R", "Fixed stuff byte", "stuff", [0, 34, 1, 1], "Byte chèn cố định cuối khung 1."),
+            R("f2-co", "C1C2OOOORR", "Byte điều khiển chèn (khung 2)", "opu-oh", [1, 1, 1, 1],
+              "Byte sau J2: bit C1, C2 (bộ thứ nhất), 4 bit O, 2 bit R.", { bitFields: VC12_C_O }),
+            R("f2-d", "32 D", "32 byte dữ liệu E1", "payload", [1, 2, 1, 32], "256 bit dữ liệu E1."),
+            R("f2-r", "R", "Fixed stuff byte", "stuff", [1, 34, 1, 1], "Byte chèn cố định cuối khung 2."),
+            R("f3-co", "C1C2OOOORR", "Byte điều khiển chèn (khung 3)", "opu-oh", [2, 1, 1, 1],
+              "Byte sau N2: bit C1, C2 (bộ thứ hai), 4 bit O, 2 bit R.", { bitFields: VC12_C_O }),
+            R("f3-d", "32 D", "32 byte dữ liệu E1", "payload", [2, 2, 1, 32], "256 bit dữ liệu E1."),
+            R("f3-r", "R", "Fixed stuff byte", "stuff", [2, 34, 1, 1], "Byte chèn cố định cuối khung 3."),
+            R("f4-cs", "C1C2RRRRRS1", "Byte điều khiển chèn + S1 (khung 4)", "opu-oh", [3, 1, 1, 1],
+              "Byte sau K4: bộ C1, C2 thứ ba, 5 bit R và bit cơ hội chèn S1.", {
+                bitFields: [
+                  { name: "Justification control C1", abbr: "C1", bits: 1, desc: "Bit C1 thứ ba (cùng khung 2, 3 biểu quyết 2/3 cho S1)." },
+                  { name: "Justification control C2", abbr: "C2", bits: 1, desc: "Bit C2 thứ ba (biểu quyết 2/3 cho S2)." },
+                  { name: "Fixed stuff", abbr: "RRRRR", bits: 5, desc: "Bit chèn cố định." },
+                  { name: "Justification opportunity S1", abbr: "S1", bits: 1, desc: "Cơ hội chèn S1: là bit dữ liệu khi C1C1C1 = 000, là bit chèn (bỏ qua) khi = 111." }
+                ] }),
+            R("f4-s2", "S2DDDDDDD", "Byte S2 + 7 bit dữ liệu", "opu-oh", [3, 2, 1, 1],
+              "Bit cơ hội chèn S2 rồi 7 bit dữ liệu.", {
+                bitFields: [
+                  { name: "Justification opportunity S2", abbr: "S2", bits: 1, desc: "Cơ hội chèn S2: dữ liệu khi C2C2C2 = 000, bit chèn khi = 111." },
+                  { name: "Data", abbr: "DDDDDDD", bits: 7, desc: "7 bit dữ liệu E1." }
+                ] }),
+            R("f4-d", "31 D", "31 byte dữ liệu E1", "payload", [3, 3, 1, 31], "248 bit dữ liệu E1."),
+            R("f4-r", "R", "Fixed stuff byte", "stuff", [3, 34, 1, 1], "Byte chèn cố định cuối khung 4.")
+          ] })
+    ]
+  };
+
+  // ---------- E3 → VC-3 (G.707 §10.1.2.2, Hình 10-5) ----------
+  // Một hàng 84 byte của khung con: [R,3D]×4, R R, 3D, [R,3D]×4, R C, 3D, [R,3D]×4, R R, 3D, [R,3D]×4, R C, 3D.
+  // Hàng 3 của khung con: byte C cuối (cột 80) là R, và 3D cuối thay bằng A (RRRRRRRS1), B (S2DDDDDDD), D.
+  function e3RowTypes() {
+    var t = [], i, p;
+    function rd(n) { for (var q = 0; q < n; q++) t.push("R", "D", "D", "D"); }
+    rd(4);
+    var dbl = [["R", "R"], ["R", "C"], ["R", "R"], ["R", "C"]];
+    for (p = 0; p < 4; p++) {
+      t.push(dbl[p][0], dbl[p][1], "D", "D", "D");
+      if (p < 3) rd(4);
+    }
+    return t; // 84 phần tử
+  }
+  var E3T = e3RowTypes();
+  var C_BYTE_BITS = [
+    { name: "Fixed stuff", abbr: "RRRRRR", bits: 6, desc: "Bit chèn cố định." },
+    { name: "Justification control C1", abbr: "C1", bits: 1, desc: "Một trong 5 bit C1 của khung con – điều khiển S1. C1×5 = 00000: S1 là dữ liệu; 11111: S1 là bit chèn. Biểu quyết đa số (chịu 2 bit lỗi)." },
+    { name: "Justification control C2", abbr: "C2", bits: 1, desc: "Một trong 5 bit C2 – điều khiển S2 theo cùng quy tắc." }
+  ];
+  function e3Sub(k) {
+    var r0 = 3 * k, pf = "t" + (k + 1) + "-", kids = [], c = 0, nD = 0, nR = 0, nC = 0;
+    // Cột payload 0..79 giống nhau ở cả 3 hàng (byte C tách theo hàng để có bitFields).
+    while (c < 80) {
+      var ty = E3T[c], w = 1;
+      if (ty === "D") { w = 3; nD++;
+        kids.push(R(pf + "d" + nD, "3D", "3 byte dữ liệu E3", "payload", [r0, 1 + c, 3, 3], "3 × 8 bit dữ liệu E3 ở mỗi hàng của khung con T" + (k + 1) + "."));
+      } else if (ty === "R") { while (c + w < 80 && E3T[c + w] === "R") w++; nR++;
+        kids.push(R(pf + "r" + nR, "R", "Fixed stuff", "stuff", [r0, 1 + c, 3, w], "Byte chèn cố định RRRRRRRR (" + w + " cột × 3 hàng)."));
+      } else {
+        for (var h = 0; h < 3; h++) { nC++;
+          kids.push(R(pf + "c" + nC, "C", "Byte RRRRRRC1C2", "opu-oh", [r0 + h, 1 + c, 1, 1], "Byte chứa 1 bit C1 và 1 bit C2 (cùng 6 bit R).", { bitFields: C_BYTE_BITS }));
+        }
+      }
+      c += w;
+    }
+    // Cột 80–83: hàng 1–2 = C, 3D; hàng 3 = R, A, B, D.
+    for (var h2 = 0; h2 < 2; h2++) { nC++;
+      kids.push(R(pf + "c" + nC, "C", "Byte RRRRRRC1C2", "opu-oh", [r0 + h2, 81, 1, 1], "Byte chứa 1 bit C1 và 1 bit C2 (cùng 6 bit R).", { bitFields: C_BYTE_BITS }));
+    }
+    kids.push(R(pf + "dz", "3D", "3 byte dữ liệu E3", "payload", [r0, 82, 2, 3], "3 × 8 bit dữ liệu ở hàng 1–2 của khung con."));
+    kids.push(R(pf + "rz", "R", "Fixed stuff", "stuff", [r0 + 2, 81, 1, 1], "Byte chèn cố định (hàng 3 không có byte C ở vị trí này – mỗi khung con chỉ có 5 byte C)."));
+    kids.push(R(pf + "a", "A", "Byte A = RRRRRRRS1", "opu-oh", [r0 + 2, 82, 1, 1], "7 bit R và bit cơ hội chèn S1.", {
+      bitFields: [
+        { name: "Fixed stuff", abbr: "RRRRRRR", bits: 7, desc: "Bit chèn cố định." },
+        { name: "Justification opportunity S1", abbr: "S1", bits: 1, desc: "Dữ liệu khi C1 đa số 0, bit chèn (không xác định, bỏ qua) khi đa số 1. Với E3 đồng bộ bit/byte: S1 luôn là chèn cố định (C1 = 1)." }
+      ] }));
+    kids.push(R(pf + "b", "B", "Byte B = S2DDDDDDD", "opu-oh", [r0 + 2, 83, 1, 1], "Bit cơ hội chèn S2 và 7 bit dữ liệu.", {
+      bitFields: [
+        { name: "Justification opportunity S2", abbr: "S2", bits: 1, desc: "Dữ liệu khi C2 đa số 0, bit chèn khi đa số 1. Với E3 đồng bộ bit/byte: S2 luôn là dữ liệu (C2 = 0)." },
+        { name: "Data", abbr: "DDDDDDD", bits: 7, desc: "7 bit dữ liệu E3." }
+      ] }));
+    kids.push(R(pf + "d-last", "D", "1 byte dữ liệu", "payload", [r0 + 2, 84, 1, 1], "Byte dữ liệu cuối khung con (8 bit)."));
+    return R("t" + (k + 1), "T" + (k + 1), "Khung con T" + (k + 1) + " (hàng " + (r0 + 1) + "–" + (r0 + 3) + ")", "payload", [r0, 1, 3, 84],
+      "Khung con T" + (k + 1) + ": 3 hàng × 84 byte = 1431 bit dữ liệu D, 5 bit C1 + 5 bit C2, 2 bit cơ hội chèn S1, S2, 573 bit chèn cố định R.", { children: kids });
+  }
+  F["vc-3-e3"] = {
+    id: "vc-3-e3", name: "VC-3 mang E3 (không đồng bộ)", family: "sdh", category: MAP_CAT, order: 20,
+    standard: "ITU-T G.707 §10.1.2.2 (Hình 10-5), §9.3.1 (POH)",
+    summary: "VC-3 9×85 byte chở một E3 34,368 Mbit/s: POH + C-3 chia 3 khung con T1–T3, mỗi khung con có 5 bộ C1/C2 và S1, S2.",
+    detail: "Ngoài cột POH (J1…N1, C2 = 0x04), C-3 có 9×84 byte chia 3 khung con 3 hàng. Mỗi khung con: 1431 bit dữ liệu, hai bộ 5 bit điều khiển chèn C1, C2, hai bit cơ hội chèn S1, S2 và 573 bit chèn cố định R. E3 danh định cần 34 368 × 125 / 3 = 1432 bit mỗi khung con, vừa giữa 1431 và 1433 – S1, S2 cho phép bù lệch cả hai phía. C1×5 = 00000 → S1 là dữ liệu, 11111 → S1 là bit chèn (C2 với S2 tương tự); biểu quyết đa số chống được 1–2 bit lỗi. Mỗi hàng 84 byte theo mẫu lặp: byte R rồi 3 byte dữ liệu, xen các cặp byte R R / R C. VC-3 sau đó vào TU-3 và trôi theo con trỏ H1H2 (lưới này vẽ VC-3 riêng).",
+    grid: { rows: 9, cols: 85, cellBits: 8 }, periodUs: 125, rateKbps: 48960, unit: "vc-3",
+    regions: [
+      R("poh", "POH", "VC-3 Path Overhead", "poh", [0, 0, 9, 1],
+        "Overhead luồng VC-3: J1, B3, C2 (= 0x04 – ánh xạ không đồng bộ 34/45 Mbit/s), G1, F2, H4, F3, K3, N1.", { children: pohBytes("", 0, "VC-3") }),
+      R("c3", "C-3", "C-3 mang E3 (3 khung con)", "payload", [0, 1, 9, 84],
+        "Container C-3 756 byte/125 µs chia 3 khung con T1, T2, T3 giống hệt nhau.", { children: [e3Sub(0), e3Sub(1), e3Sub(2)] })
+    ]
+  };
+
+  // ---------- E4 → VC-4 (G.707 §10.1.1.1, Hình 10-3) ----------
+  var E4SEQ = "WXYYYXYYYXYYYXYYYXYZ";
+  var E4BYTE = {
+    W: ["W", "Byte W = DDDDDDDD", "payload", "8 bit dữ liệu E4.", [{ v: "DDDDDDDD", m: "8 bit dữ liệu" }]],
+    X: ["X", "Byte X = CRRRRROO", "opu-oh", "1 bit điều khiển chèn C + 5 bit R + 2 bit O. 5 byte X trên một hàng cho 5 bit C điều khiển bit S của hàng đó: CCCCC = 00000 → S là dữ liệu; 11111 → S là bit chèn; biểu quyết đa số chống 1–2 bit lỗi. Bit O dự trữ cho kênh overhead.", [{ v: "CRRRRROO", m: "C điều khiển chèn, R chèn cố định, O overhead" }]],
+    Y: ["Y", "Byte Y = RRRRRRRR", "stuff", "8 bit chèn cố định.", [{ v: "RRRRRRRR", m: "chèn cố định" }]],
+    Z: ["Z", "Byte Z = DDDDDDSR", "opu-oh", "6 bit dữ liệu + bit cơ hội chèn S + 1 bit R. S là dữ liệu hay bit chèn tuỳ 5 bit C của cùng hàng.", [{ v: "DDDDDDSR", m: "D dữ liệu, S cơ hội chèn, R chèn cố định" }]]
+  };
+  var e4Blocks = [];
+  for (var bk = 0; bk < 20; bk++) {
+    var ch = E4SEQ.charAt(bk), info = E4BYTE[ch], c0 = 1 + 13 * bk;
+    e4Blocks.push(R("blk" + (bk + 1), ch + "+12D", "Khối " + (bk + 1) + " (" + ch + " + 12 byte dữ liệu)", "payload", [0, c0, 9, 13],
+      "Khối " + (bk + 1) + "/20 của mỗi hàng: byte đầu " + ch + " + 12 byte dữ liệu (96 D).", {
+        children: [
+          R("blk" + (bk + 1) + "-" + ch.toLowerCase(), info[0], info[1], info[2], [0, c0, 9, 1], info[3], { values: info[4] }),
+          R("blk" + (bk + 1) + "-d", "96D", "12 byte dữ liệu", "payload", [0, c0 + 1, 9, 12], "96 bit dữ liệu E4 mỗi hàng.")
+        ] }));
+  }
+  F["vc-4-e4"] = {
+    id: "vc-4-e4", name: "VC-4 mang E4 (không đồng bộ)", family: "sdh", category: MAP_CAT, order: 30,
+    standard: "ITU-T G.707 §10.1.1.1 (Hình 10-2, 10-3), §9.3.1 (POH)",
+    summary: "VC-4 9×261 byte chở một E4 139,264 Mbit/s: mỗi hàng C-4 chia 20 khối 13 byte, byte đầu khối là W/X/Y/Z.",
+    detail: "Cột 1 là POH (C2 = 0x12). Mỗi hàng của C-4 (260 byte) chia 20 khối 13 byte; byte đầu khối theo thứ tự W X Y Y Y X Y Y Y X Y Y Y X Y Y Y X Y Z, 12 byte sau đều là dữ liệu. Mỗi hàng có 1934 bit dữ liệu cố định + 1 bit cơ hội chèn S (trong byte Z), điều khiển bởi 5 bit C (trong 5 byte X). Cả 9 hàng giống nhau: 17 406 bit dữ liệu + 9 bit S mỗi 125 µs; E4 danh định cần 17 408 bit, tức trung bình khoảng 2 trong 9 bit S mang dữ liệu. CCCCC = 00000 → S là dữ liệu, 11111 → S là bit chèn; biểu quyết đa số chịu được 1–2 bit C lỗi. VC-4 sau đó thành AU-4 và trôi theo con trỏ H1H2.",
+    grid: { rows: 9, cols: 261, cellBits: 8 }, periodUs: 125, rateKbps: 150336, unit: "vc-4",
+    regions: [
+      R("poh", "POH", "VC-4 Path Overhead", "poh", [0, 0, 9, 1],
+        "Overhead luồng VC-4: J1, B3, C2 (= 0x12 – ánh xạ không đồng bộ 140 Mbit/s), G1, F2, H4, F3, K3, N1.", { children: pohBytes("", 0, "VC-4") }),
+      R("c4", "C-4", "C-4 mang E4 (20 khối/hàng)", "payload", [0, 1, 9, 260],
+        "Container C-4 2340 byte; mỗi hàng 20 khối × 13 byte theo mẫu W X Y Y Y X Y Y Y X Y Y Y X Y Y Y X Y Z.", {
+          values: [
+            { v: "W", m: "DDDDDDDD – 8 bit dữ liệu" },
+            { v: "X", m: "CRRRRROO – điều khiển chèn C, 5 R, 2 O" },
+            { v: "Y", m: "RRRRRRRR – chèn cố định" },
+            { v: "Z", m: "DDDDDDSR – 6 D, cơ hội chèn S, 1 R" }
+          ],
+          children: e4Blocks })
+    ]
+  };
+
+  // =====================================================================
   // TMUX – cây ghép kênh SDH (ETSI, qua AU-4)
   // =====================================================================
   function U(o) { o.family = "sdh"; M[o.id] = o; }
   var noOH = { bytes: 0, name: "", desc: "" };
 
-  U({ id: "e1", name: "E1 (2,048 Mbit/s)", kind: "client", level: 1, rateKbps: 2048, standard: "ITU-T G.703, G.704",
-    summary: "Luồng PDH sơ cấp châu Âu 2,048 Mbit/s (32 khe 64 kbit/s).",
-    desc: "Tín hiệu E1 từ tổng đài/BTS/thiết bị PDH. Vào SDH bằng ánh xạ không đồng bộ vào C-12 (bù lệch đồng hồ ±50 ppm bằng bit chèn)." });
-  U({ id: "e3", name: "E3 (34,368 Mbit/s)", kind: "client", level: 2, rateKbps: 34368, standard: "ITU-T G.703, G.751",
-    summary: "Luồng PDH bậc 3 châu Âu 34,368 Mbit/s (16 E1).",
-    desc: "Ánh xạ không đồng bộ vào C-3 rồi VC-3 → TU-3 → TUG-3." });
-  U({ id: "e4", name: "E4 (139,264 Mbit/s)", kind: "client", level: 3, rateKbps: 139264, standard: "ITU-T G.703, G.751",
-    summary: "Luồng PDH bậc 4 châu Âu 139,264 Mbit/s (64 E1).",
-    desc: "Ánh xạ không đồng bộ vào C-4 rồi VC-4 → AU-4, chiếm trọn một STM-1." });
+  // E1, E3, E4 (và DS0, E2) định nghĩa trong data/transport-pdh.js (nạp trước file này).
 
   U({ id: "c-12", name: "C-12", kind: "container", level: 10, bytesPer125us: 34, standard: "ITU-T G.707 §10.1.4",
     summary: "Container 12: 34 byte/125 µs (2,176 Mbit/s) chứa một E1.",
     desc: "Khối tải 136 byte trên đa khung 500 µs. Ánh xạ E1 không đồng bộ: ngoài bit dữ liệu có byte fixed stuff R, bit điều khiển chèn C1/C2 và bit cơ hội chèn S1/S2 để bù lệch tần số.",
     accepts: [{ of: "e1", count: 1, overhead: noOH, mapping: "asynchronous", note: "E1 2048 kbit/s ≤ dung lượng 2176 kbit/s; phần dư là stuff/bit điều khiển." }] });
-  U({ id: "vc-12", name: "VC-12", kind: "vc", level: 11, bytesPer125us: 35, standard: "ITU-T G.707 §9.3.2",
+  U({ id: "vc-12", name: "VC-12", kind: "vc", level: 11, bytesPer125us: 35, frame: "vc-12-e1", standard: "ITU-T G.707 §9.3.2",
     summary: "Container ảo 12 = C-12 + POH bậc thấp (V5, J2, N2, K4 trên đa khung 500 µs).",
     desc: "Đơn vị luồng bậc thấp được đấu chéo trong DXC 4/1. POH 1 byte/125 µs = 4 byte/đa khung: V5 (BIP-2, REI, RFI, nhãn, RDI), J2 (trace), N2 (TCM), K4 (nhãn mở rộng, APS).",
     accepts: [{ of: "c-12", count: 1, overhead: { bytes: 1, name: "VC-12 POH", desc: "V5, J2, N2, K4 – 1 byte mỗi khung 125 µs (4 byte/500 µs)." }, note: "34 + 1 = 35 byte." }] });
@@ -595,7 +770,7 @@ window.TLABS = window.TLABS || [];
     summary: "Container 3: 9×84 = 756 byte/125 µs (48,384 Mbit/s) chứa E3.",
     desc: "Ánh xạ không đồng bộ E3 34,368 Mbit/s (hoặc DS3 45 Mbit/s): chia 3 khung con, mỗi khung con có bit điều khiển chèn C và cơ hội chèn S.",
     accepts: [{ of: "e3", count: 1, overhead: noOH, mapping: "asynchronous", note: "34368 kbit/s ≤ 48384 kbit/s." }] });
-  U({ id: "vc-3", name: "VC-3", kind: "vc", level: 31, bytesPer125us: 765, standard: "ITU-T G.707 §9.3.1",
+  U({ id: "vc-3", name: "VC-3", kind: "vc", level: 31, bytesPer125us: 765, frame: "vc-3-e3", standard: "ITU-T G.707 §9.3.1",
     summary: "Container ảo 3 = C-3 + POH 9 byte (9×85).",
     desc: "Dùng POH bậc cao (J1, B3, C2, G1, F2, H4, F3, K3, N1). Trong cấu trúc ETSI, VC-3 vào VC-4 qua TU-3/TUG-3.",
     accepts: [{ of: "c-3", count: 1, overhead: { bytes: 9, name: "VC-3 POH", desc: "J1, B3, C2, G1, F2, H4, F3, K3, N1 (1 cột)." }, note: "756 + 9 = 765 byte." }] });
@@ -686,7 +861,7 @@ window.TLABS = window.TLABS || [];
   L.push({
     id: "sdh", name: "Ghép kênh SDH", family: "sdh",
     roots: ["stm-1", "stm-4", "stm-16", "stm-64", "stm-256"],
-    palette: ["e1", "e3", "e4", "c-12", "vc-12", "tu-12", "tug-2", "c-3", "vc-3", "tu-3", "tug-3", "c-4", "vc-4", "au-4", "aug-1", "aug-4", "pos-4c", "pos-16c", "10gbase-w", "pos-256c", "vc-4-4c", "vc-4-16c", "vc-4-64c"],
+    palette: ["e1", "e2", "e3", "e4", "c-12", "vc-12", "tu-12", "tug-2", "c-3", "vc-3", "tu-3", "tug-3", "c-4", "vc-4", "au-4", "aug-1", "aug-4", "pos-4c", "pos-16c", "10gbase-w", "pos-256c", "vc-4-4c", "vc-4-16c", "vc-4-64c"],
     intro: "Chọn khung STM-N đích rồi lắp dần từ dưới lên: E1 → C-12 → VC-12 → TU-12 → TUG-2 → TUG-3 → VC-4 → AU-4 → AUG → STM-N. Mỗi bước hiện số byte overhead được thêm, để thấy vì sao một STM-1 chứa đúng 63 E1 (3 TUG-3 × 7 TUG-2 × 3 TU-12). Mỗi TUG-3 có thể chọn mang 7 TUG-2 hoặc 1 TU-3 (E3)."
   });
 })();

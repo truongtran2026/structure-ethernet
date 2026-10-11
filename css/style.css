@@ -747,3 +747,10 @@ button { font: inherit; color: inherit; }
 .tp.is-wide .tp-l { position: sticky; left: 44px; padding: 0 10px; font-size: 12px; }
 .swatch[class*="k-"], .lg-sw[class*="k-"] { background: color-mix(in srgb, var(--kd) 70%, var(--kb)); }
 .lab-table .barcell { white-space: nowrap; }
+
+/* ---------- GD2: đa khung (perFrame), khung bit ---------- */
+.mf-bar { margin-top: 10px; }
+.mf-bar .seg-btn { min-width: 2.2em; font-variant-numeric: tabular-nums; }
+.tp.has-pf { background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, currentColor 14%, transparent) 5px 6px); }
+.pf-table tr.is-cur td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.pf-table .pf-bits { font-size: 11px; white-space: normal; }

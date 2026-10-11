@@ -156,7 +156,7 @@
           g.items = g.frames.map(function (f) {
             var meta = TV ? TV.fmtRate(f.rateKbps) : '';
             return addItem({ view: 't', id: f.id }, f.name || f.id, meta,
-              [f.id, f.name, f.summary, f.category, f.family, f.unit].join(' '), (f.grid.rows + ' × ' + f.grid.cols) + ' ô, chu kỳ ' + f.periodUs + ' µs');
+              [f.id, f.name, f.summary, f.category, f.family, f.unit].join(' '), (f.grid.rows + ' × ' + f.grid.cols) + (f.grid.cellBits === 1 ? ' bit' : ' ô') + ', chu kỳ ' + (TV ? TV.fmtNum(f.periodUs, 2) : f.periodUs) + ' µs');
           });
         });
       });
