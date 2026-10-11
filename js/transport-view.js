@@ -17,6 +17,7 @@
   ];
   var AUTO_COMPRESS_COLS = 300;   // rộng hơn → mặc định nén cột
   var MAX_PLAIN_COLS = 2000;      // không cho tắt nén khi lưới rộng hơn
+  var MF_BUTTONS_MAX = 32;       // đa khung dài hơn → bộ chọn gọn (ô số + trước/sau + nhóm khung)
   var MAX_BAND_EXPAND = 1500;     // dải rộng hơn không cho bung từng cột
   var BAND_W = 46;
 
@@ -80,6 +81,10 @@
     root.addEventListener('mouseover', onOver);
     root.addEventListener('mouseleave', function () { setHl(null); });
     root.addEventListener('keydown', onKey);
+    root.addEventListener('change', function (e) {
+      var el = e.target;
+      if (el.matches && (el.matches('[data-tmfnum]') || el.matches('[data-tmfsel]'))) setMf(el.value);
+    });
     document.getElementById('detail').addEventListener('click', function (e) {
       if (!tv.active) return;
       var a = e.target.closest && e.target.closest('[data-tgoto]');
@@ -189,10 +194,45 @@
       return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-tmf="' + (v == null ? 'all' : v) + '" aria-pressed="' + on + '" title="' + esc(tip) + '">' + esc(label) + '</button>';
     };
     var items = [btn(null, 'Tất cả', 'Nhãn chung, không theo khung')];
+    if (N > MF_BUTTONS_MAX) return renderMfCompact(N, cur, items[0]);
     for (var k = 0; k < N; k++) items.push(btn(k, String(k), 'Khung ' + k + ' trong đa khung ' + N + ' khung' + (k % 2 ? ' (lẻ)' : ' (chẵn)')));
     return '<div class="toolbar mf-bar" role="toolbar" aria-label="Khung trong đa khung">' +
       '<span class="toolbar-label">Khung trong đa khung</span><div class="seg-group">' + items.join('') + '</div>' +
       '<span class="muted">' + (cur == null ? 'ô có nghĩa đổi theo khung đánh dấu ⟳ — chọn một khung để xem nghĩa riêng' : 'đang xem khung ' + cur + '/' + (N - 1) + ' (0-based)') + '</span></div>';
+  }
+
+  /**
+   * Bộ chọn gọn cho đa khung dài (> MF_BUTTONS_MAX khung, vd OTU4 OMFI 80, K4 32×…): ô số + trước/sau +
+   * danh sách các nhóm khung có nghĩa riêng (mỗi phần tử perFrame một mục, nhảy tới khung đầu của nhóm).
+   */
+  function renderMfCompact(N, cur, allBtn) {
+    var groups = [];
+    tv.fm.list.forEach(function (x) {
+      (x.region.perFrame || []).forEach(function (p) {
+        if (!p || !(p.frames || []).length) return;
+        var first = Math.min.apply(null, p.frames);
+        groups.push({ first: first, label: framesTxt(p.frames) + ' — ' + (p.abbr || p.name || x.region.abbr || x.region.id) + ' (' + (x.region.abbr || x.region.id) + ')', has: cur != null && p.frames.indexOf(cur) >= 0 });
+      });
+    });
+    groups.sort(function (a, b) { return a.first - b.first; });
+    var prev = cur == null ? N - 1 : (cur + N - 1) % N, next = cur == null ? 0 : (cur + 1) % N;
+    return '<div class="toolbar mf-bar mf-compact" role="toolbar" aria-label="Khung trong đa khung">' +
+      '<span class="toolbar-label">Khung trong đa khung (' + N + ')</span><div class="seg-group">' + allBtn +
+        '<button type="button" class="seg-btn" data-tmf="' + prev + '" title="Khung trước" aria-label="Khung trước">‹</button>' +
+        '<label class="mf-num"><span class="sr-only">Số khung</span><input type="number" min="0" max="' + (N - 1) + '" step="1" data-tmfnum value="' + (cur == null ? '' : cur) + '" placeholder="0–' + (N - 1) + '"></label>' +
+        '<button type="button" class="seg-btn" data-tmf="' + next + '" title="Khung sau" aria-label="Khung sau">›</button></div>' +
+      (groups.length ? '<label class="mf-jump"><span class="sr-only">Khung có nghĩa riêng</span><select data-tmfsel title="Các nhóm khung có nghĩa riêng (⟳)">' +
+        '<option value="">Khung có nghĩa riêng…</option>' + groups.map(function (g) {
+          return '<option value="' + g.first + '"' + (g.has ? ' selected' : '') + '>' + esc(g.label) + '</option>';
+        }).join('') + '</select></label>' : '') +
+      '<span class="muted">' + (cur == null ? 'nhãn chung — nhập số khung hoặc chọn nhóm khung' : 'đang xem khung ' + cur + '/' + (N - 1) + ' (0-based)') + '</span></div>';
+  }
+  /** Đặt khung đang xem từ ô số/ô chọn (giá trị ngoài 0…N−1 bị kẹp; rỗng = nhãn chung). */
+  function setMf(v) {
+    var N = T().perFrameCount(tv.fm);
+    if (v === '' || v == null || isNaN(+v)) tv.state.mf = null;
+    else tv.state.mf = Math.max(0, Math.min(N - 1, Math.round(+v)));
+    save(); render();
   }
 
   function kindCls(node) {

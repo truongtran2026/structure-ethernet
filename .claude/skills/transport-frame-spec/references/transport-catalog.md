@@ -11,7 +11,52 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD1b | Ghép chuỗi liền kề VC-4-4c/16c/64c/256c | xong 2026-10-11 (review: sửa trích dẫn §11.1, WIS 64B/66B) |
 | GD2 | PDH: E1 (khung, đa khung CRC-4), E2/E3/E4 (chèn bit), lab PDH → SDH | xong 2026-10-11 (review G.704/742/751/707: bit đúng, sửa 3 mô tả) |
 | GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | xong 2026-10-11 (review G.709 02/2012 + Amd.4: 2 vòng, vá 3 trích dẫn; QA ĐẠT) |
-| Sau | OTUCn/FlexO; Ethernet qua truyền dẫn (GFP-F, VCAT/LCAS, GMP, FlexE); máy tính tốc độ; quiz | chờ |
+| GD4 | Ethernet qua SDH: GFP-F (mảng IP), VCAT/LCAS (VC-n-Xv), lab SDH nhận Ethernet; tồn đọng GD3 | xong 2026-10-12 (review G.707 01/2007, G.7042 03/2006, G.7041 08/2016: 2 vòng ĐẠT; QA ĐẠT) |
+| Sau | OTUCn/FlexO; ODUflex(GFP), FlexE; máy tính tốc độ; quiz | chờ |
+
+## GD4 — Ethernet qua SDH: VCAT/LCAS (file mới `data/transport-eos.js`) — G.707 §11.2–11.4, G.7042, G.7041
+
+GFP-F (khung) nằm ở mảng IP (`data/headers-gfp.js`, xem protocol-catalog.md). Ở đây là phần truyền dẫn:
+ghép chuỗi ẢO — các VC thành viên của một VCG đi **độc lập** qua mạng (mỗi thành viên một AU-4/TU-3/TU-12
+bất kỳ, không cần liền kề), đầu thu bù trễ vi sai nhờ MFI và sắp lại theo SQ.
+
+### Unit (TMUX), family `sdh`
+
+| id | kind | rateKbps | members | accepts |
+| --- | --- | --- | --- | --- |
+| `eth-10m-gfpf` | client | 10000 | — | — (Ethernet 10 Mbit/s, chỉ khung MAC qua GFP-F) |
+| `eth-100m-gfpf` | client | 100000 | — | — |
+| `eth-1g-gfpf` | client | 1000000 | — | — |
+| `vc-12-5v` | vcg | 5 × 2176 | 5 × vc-12 (payloadOf c-12) | 1×eth-10m-gfpf GFP-F `fit`, `carriedKbps` |
+| `vc-12-46v` | vcg | 46 × 2176 | 46 × vc-12 | 1×eth-100m-gfpf `fit`, `carriedKbps` |
+| `vc-3-2v` | vcg | 2 × 48384 | 2 × vc-3 (payloadOf c-3) | KHÔNG nhận eth-100m-gfpf ở tốc độ đường dây (96 768 < 99 220) — không có accepts, desc giải thích (thực tế dùng được khi chấp nhận giới hạn tốc độ) |
+| `vc-3-21v` | vcg | 21 × 48384 | 21 × vc-3 | 1×eth-1g-gfpf |
+| `vc-4-7v` | vcg | 7 × 149760 | 7 × vc-4 (payloadOf c-4) | 1×eth-1g-gfpf |
+
+`carriedKbps` cho Ethernet qua GFP-F = tốc độ × 1526 / 1538 (khung 1518 B: bỏ preamble+SFD 8 B và IFG 12 B,
+thêm core header 4 + payload header 4; không pFCS) — ghi công thức trong note. Chỉ tốc độ đường dây
+khung lớn nhất; khung nhỏ cần ít hơn (64 B: 72/84).
+VCG không dùng `accepts` để nằm trong cây: lab rải `members.count` thành viên `members.of` vào các vị trí trống
+(AU-4/TU-3/TU-12) của khung đích; dung lượng VCG = count × tốc độ `payloadOf`.
+
+### Frame (TFRAMES), family `sdh`, category "VCAT/LCAS"
+
+| id | Lưới | Chu kỳ | Ghi chú |
+| --- | --- | --- | --- |
+| `vcat-h4` | 16 hàng × 1 byte (mỗi hàng = byte H4 của một khung VC-4/VC-3 trong đa khung 16) | 16 × 125 = 2000 µs | HO VCAT/LCAS: bit 5–8 MFI-1 (0–15); bit 1–4 theo MFI-1: MFI-2 MSB/LSB, CTRL, GID, CRC-8, MST, RS-Ack, SQ MSB/LSB, dự trữ (G.707 §11.2 Bảng 11-1 không LCAS / §11.2.1 Bảng 11-2 có LCAS, Bảng 11-3 MST; LCAS G.7042). `multiframe` 16 không cần — mỗi hàng đã là một khung; desc nêu đa khung lớn 4096 × 16 (512 ms) |
+| `vcat-k4` | 32 hàng × 1 bit (bit 2 của K4 qua 32 đa khung VC-12 500 µs) | 32 × 500 = 16000 µs | LO VCAT/LCAS: MFI 5 bit, SQ 6 bit, CTRL 4, GID 1, RS-Ack, MST, CRC-3 theo vị trí bit (G.707 §11.4 Hình 11-9/11-10, Bảng 11-5) |
+
+### Lab
+
+`sdh`: palette thêm `eth-10m-gfpf`, `eth-100m-gfpf`, `eth-1g-gfpf`, `vc-12-5v`, `vc-12-46v`, `vc-3-2v`, `vc-3-21v`, `vc-4-7v`.
+Điểm học: thả GbE vào STM-4 → từ chối "VC-4-7v cần 7 VC-4, STM-4 chỉ có 4; VC-3-21v cần 21 VC-3, STM-4 có 12";
+vào STM-16 → 7 thành viên rải vào 7 AU-4 trống bất kỳ, nhãn VCG#n·SQ k; gỡ một thành viên → (LCAS) dung lượng giảm,
+hiện còn đủ/không đủ cho client.
+
+### Tồn đọng GD3 (làm kèm)
+- `transport-otn.js`: bitFields OMFI (bit 1 = 0, bit 2–8 đếm 0–79, §19.4.4) ở khung otu4 (cột 16 hàng 4 khi PT 21 — hiện ghi RES/OMFI).
+- UI: ô chọn khung trong đa khung > 32 khung → bộ chọn gọn (ô số + trước/sau + danh sách khung có nghĩa riêng);
+  trạng thái thu gọn trong bể TS khoá theo id ổn định chứ không theo vị trí.
 
 ## GD3 — OTN (file mới `data/transport-otn.js`; sửa nhỏ `data/transport-sdh.js`) — ITU-T G.709
 

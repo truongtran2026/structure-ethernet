@@ -458,7 +458,7 @@
     n.kids = [];
     for (var i = 0; i < a.count; i++) n.kids.push(null);
     // chuỗi bắt buộc 1×X (X không phải client) → dựng luôn để thấy cây ô trống
-    if (a.count === 1 && !isClient(MUX, a.of)) n.kids[0] = newNode(MUX, a.of);
+    if (a.count === 1 && !isClient(MUX, a.of)) { n.kids[0] = newNode(MUX, a.of); n.kids[0].auto = true; } // auto: dựng sẵn, thả đơn vị cùng loại sẽ nhận
     return n;
   }
 
@@ -537,6 +537,7 @@
       var r = build(kid, a.of === X, idx);
       if (!r) continue;
       kid.ts = ts;
+      kid.k = nextKidKey(node);
       node.kids.push(kid);
       return { kid: kid, idx: idx, r: r };
     }
@@ -549,8 +550,17 @@
    * Trả về đường dẫn tới node X vừa đặt, hoặc null.
    */
   function placeIn(MUX, node, X, path, canOpen) {
+    // Đặt thành viên VCG theo lô: node (đã có, không được tự mở) từng trả null cho X thì vẫn hết chỗ —
+    // trong lô cây chỉ đầy thêm — nên bỏ qua ngay thay vì duyệt lại cả cây con (tránh O(n²) ở STM-64/256).
+    var full = CLAIM.on && CLAIM.full && !canOpen ? CLAIM.full : null;
+    if (full && full.has(node)) return null;
+    var r = placeIn0(MUX, node, X, path, canOpen);
+    if (!r && full) full.add(node);
+    return r;
+  }
+  function placeIn0(MUX, node, X, path, canOpen) {
     var u = MUX[node.u];
-    if (!hasAcc(u)) return null;
+    if (!hasAcc(u) || node.vcg) return null; // thành viên VCG: tải đã thuộc VCG, không mở
     if (!chosen(node)) {
       if (u.leafOk && !canOpen) return null; // client nguyên khối: không tự mở
       var idx = firstOpt(MUX, node.u, X);
@@ -562,6 +572,7 @@
       for (var t = 0; t < node.kids.length; t++) {
         var kt = node.kids[t];
         if (kt && kt.u !== X) { var pt = placeIn(MUX, kt, X, path.concat(t), false); if (pt) return pt; }
+        else if (kt && claimable(MUX, kt)) { delete kt.auto; return path.concat(t); }
       }
       var add = poolAdd(MUX, node, X, function (kid, direct, i) {
         return direct ? path.concat(i) : placeIn(MUX, kid, X, path.concat(i), true);
@@ -581,9 +592,26 @@
       } else if (k.u !== X) {
         var p2 = placeIn(MUX, k, X, path.concat(i), false);
         if (p2) return p2;
-      }
+      } else if (claimable(MUX, k)) { delete k.auto; return path.concat(i); } // nhận node X rỗng dựng sẵn
     }
     return null;
+  }
+  /** Chế độ "nhận node X rỗng có sẵn" (chỉ bật khi đặt thành viên VCG). */
+  var CLAIM = { on: false, full: null }; // full: Set node đã biết hết chỗ cho `of` của lô hiện tại
+  /** Node X rỗng nhận được: dựng sẵn (auto) hoặc — khi đặt thành viên VCG — mọi node rỗng; không phải client/thành viên. */
+  function claimable(MUX, k) {
+    if (!k || k.vcg || !vacant(MUX, k)) return false;
+    return CLAIM.on || (!!k.auto && !isClient(MUX, k.u, k));
+  }
+  /** Node rỗng: không phải thành viên VCG, trong cây con không có client hay thành viên nào. */
+  function vacant(MUX, n) {
+    var busy = false;
+    (function w(x, top) {
+      if (!x || busy) return;
+      if (x.vcg || (!top && isClient(MUX, x.u, x))) { busy = true; return; }
+      (x.kids || []).forEach(function (k) { w(k, false); });
+    })(n, true);
+    return !busy;
   }
 
   /**
@@ -608,6 +636,7 @@
       parent.kids[path[path.length - 1]] = fresh;
       return { ok: true, path: p, chain: chainAlong(tree, path, p) };
     }
+    if (target.vcg) return { ok: false, reason: nameOf(MUX, target.u) + ' là thành viên VCG#' + target.vcg.g + ' (SQ ' + target.vcg.sq + ') — tải của nó thuộc VCG; gỡ thành viên trước khi dùng vào việc khác.' };
     if (target.u === X) return { ok: false, reason: nameOf(MUX, X) + ' đã có ở vị trí này — thả vào ô trống hoặc nút cha.' };
     var p3 = placeIn(MUX, target, X, path, true);
     if (!p3) return { ok: false, reason: explainReject(MUX, target.u, X, target) };
@@ -626,7 +655,7 @@
     var count = 0;
     function fillNode(node, canOpen) {
       var u = MUX[node.u];
-      if (!hasAcc(u)) return;
+      if (!hasAcc(u) || node.vcg) return;
       if (!chosen(node)) {
         if (u.leafOk && !canOpen) return;
         var idx = firstOpt(MUX, node.u, X);
@@ -634,7 +663,7 @@
         setOptionNode(MUX, node, idx);
       }
       if (isTs(node)) {
-        node.kids.forEach(function (k) { if (k && k.u !== X) fillNode(k, false); });
+        node.kids.forEach(function (k) { if (k && k.u !== X) fillNode(k, false); else if (claimable(MUX, k)) { delete k.auto; count++; } });
         // cấp TS cho con mới tới khi hết chỗ
         while (poolAdd(MUX, node, X, function (kid, direct) {
           if (direct) { count++; return true; }
@@ -655,6 +684,7 @@
           fillNode(fresh, true);
           if (count > before) node.kids[i] = fresh;
         } else if (k.u !== X) fillNode(k, false);
+        else if (claimable(MUX, k)) { delete k.auto; count++; }
       }
     }
     var target = getNode(tree, path);
@@ -694,7 +724,7 @@
     }
     if (node.u === X) return 1;
     var u = MUX[node.u];
-    if (!hasAcc(u)) return 0;
+    if (!hasAcc(u) || node.vcg) return 0;
     if (!chosen(node)) return u.leafOk && parentU != null ? 0 : maxCount(MUX, node.u, X);
     if (isTs(node)) {
       // con hiện có + số X còn thêm được bằng TS trống (phương án tốt nhất)
@@ -713,11 +743,12 @@
   }
 
   /** Đếm số node theo đơn vị. */
-  function counts(tree) {
+  function counts(tree, MUX) {
     var out = {};
     (function walk(n) {
       if (!n) return;
-      out[n.u] = (out[n.u] || 0) + 1;
+      // node dựng sẵn còn rỗng chưa tính là đã dùng (thả đơn vị cùng loại sẽ nhận nó)
+      if (!(MUX && n.auto && !n.vcg && vacant(MUX, n))) out[n.u] = (out[n.u] || 0) + 1;
       n.kids.forEach(walk);
     })(tree);
     return out;
@@ -742,11 +773,24 @@
       o.count++; o.kbps += oh;
       if (name && o.ohName.indexOf(name) < 0) o.ohName += (o.ohName ? ' · ' : '') + name;
     }
+    var vcgPay = {}; // g → tổng dung lượng tải (payloadOf) của các thành viên đang có
     // pa = phương án của cha dùng để chứa n (để biết carriedKbps); null ở gốc
     (function walk(n, slotU, isRoot, pa) {
       if (!n) { addEmpty(slotU, pa ? childRate(MUX, pa, null) : unitKbps(MUX, slotU)); return; }
       var u = MUX[n.u];
       if (!u) return;
+      if (n.vcg) {
+        // thành viên VCG: POH của VC là overhead; tải (C-n) dồn vào dung lượng chung của VCG, tính sau
+        var rec = vcgRec(tree, n.vcg.g), V = rec && MUX[rec.u];
+        var ma = V ? memberOpt(MUX, n.u, V.members.payloadOf) : null;
+        if (!ma) { addEmpty(n.u, unitKbps(MUX, n.u)); return; }
+        var moh = ohKbps(ma), pay = unitKbps(MUX, ma.of);
+        ohEntry(n, u, moh, ma.overhead && ma.overhead.name, !!(ma.overhead && ma.overhead.bytes));
+        var mj = unitKbps(MUX, n.u) - moh - pay;
+        if (mj > 1e-9) acc.justificationKbps += mj;
+        vcgPay[n.vcg.g] = (vcgPay[n.vcg.g] || 0) + pay;
+        return;
+      }
       if (!isRoot && isClient(MUX, n.u, n)) {
         var line = unitKbps(MUX, n.u), carried = pa ? childRate(MUX, pa, n) : line;
         acc.clientKbps += carried;
@@ -794,6 +838,22 @@
       }
       n.kids.forEach(function (k) { walk(k, a.of, false, a); });
     })(tree, tree.u, true, null);
+    // VCG: client lấy min(tốc độ cần, dung lượng còn lại sau LCAS); phần dư = khoảng trống ánh xạ (GFP idle)
+    (tree.vcgs || []).forEach(function (rec) {
+      var cap = vcgPay[rec.g] || 0;
+      if (!rec.client || !MUX[rec.client]) { if (cap) addEmpty(rec.u, cap); return; }
+      var need = vcgNeedKbps(MUX, rec.u, rec.client), line = unitKbps(MUX, rec.client);
+      var got = Math.min(need, cap);
+      acc.clientKbps += got;
+      acc.clientLineKbps += line;
+      acc.clients[rec.client] = (acc.clients[rec.client] || 0) + 1;
+      if (cap - got > 1e-9) acc.justificationKbps += cap - got;
+      if (Math.abs(need - line) > 1e-9) {
+        var tc = acc.transcoded[rec.client] || (acc.transcoded[rec.client] = { u: rec.client, count: 0, lineKbps: line, carriedKbps: need });
+        tc.count++;
+      }
+    });
+    acc.vcgs = vcgInfo(MUX, tree);
     var list = Object.keys(acc.overheadBy).map(function (k) { return acc.overheadBy[k]; });
     list.sort(function (x, y) { return x.level - y.level; });
     list.forEach(function (o) { o.bytes = o.kbps / 64; o.bytesEach = o.kbpsEach / 64; });
@@ -1008,6 +1068,316 @@
     return msg;
   }
 
+  // =====================================================================
+  //  Khoá ổn định cho con trong bể TS (trạng thái thu gọn không lệch khi gỡ con)
+  // =====================================================================
+  /** Khoá mới cho con của bể TS: bộ đếm riêng của bể (không dùng lại khoá của con đã gỡ). */
+  function nextKidKey(pool) {
+    var mx = 0;
+    (pool.kids || []).forEach(function (k) { if (k && k.k > mx) mx = k.k; });
+    pool.kseq = Math.max(pool.kseq || 0, mx) + 1;
+    return pool.kseq;
+  }
+  /** Gán khoá cho con trong bể TS chưa có (trạng thái lưu từ bản cũ). */
+  function ensureKeys(tree) {
+    (function walk(n) {
+      if (!n) return;
+      if (isTs(n)) n.kids.forEach(function (k) { if (k && !(k.k > 0)) k.k = nextKidKey(n); });
+      (n.kids || []).forEach(walk);
+    })(tree);
+    return tree;
+  }
+  /** Khoá trạng thái của vị trí path: bước trong bể TS dùng "k<khoá>" thay chỉ số. */
+  function stableKey(tree, path) {
+    var n = tree, out = [];
+    for (var i = 0; i < path.length; i++) {
+      var kid = n && n.kids ? n.kids[path[i]] : null;
+      out.push(isTs(n) && kid && kid.k > 0 ? 'k' + kid.k : String(path[i]));
+      n = kid;
+    }
+    return out.join('.');
+  }
+
+  // =====================================================================
+  //  Ghép chuỗi ảo VCAT/LCAS (unit kind "vcg", members { of, count, payloadOf })
+  // =====================================================================
+  // VCG không nằm trong cây accepts: lab rải `count` thành viên `of` (VC-4/VC-3/VC-12) vào vị trí trống
+  // bất kỳ của khung. Thành viên là node bình thường của cây, thêm dấu `vcg: { g, sq }`, opt = -1, kids = []
+  // (tải C-n thuộc VCG, không mở). Sổ VCG nằm ở gốc cây: tree.vcgs = [{ g, u, client }] — lưu cùng cây.
+  // Gỡ một thành viên = LCAS giảm băng thông: VCG còn k/n, SQ đánh lại 0…k−1.
+
+  function isVcg(MUX, id) { return !!(MUX[id] && MUX[id].members && MUX[id].members.of); }
+  function vcgRec(tree, g) { return (tree.vcgs || []).filter(function (r) { return r.g === g; })[0] || null; }
+  /** Phương án của VC thành viên chứa payloadOf (vd VC-4 = C-4 + POH). */
+  function memberOpt(MUX, vcId, payloadOf) {
+    var u = MUX[vcId];
+    return (u && u.accepts || []).filter(function (a) { return a.of === payloadOf; })[0] || null;
+  }
+  function payloadKbps(MUX, vid) { return unitKbps(MUX, MUX[vid].members.payloadOf); }
+  /** Các VCG nhận client X: [{ v, a }] — ít thành viên trước (VC-4-7v trước VC-3-21v). */
+  function vcgsFor(MUX, X) {
+    return Object.keys(MUX).filter(function (id) { return isVcg(MUX, id); }).map(function (id) {
+      return { v: id, a: (MUX[id].accepts || []).filter(function (a) { return a.of === X; })[0] };
+    }).filter(function (x) { return x.a; })
+      .sort(function (x, y) { return MUX[x.v].members.count - MUX[y.v].members.count || unitKbps(MUX, x.v) - unitKbps(MUX, y.v); });
+  }
+  /** Tốc độ client cần trong VCG (carriedKbps của phương án, hoặc tốc độ client; không nhận → dùng số của VCG khác). */
+  function vcgNeedKbps(MUX, vid, X) {
+    var a = (MUX[vid] && MUX[vid].accepts || []).filter(function (x) { return x.of === X; })[0];
+    if (!a) a = (vcgsFor(MUX, X)[0] || {}).a;
+    return a && a.carriedKbps != null ? a.carriedKbps : unitKbps(MUX, X);
+  }
+  /** Các thành viên trong cây: { g: [{ node, path, sq }] } (sắp theo SQ). */
+  function vcgMembers(tree) {
+    var out = {};
+    (function walk(n, p) {
+      if (!n) return;
+      if (n.vcg) { (out[n.vcg.g] = out[n.vcg.g] || []).push({ node: n, path: p, sq: n.vcg.sq }); return; }
+      (n.kids || []).forEach(function (k, i) { walk(k, p.concat(i)); });
+    })(tree, []);
+    Object.keys(out).forEach(function (g) { out[g].sort(function (a, b) { return a.sq - b.sq; }); });
+    return out;
+  }
+  /** Đồng bộ sổ VCG với cây: bỏ VCG hết thành viên, bỏ dấu thành viên mồ côi, đánh lại SQ liền 0…k−1 (LCAS). */
+  function vcgSync(tree) {
+    var mem = vcgMembers(tree);
+    tree.vcgs = (tree.vcgs || []).filter(function (r) { return mem[r.g] && mem[r.g].length; });
+    Object.keys(mem).forEach(function (g) {
+      var has = !!vcgRec(tree, +g);
+      mem[g].forEach(function (m, i) { if (has) m.node.vcg.sq = i; else delete m.node.vcg; });
+    });
+    if (!tree.vcgs.length) delete tree.vcgs;
+    return tree;
+  }
+  /** Vị trí đọc được của path: các cấp có nhiều ô ("AUG-1 #3 · TUG-3 #1 · TUG-2 #5 · TU-12 #2"). */
+  function locText(MUX, tree, path) {
+    var parts = [], n = tree;
+    for (var i = 0; i < path.length && n; i++) {
+      var kid = n.kids[path[i]];
+      if (isTs(n)) parts.push(nameOf(MUX, kid ? kid.u : '?') + ' #' + (path[i] + 1));
+      else {
+        var a = n.opt >= 0 && MUX[n.u] && MUX[n.u].accepts[n.opt];
+        if (a && a.count > 1) parts.push(nameOf(MUX, a.of) + ' #' + (path[i] + 1));
+      }
+      n = kid;
+    }
+    return parts.length ? parts.join(' · ') : (n ? nameOf(MUX, n.u) : '');
+  }
+  /** Thông tin từng VCG: [{ g, u, client, n, k, members:[{sq,path,loc}], capKbps, fullKbps, needKbps, gotKbps, enough, effPct }]. */
+  function vcgInfo(MUX, tree) {
+    var mem = vcgMembers(tree);
+    return (tree.vcgs || []).filter(function (r) { return MUX[r.u]; }).map(function (r) {
+      var V = MUX[r.u], ms = mem[r.g] || [], pay = payloadKbps(MUX, r.u);
+      var cap = ms.length * pay, need = r.client ? vcgNeedKbps(MUX, r.u, r.client) : 0;
+      var got = Math.min(need, cap);
+      return {
+        g: r.g, u: r.u, client: r.client || null, of: V.members.of, n: V.members.count, k: ms.length,
+        members: ms.map(function (m) { return { sq: m.sq, path: m.path, loc: locText(MUX, tree, m.path) }; }),
+        payloadKbps: pay, capKbps: cap, fullKbps: V.members.count * pay, needKbps: need, gotKbps: got,
+        enough: !r.client || cap + 1e-9 >= need, effPct: cap ? got / cap * 100 : 0
+      };
+    });
+  }
+  /** Số vị trí `of` còn trống trong cây (theo các phương án đang chọn). */
+  function freeOf(MUX, tree, of) {
+    var used = 0; // node `of` đang dùng (có tải/thành viên); node rỗng dựng sẵn vẫn tính là trống
+    (function w(n) { if (!n) return; if (n.u === of) { if (!vacant(MUX, n)) used++; return; } (n.kids || []).forEach(w); })(tree);
+    return Math.max(0, capacityNow(MUX, tree, tree.u, of, null) - used);
+  }
+  function nextG(tree) {
+    var mx = 0;
+    (tree.vcgs || []).forEach(function (r) { if (r.g > mx) mx = r.g; });
+    tree.gseq = Math.max(tree.gseq || 0, mx) + 1;
+    return tree.gseq;
+  }
+  /** Đặt một thành viên `of` vào chỗ trống đầu tiên của cây; trả về path hoặc null. */
+  function placeMember(MUX, tree, of, g, sq, full) {
+    var p;
+    CLAIM.on = true; CLAIM.full = full || null;
+    try { p = placeIn(MUX, tree, of, [], true); } finally { CLAIM.on = false; CLAIM.full = null; }
+    if (!p) return null;
+    var nd = getNode(tree, p);
+    nd.opt = -1; nd.kids = []; nd.vcg = { g: g, sq: sq };
+    return p;
+  }
+  /** Câu thiếu chỗ: "VC-4-7v cần 7 VC-4, STM-4 chỉ có 4 (còn trống 4)". */
+  function vcgShortText(MUX, tree, vid) {
+    var m = MUX[vid].members, total = maxCount(MUX, tree.u, m.of), free = freeOf(MUX, tree, m.of);
+    var s = nameOf(MUX, vid) + ' cần ' + m.count + ' ' + nameOf(MUX, m.of) + ', ' + nameOf(MUX, tree.u);
+    return total < m.count ? s + ' chỉ có ' + total + ' (còn trống ' + free + ')' : s + ' chỉ còn trống ' + free + ' (tổng ' + total + ')';
+  }
+  /** Khung nhỏ nhất trong roots chứa được VCG vid (null nếu không có). */
+  function biggerRoot(MUX, roots, vid) {
+    var m = MUX[vid].members;
+    return (roots || []).filter(function (r) { return MUX[r] && maxCount(MUX, r, m.of) >= m.count; })
+      .sort(function (a, b) { return unitKbps(MUX, a) - unitKbps(MUX, b); })[0] || null;
+  }
+  /**
+   * Thả VCG vid vào khung: rải count thành viên vào các vị trí trống (nguyên tử — thiếu thì không đổi gì).
+   * Trả về { ok, g, paths } hoặc { ok:false, reason }.
+   */
+  function placeVcg(MUX, tree, vid, client, roots) {
+    if (!isVcg(MUX, vid)) return { ok: false, reason: 'Không phải VCG: ' + vid };
+    var m = MUX[vid].members;
+    var work = JSON.parse(JSON.stringify(tree));
+    var g = nextG(work), paths = [], full = new Set();
+    for (var i = 0; i < m.count; i++) {
+      var p = placeMember(MUX, work, m.of, g, i, full);
+      if (!p) break;
+      paths.push(p);
+    }
+    if (paths.length < m.count) {
+      var why = vcgShortText(MUX, tree, vid);
+      var alt = client ? vcgsFor(MUX, client).filter(function (x) { return x.v !== vid && freeOf(MUX, tree, MUX[x.v].members.of) >= MUX[x.v].members.count; }) : [];
+      var big = biggerRoot(MUX, roots, vid);
+      return { ok: false, reason: why + '.' +
+        (alt.length ? ' Thử ' + alt.map(function (x) { return nameOf(MUX, x.v); }).join(' hoặc ') + '.' : '') +
+        (big && big !== tree.u ? ' Hoặc chọn khung ' + nameOf(MUX, big) + ' trở lên.' : '') };
+    }
+    work.vcgs = (work.vcgs || []).concat([{ g: g, u: vid, client: client || null }]);
+    tree.opt = work.opt; tree.kids = work.kids; tree.vcgs = work.vcgs; tree.gseq = work.gseq;
+    return { ok: true, g: g, paths: paths };
+  }
+  /**
+   * Thả client X (Ethernet) vào khung: dùng VCG trống đã có nhận được X, không thì tạo VCG mới —
+   * ưu tiên VCG vừa với khung (ít thành viên trước). Trả về { ok, g, v, reused, paths } hoặc { ok:false, reason }.
+   */
+  function placeClientVcg(MUX, tree, X, roots) {
+    var cands = vcgsFor(MUX, X);
+    if (!cands.length) return { ok: false, reason: nameOf(MUX, X) + ' không có VCG nào nhận.' };
+    // chỉ dựng vcgInfo (đắt: locText từng thành viên) khi có VCG chưa mang client
+    var info = (tree.vcgs || []).some(function (r) { return !r.client; }) ? vcgInfo(MUX, tree) : [];
+    var spare = info.filter(function (v) { return !v.client && v.k === v.n && cands.some(function (c) { return c.v === v.u; }); })[0];
+    if (spare) { vcgRec(tree, spare.g).client = X; return { ok: true, g: spare.g, v: spare.u, reused: true, paths: spare.members.map(function (m) { return m.path; }) }; }
+    for (var i = 0; i < cands.length; i++) {
+      var r = placeVcg(MUX, tree, cands[i].v, X, roots);
+      if (r.ok) { r.v = cands[i].v; return r; }
+    }
+    var big = null;
+    cands.forEach(function (c) { var b = biggerRoot(MUX, roots, c.v); if (b && (!big || unitKbps(MUX, b) < unitKbps(MUX, big.r))) big = { r: b, v: c.v }; });
+    return { ok: false, reason: nameOf(MUX, X) + ' cần một VCG: ' + cands.map(function (c) { return vcgShortText(MUX, tree, c.v); }).join('; ') + '.' +
+      (big && big.r !== tree.u ? ' Khung nhỏ nhất chứa được: ' + nameOf(MUX, big.r) + ' (' + nameOf(MUX, big.v) + ').' : '') };
+  }
+  /**
+   * "Lấp đầy" bằng VCG: lặp như placeVcg / placeClientVcg tới khi hết chỗ (tối đa limit), nhưng làm theo lô
+   * để không O(n²) ở STM-64/256:
+   *  - một bản sao cây cho cả lô (thay vì sao chép cả cây mỗi VCG);
+   *  - đếm chỗ trống freeOf một lần cho mỗi loại thành viên rồi trừ dần — VCG chỉ được thử khi đủ chỗ,
+   *    nên mỗi VCG vẫn nguyên tử (không đặt dở);
+   *  - tập node "đã hết chỗ" theo từng loại thành viên giữ suốt lô (cây chỉ đầy thêm).
+   * Nếu đếm và đặt thực tế lệch nhau (không mong đợi) → bỏ lô, chạy lại cách từng VCG (chậm nhưng đúng).
+   * Trả về { count, last } — last là kết quả placeVcg/placeClientVcg cuối (ok:false khi dừng vì hết chỗ).
+   */
+  function fillVcg(MUX, tree, X, roots, limit) {
+    limit = limit == null ? Infinity : limit;
+    var asVcg = isVcg(MUX, X);
+    var cands = asVcg ? [{ v: X }] : vcgsFor(MUX, X);
+    if (!cands.length) return { count: 0, last: placeClientVcg(MUX, tree, X, roots) };
+    var work = JSON.parse(JSON.stringify(tree)), count = 0;
+    var free = {}, fullBy = {};
+    function freeNow(of) { if (free[of] == null) free[of] = freeOf(MUX, work, of); return free[of]; }
+    // VCG trống (chưa mang client, đủ thành viên) được dùng lại trước — như placeClientVcg
+    var spares = [];
+    if (!asVcg) {
+      var mem = vcgMembers(work);
+      spares = (work.vcgs || []).filter(function (r) {
+        return !r.client && MUX[r.u] && (mem[r.g] || []).length === MUX[r.u].members.count && cands.some(function (c) { return c.v === r.u; });
+      });
+    }
+    while (count < limit) {
+      if (spares.length) { spares.shift().client = X; count++; continue; }
+      var pick = null;
+      for (var i = 0; i < cands.length && !pick; i++) {
+        var m = MUX[cands[i].v].members;
+        if (freeNow(m.of) >= m.count) pick = cands[i].v;
+      }
+      if (!pick) break;
+      var mm = MUX[pick].members, g = nextG(work), full = fullBy[mm.of] = fullBy[mm.of] || new Set();
+      for (var j = 0; j < mm.count; j++) {
+        if (!placeMember(MUX, work, mm.of, g, j, full)) {
+          // lệch giữa đếm và đặt: làm lại từng VCG trên cây gốc (chưa đổi gì)
+          return fillVcgSlow(MUX, tree, X, roots, limit);
+        }
+      }
+      work.vcgs = (work.vcgs || []).concat([{ g: g, u: pick, client: asVcg ? null : X }]);
+      count++;
+      // cây đã đổi: chỗ trống của loại thành viên khác phải đếm lại; cùng loại thì trừ thẳng
+      var keep = free[mm.of] - mm.count;
+      free = {}; free[mm.of] = keep;
+    }
+    tree.opt = work.opt; tree.kids = work.kids; // cùng thứ tự khoá với placeVcg (JSON lưu giống hệt)
+    if (work.vcgs) tree.vcgs = work.vcgs;
+    if (work.gseq != null) tree.gseq = work.gseq;
+    // lý do dừng (câu thiếu chỗ) như khi thả từng cái
+    var last = count < limit ? (asVcg ? placeVcg(MUX, tree, X, null, roots) : placeClientVcg(MUX, tree, X, roots)) : null;
+    if (last && last.ok) { count++; return fillVcgMore(MUX, tree, X, roots, limit, count); } // phòng hờ: đếm thiếu chỗ
+    return { count: count, last: last };
+  }
+  function fillVcgMore(MUX, tree, X, roots, limit, count) {
+    var last = null;
+    while (count < limit) {
+      last = isVcg(MUX, X) ? placeVcg(MUX, tree, X, null, roots) : placeClientVcg(MUX, tree, X, roots);
+      if (!last.ok) break;
+      count++;
+    }
+    return { count: count, last: last };
+  }
+  function fillVcgSlow(MUX, tree, X, roots, limit) { return fillVcgMore(MUX, tree, X, roots, limit, 0); }
+
+  /** Gán client X cho VCG g (thả client vào một thành viên). */
+  function setVcgClient(MUX, tree, g, X) {
+    var rec = vcgRec(tree, g);
+    if (!rec) return { ok: false, reason: 'Không có VCG#' + g + '.' };
+    var vn = nameOf(MUX, rec.u), xn = nameOf(MUX, X);
+    if (rec.client) return { ok: false, reason: 'VCG#' + g + ' (' + vn + ') đã mang ' + nameOf(MUX, rec.client) + ' — thả vào ô trống để tạo VCG mới.' };
+    var ok = (MUX[rec.u].accepts || []).some(function (a) { return a.of === X; });
+    if (!ok) {
+      var need = vcgNeedKbps(MUX, rec.u, X), cap = unitKbps(MUX, rec.u);
+      return { ok: false, reason: vn + ' không nhận ' + xn + ': dung lượng ' + fmtRate(cap) + (cap < need ? ' < ' : ', ') + xn + ' qua GFP-F cần ' + fmtRate(need) + '.' +
+        (vcgsFor(MUX, X).length ? ' Dùng ' + vcgsFor(MUX, X).map(function (c) { return nameOf(MUX, c.v); }).join(' hoặc ') + '.' : '') };
+    }
+    rec.client = X;
+    return { ok: true, g: g };
+  }
+  /** LCAS: thêm lại một thành viên cho VCG g (tối đa members.count). */
+  function addVcgMember(MUX, tree, g) {
+    var info = vcgInfo(MUX, tree).filter(function (v) { return v.g === g; })[0];
+    if (!info) return { ok: false, reason: 'Không có VCG#' + g + '.' };
+    if (info.k >= info.n) return { ok: false, reason: 'VCG#' + g + ' đã đủ ' + info.n + ' thành viên.' };
+    var p = placeMember(MUX, tree, info.of, g, info.k);
+    if (!p) return { ok: false, reason: nameOf(MUX, tree.u) + ' không còn ' + nameOf(MUX, info.of) + ' trống để thêm thành viên.' };
+    return { ok: true, path: p, sq: info.k };
+  }
+  /** Gỡ cả VCG g: mọi thành viên trả lại ô trống. */
+  function removeVcg(tree, g) {
+    var ms = vcgMembers(tree)[g] || [];
+    ms.forEach(function (m) { getNode(tree, m.path.slice(0, -1)).kids[m.path[m.path.length - 1]] = null; });
+    tree.vcgs = (tree.vcgs || []).filter(function (r) { return r.g !== g; });
+    vcgSync(tree);
+    return ms.length;
+  }
+  /** Số tối đa của VCG / client chỉ đi qua VCG trong khung rootId (0 nếu không phải). */
+  function vcgMax(MUX, rootId, id) {
+    if (isVcg(MUX, id)) { var m = MUX[id].members; return Math.floor(maxCount(MUX, rootId, m.of) / m.count); }
+    var best = 0;
+    vcgsFor(MUX, id).forEach(function (c) { best = Math.max(best, vcgMax(MUX, rootId, c.v)); });
+    return best;
+  }
+  /** Còn chứa được (đã có + thêm được) theo chỗ trống hiện tại. */
+  function vcgCapNow(MUX, tree, id) {
+    // chỉ cần u/client từng VCG — không dựng vcgInfo (locText từng thành viên, đắt khi hàng trăm VCG)
+    var info = (tree.vcgs || []).filter(function (r) { return MUX[r.u]; }).map(function (r) { return { u: r.u, client: r.client || null }; });
+    if (isVcg(MUX, id)) {
+      var m = MUX[id].members;
+      return info.filter(function (v) { return v.u === id; }).length + Math.floor(freeOf(MUX, tree, m.of) / m.count);
+    }
+    var cands = vcgsFor(MUX, id), have = info.filter(function (v) { return v.client === id; }).length;
+    var spare = info.filter(function (v) { return !v.client && cands.some(function (c) { return c.v === v.u; }); }).length;
+    var more = 0;
+    cands.forEach(function (c) { var mm = MUX[c.v].members; more = Math.max(more, Math.floor(freeOf(MUX, tree, mm.of) / mm.count)); });
+    return have + spare + more;
+  }
+
   var api = {
     KIND_LABEL: KIND_LABEL, PAYLOAD_KINDS: PAYLOAD_KINDS,
     fmtNum: fmtNum, fmtRate: fmtRate, rectCells: rectCells, rectText: rectText,
@@ -1024,7 +1394,13 @@
       // bể tributary slot (OTN)
       isTs: isTs, chosen: chosen, choices: choices, choiceText: choiceText, optObj: optObj, slotOpts: slotOpts, hasPool: hasPool,
       poolInfo: poolInfo, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,
-      poolShortage: poolShortage, routeHint: routeHint
+      poolShortage: poolShortage, routeHint: routeHint,
+      // khoá ổn định trong bể TS
+      ensureKeys: ensureKeys, stableKey: stableKey,
+      // VCAT/LCAS
+      isVcg: isVcg, vcgsFor: vcgsFor, vcgNeedKbps: vcgNeedKbps, vcgMembers: vcgMembers, vcgSync: vcgSync, vcgInfo: vcgInfo,
+      locText: locText, freeOf: freeOf, placeVcg: placeVcg, placeClientVcg: placeClientVcg, fillVcg: fillVcg, setVcgClient: setVcgClient,
+      addVcgMember: addVcgMember, removeVcg: removeVcg, vcgMax: vcgMax, vcgCapNow: vcgCapNow, memberOpt: memberOpt
     }
   };
   root.TransViz = Object.assign(root.TransViz || {}, api);

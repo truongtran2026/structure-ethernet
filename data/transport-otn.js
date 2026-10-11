@@ -259,7 +259,13 @@ window.TLABS = window.TLABS || [];
                   "Định danh cấu trúc tải: bản tin 256 byte theo MFAS. PSI[0] = PT = 0x07 (100GBASE-R), PSI[1] RES, PSI[2] CSF + RES, PSI[3–255] RES; khi ghép ODU (PT 21) PSI[2…] là MSI." + MSI_NOTE, {
                     perFrame: psiPF("0x07", "ánh xạ 100GBASE-R vào OPU4 bằng GMP.") }),
                 R("omfi", "RES/OMFI", "Reserved / OMFI", "opu-oh", [3, 15, 1, 1],
-                  "Hàng 4 cột 16: RES khi OPU4 chở client; là OMFI (OPU Multi-Frame Identifier, đếm 0–79) khi ghép ODU (PT 21).")
+                  "Hàng 4 cột 16: RES (dự trữ, toàn 0) khi OPU4 chở client (vd. PT 0x07, 100GBASE-R) – khi đó bitFields dưới đây không áp dụng; là OMFI (OPU Multi-Frame Identifier) khi ghép ODU (PT 21), dùng thay MFAS vì 256 không chia hết cho 80; cho biết TS nào mang TSOH; tuỳ chọn căn OMFI = 0 trùng MFAS = 0 mỗi 1280 khung (G.709 §15.6.2.2 NOTE, Bảng 19-4, §19.4.4 NOTE).", {
+                    bitFields: [
+                      { name: "OMFI bit 1 (cố định 0)", abbr: "0", bits: 1,
+                        desc: "Bit 1 (MSB) của OMFI luôn = 0 (chỉ cần 7 bit để đếm tới 79). Khi OPU4 chở client thay vì ghép ODU, cả byte là RES." },
+                      { name: "OPU multi-frame identifier", abbr: "OMFI 0–79", bits: 7,
+                        desc: "Bit 2–8: số thứ tự khung trong đa khung OPU4 80 khung (0–79), tăng 1 mỗi khung OPU4 và về 0 sau 79. 80 TS × 1 lượt TSOH mỗi khung → mỗi TS có JC/OH riêng một lần trên 80 khung. Chỉ có nghĩa khi PT = 0x21." }
+                    ] })
               ])
             : [
             R("opu-res", "RES", "Reserved (mapping-specific)", "opu-oh", [0, 14, 3, 1],

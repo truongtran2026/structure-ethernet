@@ -12,6 +12,7 @@
 
   var STORE_PREFIX = 'fs.lab.v1.';
   var BIG_TREE = 400; // cây lớn hơn → các hộp sâu mặc định thu gọn
+  var VCG_FILL_MAX = 400; // "Lấp đầy" bằng VCG: tối đa số VCG mỗi lần bấm
 
   var lb = { active: false, lab: null, st: null, armed: null, drag: null, msg: null, lastPath: null, sel: null, confirmClear: false };
 
@@ -42,13 +43,25 @@
     if (!s.step || typeof s.step !== 'object') s.step = { client: null, n: 1 };
     return s;
   }
-  function save() { if (lb.lab) storeSet(STORE_PREFIX + lb.lab.id, lb.st); }
+  function save() {
+    if (!lb.lab) return;
+    if (lb.st.trees[lb.st.root]) L().vcgSync(lb.st.trees[lb.st.root]); // sổ VCG khớp cây (LCAS, gỡ hộp cha…)
+    storeSet(STORE_PREFIX + lb.lab.id, lb.st);
+  }
   function tree() {
     var r = lb.st.root;
     var t = lb.st.trees[r];
     if (!t || t.u !== r || !Array.isArray(t.kids)) t = lb.st.trees[r] = L().newRoot(MUX(), r);
+    if (!t.__ok) { L().ensureKeys(t); L().vcgSync(t); Object.defineProperty(t, '__ok', { value: true, enumerable: false }); }
     return t;
   }
+  /** Khoá trạng thái thu gọn của vị trí path (ổn định khi gỡ con trong bể TS). */
+  function ckey(path) { return L().stableKey(tree(), path); }
+  /** Màu VCG g (dùng chung bảng màu với bể TS). */
+  function vcgHue(g) { return tsHue(g - 1 + 3); }
+  function isVcgItem(id) { var M = MUX(); return L().isVcg(M, id) || L().vcgsFor(M, id).length > 0; }
+  /** Số tối đa trong khung gốc: đơn vị thường theo cây accepts, VCG/Ethernet theo số thành viên. */
+  function maxIn(root, id) { var M = MUX(); return L().maxCount(M, root, id) || L().vcgMax(M, root, id); }
 
   // ---------- vào/ra ----------
   function init() {
@@ -111,6 +124,7 @@
           '<div class="lab-tree">' + renderBox(t, lb.st.root, [], 0, null, countNodes(t) > BIG_TREE) + '</div>' +
         '</section>' +
       '</div>' +
+      renderVcgs(t) +
       '<section class="card" aria-label="Tổng kết">' + renderTotals(t) + '</section>' +
       '<section class="card" aria-label="Bộ đếm theo loại">' + renderCounters(t) + '</section>' +
       '<section class="card" aria-label="Đóng gói từng bước">' + renderSteps() + '</section>';
@@ -134,14 +148,15 @@
     return '<div class="section-title"><h2>Đơn vị</h2><span class="muted">từ bé đến lớn</span></div>' +
       '<div class="pal-list">' + items.map(function (id) {
         var u = M[id], client = L().isClient(M, id);
-        var max = L().maxCount(M, root, id);
-        var size = u.bytesPer125us != null ? n(u.bytesPer125us, 0) + ' B' : TV().fmtRate(u.rateKbps);
+        var max = maxIn(root, id);
+        var size = u.members ? u.members.count + '×' + nm(u.members.of) : u.bytesPer125us != null ? n(u.bytesPer125us, 0) + ' B' : TV().fmtRate(u.rateKbps);
         return '<button type="button" class="pal-item k-' + (client ? 'client' : u.kind) + (lb.armed === id ? ' is-armed' : '') + (max ? '' : ' is-na') +
           '" draggable="true" data-lpal="' + esc(id) + '" aria-pressed="' + (lb.armed === id) + '" title="' +
           esc((u.summary || '') + (max ? ' — tối đa ' + max + ' trong ' + nm(root) : ' — không ghép được vào ' + nm(root))) + '">' +
           '<span class="pal-name">' + esc(nm(id)) + '</span><span class="pal-size">' + esc(size) + '</span></button>';
       }).join('') + '</div>' +
-      '<p class="muted pal-hint">' + palHint(root) + '</p>';
+      '<p class="muted pal-hint">' + palHint(root) +
+      (items.some(function (id) { return M[id].members; }) ? ' <b>VCAT</b>: thả VCG (VC-n-Xv) hoặc Ethernet vào khung — các thành viên được rải vào VC trống bất kỳ (không cần liền kề), mỗi thành viên mang nhãn VCG#·SQ; gỡ một thành viên để thấy LCAS giảm băng thông.' : '') + '</p>';
   }
   /** Gốc có bể TS ở dưới (OTN) không. */
   function poolUnder(root) {
@@ -258,9 +273,10 @@
     var last = chain[chain.length - 1];
     var lu = M[last.node.u];
     var leafClient = last.path.length > 0 && L().isClient(M, last.node.u, last.node);
-    var pk = pkey(path);
+    var pk = pkey(path), ck = ckey(path);
     var collapsedDefault = big && depth >= 2;
-    var collapsed = lb.st.collapsed[pk] != null ? lb.st.collapsed[pk] : collapsedDefault;
+    var collapsed = lb.st.collapsed[ck] != null ? lb.st.collapsed[ck] : collapsedDefault;
+    var mem = last.node.vcg, memRec = mem && (tree().vcgs || []).filter(function (r) { return r.g === mem.g; })[0];
     var compact = leafClient && depth > 0;
 
     var head = chain.map(function (c, i) {
@@ -281,11 +297,13 @@
         '</span>';
     }).join('');
 
-    var cls = 'lab-box' + (compact ? ' is-compact' : '') + (depth === 0 ? ' is-root' : '') + (ex.ts ? ' is-tskid' : '') + (isNew && lb.lastPath && pkey(lb.lastPath) === pkey(last.path) ? ' is-new' : '');
+    var cls = 'lab-box' + (mem ? ' is-vcg' : '') + (compact ? ' is-compact' : '') + (depth === 0 ? ' is-root' : '') + (ex.ts ? ' is-tskid' : '') + (isNew && lb.lastPath && pkey(lb.lastPath) === pkey(last.path) ? ' is-new' : '');
     var tsStyle = ex.ts ? ' style="--tsh:' + ex.hue + '"' : '';
+    if (mem) tsStyle = ' style="--tsh:' + vcgHue(mem.g) + '"';
     var idxHtml = idxLabel ? '<span class="box-idx' + (ex.ts ? ' ts-tag' : '') + '"' + tsStyle + (ex.ts ? ' title="Chiếm ' + ex.ts.length + ' TS: #' + esc(tsList(ex.ts)) + '"' : '') + '>#' + idxLabel +
       (ex.ts ? ' · TS ' + esc(tsList(ex.ts)) : '') + '</span>' : '';
-    var tools = (path.length ? '<button type="button" class="box-x" data-lremove="' + pk + '" title="Gỡ ' + esc(nm(node.u)) + (ex.ts ? ' — trả lại ' + ex.ts.length + ' TS' : ' khỏi ô này') + '" aria-label="Gỡ">×</button>' : '');
+    var tools = (path.length ? '<button type="button" class="box-x" data-lremove="' + pk + '" title="Gỡ ' + esc(nm(node.u)) +
+      (mem ? ' — LCAS: VCG#' + mem.g + ' bớt một thành viên' : ex.ts ? ' — trả lại ' + ex.ts.length + ' TS' : ' khỏi ô này') + '" aria-label="Gỡ">×</button>' : '');
     if (compact) {
       return '<div class="' + cls + '" data-drop="' + pk + '"' + tsStyle + '>' + idxHtml +
         '<span class="box-chain">' + head + '</span>' + tools + '</div>';
@@ -293,7 +311,11 @@
 
     var body = '';
     var summary = '';
-    if (!L().chosen(last.node) && lu && lu.accepts && !leafClient) {
+    if (mem) {
+      summary = '<span class="vcg-tag"' + tsStyle + ' title="' + esc('Thành viên SQ ' + mem.sq + ' của VCG#' + mem.g + (memRec ? ' (' + nm(memRec.u) + ')' : '') + ' — tải ' +
+        (memRec ? nm(MUX()[memRec.u].members.payloadOf) : '') + ' thuộc VCG, đi độc lập qua mạng; đầu thu sắp lại theo SQ, bù trễ nhờ MFI') + '">VCG#' + mem.g + ' · SQ ' + mem.sq + '</span>' +
+        (memRec ? '<span class="box-sum">' + esc(nm(memRec.u)) + (memRec.client ? ' · ' + esc(nm(memRec.client)) : ' · chưa có client') + '</span>' : '');
+    } else if (!L().chosen(last.node) && lu && lu.accepts && !leafClient) {
       body = '<div class="opt-pick"><span class="muted">Chọn cách lấp ' + esc(nm(last.node.u)) + ':</span> ' + L().choices(M, last.node.u).map(function (c) {
         return '<button type="button" class="var-chip" data-lopt="' + pkey(last.path) + '" data-lval="' + c + '" title="' + esc(choiceTip(last.node.u, c)) + '">' +
           esc(choiceLabel(last.node.u, c)) + '</button>';
@@ -329,7 +351,7 @@
     if (leafClient && !compact) summary = '<span class="box-sum">nguyên khối · ' + esc(TV().fmtRate(L().unitKbps(M, last.node.u))) + '</span>';
     return '<div class="' + cls + '" data-drop="' + pk + '">' +
       '<div class="box-head">' +
-        (canCollapse ? '<button type="button" class="caret" data-lcollapse="' + pk + '" data-lstate="' + (collapsed ? 1 : 0) + '" aria-expanded="' + !collapsed + '" title="Thu gọn/bung">' + (collapsed ? '▸' : '▾') + '</button>' : '') +
+        (canCollapse ? '<button type="button" class="caret" data-lcollapse="' + esc(ck) + '" data-lstate="' + (collapsed ? 1 : 0) + '" aria-expanded="' + !collapsed + '" title="Thu gọn/bung">' + (collapsed ? '▸' : '▾') + '</button>' : '') +
         (idxLabel ? '<span class="box-idx">#' + idxLabel + '</span>' : '') +
         '<span class="box-chain">' + head + '</span>' + summary + tools +
       '</div>' + body + '</div>';
@@ -359,6 +381,55 @@
     return '<div class="ts-wrap"><div class="ts-legend muted">Bể ' + pi.n + ' tributary slot × ' + esc(TV().fmtRate(pi.kbps)) + (pi.note ? ' · ' + esc(pi.note) : '') +
       ' · đã dùng ' + (pi.n - free) + ', trống ' + free + ' · cấp TS trống thấp nhất, không cần liền kề</div>' +
       '<div class="ts-bar" data-drop="' + pkey(path) + '" role="img" aria-label="' + esc('Tributary slot: ' + (pi.n - free) + '/' + pi.n + ' đã dùng') + '">' + cells + '</div></div>';
+  }
+
+  // ---------- VCG (ghép chuỗi ảo) ----------
+  /** Bảng VCG: thành viên/SQ ở đâu, dung lượng (LCAS k/n), client, hiệu suất. Rỗng nếu chưa có VCG. */
+  function renderVcgs(t) {
+    var M = MUX(), info = L().vcgInfo(M, t);
+    if (!info.length) return '';
+    var rows = info.map(function (v) {
+      var hue = vcgHue(v.g), V = M[v.u];
+      var status = !v.client ? '<span class="muted">chưa có client — thả ' + esc((V.accepts || []).map(function (a) { return nm(a.of); }).join('/') || 'Ethernet') + ' vào một thành viên</span>'
+        : v.enough ? '<span class="vcg-ok">đủ</span> <span class="muted">cần ' + esc(TV().fmtRate(v.needKbps)) + '</span>'
+        : '<span class="vcg-bad">không đủ</span> <span class="muted">cần ' + esc(TV().fmtRate(v.needKbps)) + ', chỉ mang được ' + esc(n(v.gotKbps / v.needKbps * 100, 1)) + '%</span>';
+      return '<tr><td><span class="vcg-tag" style="--tsh:' + hue + '">VCG#' + v.g + '</span> <button type="button" class="link-btn" data-lsel="' + esc(v.u) + '">' + esc(nm(v.u)) + '</button></td>' +
+        '<td><b' + (v.k < v.n ? ' class="vcg-bad"' : '') + '>' + v.k + '/' + v.n + '</b> ' + esc(nm(v.of)) +
+          '<div class="vcg-mem muted">' + v.members.map(function (m) { return 'SQ ' + m.sq + ': ' + esc(m.loc); }).join('<br>') + '</div></td>' +
+        '<td class="num">' + esc(TV().fmtRate(v.capKbps)) + (v.k < v.n ? '<br><span class="muted">/ ' + esc(TV().fmtRate(v.fullKbps)) + '</span>' : '') +
+          '<br><span class="muted">' + v.k + ' × ' + esc(nm(V.members.payloadOf)) + '</span></td>' +
+        '<td>' + (v.client ? '<button type="button" class="link-btn" data-lsel="' + esc(v.client) + '">' + esc(nm(v.client)) + '</button><br>' : '') + status + '</td>' +
+        '<td class="num">' + (v.client ? esc(n(v.effPct, 1)) + '%' : '–') + '</td>' +
+        '<td class="vcg-act">' + (v.k < v.n ? '<button type="button" class="btn-ghost btn-sm" data-lvcgadd="' + v.g + '" title="LCAS: thêm lại một thành viên (vào VC trống bất kỳ)">+ thành viên</button> ' : '') +
+          '<button type="button" class="btn-ghost btn-sm" data-lvcgdel="' + v.g + '" title="Gỡ cả VCG — mọi thành viên trả lại ô trống">Gỡ VCG</button></td></tr>';
+    }).join('');
+    return '<section class="card" aria-label="Nhóm ghép chuỗi ảo"><div class="section-title"><h2>Ghép chuỗi ảo (VCG)</h2>' +
+      '<span class="muted">thành viên đi độc lập, đầu thu sắp lại theo SQ · gỡ một thành viên = LCAS giảm băng thông</span></div>' +
+      '<div class="tbl-wrap"><table class="values lab-table vcg-table"><thead><tr><th>VCG</th><th>Thành viên (SQ · vị trí)</th><th class="num">Dung lượng</th><th>Client</th><th class="num">Hiệu suất</th><th></th></tr></thead><tbody>' +
+      rows + '</tbody></table></div></section>';
+  }
+  /** Câu tóm tắt một VCG: "VC-4-7v 7/7 VC-4 = 1,048 Gbit/s — GbE qua GFP-F cần 992,2 Mbit/s: đủ (hiệu suất 94,6%)". */
+  function vcgLine(v) {
+    var s = nm(v.u) + ' ' + v.k + '/' + v.n + ' ' + nm(v.of) + ' = ' + TV().fmtRate(v.capKbps);
+    if (!v.client) return s + ' (chưa có client)';
+    return s + ' — ' + nm(v.client) + ' qua GFP-F cần ' + TV().fmtRate(v.needKbps) + ': ' +
+      (v.enough ? 'đủ (hiệu suất ' + n(v.effPct, 1) + '%)' : 'KHÔNG đủ, chỉ mang được ' + n(v.gotKbps / v.needKbps * 100, 1) + '% — LCAS giữ dịch vụ ở băng thông giảm');
+  }
+  function vcgOf(g) { return L().vcgInfo(MUX(), tree()).filter(function (v) { return v.g === g; })[0]; }
+  /** Thả VCG hoặc Ethernet (chỉ đi qua VCG): thả vào thành viên = gán client; nơi khác = rải VCG vào khung. */
+  function doPlaceVcg(path, X) {
+    var M = MUX(), t = tree(), res;
+    var target = L().getNode(t, path);
+    if (!L().isVcg(M, X) && target && target.vcg) res = L().setVcgClient(M, t, target.vcg.g, X);
+    else if (L().isVcg(M, X)) res = L().placeVcg(M, t, X, null, lb.lab.roots);
+    else res = L().placeClientVcg(M, t, X, lb.lab.roots);
+    if (!res.ok) { lb.msg = { ok: false, html: '<b>Không thả được ' + esc(nm(X)) + ':</b> ' + esc(res.reason) }; lb.lastPath = null; save(); render(); return; }
+    var v = vcgOf(res.g);
+    var where = v.members.map(function (m) { return 'SQ ' + m.sq + ' → ' + m.loc; });
+    lb.msg = { ok: true, html: (res.paths && !res.reused ? 'Đã tạo <b>VCG#' + v.g + ' ' + esc(nm(v.u)) + '</b>: ' + v.n + ' ' + esc(nm(v.of)) + ' rải vào ô trống bất kỳ (' + esc(where.slice(0, 8).join('; ')) + (where.length > 8 ? '; …' : '') + '). '
+        : 'Gán <b>' + esc(nm(X)) + '</b> cho VCG#' + v.g + '. ') + esc(vcgLine(v)) + '.' };
+    lb.lastPath = v.members.length ? v.members[0].path : null;
+    save(); render();
   }
 
   // ---------- tổng kết ----------
@@ -397,7 +468,7 @@
     var extra = [
       ['Chèn bù tốc độ / khoảng trống ánh xạ (justification)', acc.justificationKbps, 'Dung lượng bước ghép lớn hơn overhead + tổng nhánh (vd C-12 2176 kbit/s mang E1 2048 kbit/s; STM-64 AMP trong OPU2; phần TS dư so với ODU).'],
       ['Chưa dùng (ô trống' + (acc.freeTs.length ? ', TS trống' : '') + ')', acc.emptyKbps, 'Dung lượng chưa lấp.' + (freeTsTxt ? ' TS trống: ' + freeTsTxt + ' = ' + TV().fmtRate(acc.emptyTsKbps) + '.' : '')],
-      ['Tải khách hàng', acc.clientKbps, (clientsTxt(acc.clients) || 'chưa có') + (tcTxt ? ' · tính theo tốc độ thực mang sau transcode (' + tcTxt + ')' : '')]
+      ['Tải khách hàng', acc.clientKbps, (clientsTxt(acc.clients) || 'chưa có') + (tcTxt ? ' · tính theo tốc độ thực mang sau transcode/GFP-F (' + tcTxt + ')' : '')]
     ].map(function (r) {
       return '<tr class="tr-sum"><td colspan="3">' + esc(r[0]) + ' <span class="muted">' + esc(r[2]) + '</span></td>' + byteCols(r[1]) +
         '<td class="num">' + esc(n(r[1])) + '</td><td class="num">' + esc(n(r[1] / total * 100)) + '%</td></tr>';
@@ -407,7 +478,7 @@
       '<div class="stats">' +
         '<div class="stat"><div class="stat-label">Tốc độ khung đích</div><div class="stat-value">' + esc(TV().fmtRate(total)) + '</div><div class="stat-sub">' + esc(byteMode ? n(total / 64, 0) + ' byte/125 µs' : n(total, 0) + ' kbit/s') + '</div></div>' +
         '<div class="stat"><div class="stat-label">Tải khách hàng thực mang</div><div class="stat-value">' + esc(TV().fmtRate(acc.clientKbps)) + '</div><div class="stat-sub">' + esc(clientsTxt(acc.clients) || 'chưa thả gì') +
-          (Math.abs(acc.clientLineKbps - acc.clientKbps) > 1e-6 ? ' · đường dây ' + esc(TV().fmtRate(acc.clientLineKbps)) + ' (transcode)' : '') + '</div></div>' +
+          (Math.abs(acc.clientLineKbps - acc.clientKbps) > 1e-6 ? ' · đường dây ' + esc(TV().fmtRate(acc.clientLineKbps)) + ' (transcode/GFP-F)' : '') + '</div></div>' +
         '<div class="stat"><div class="stat-label">Hiệu suất</div><div class="stat-value">' + esc(n(acc.efficiency)) + '%</div><div class="stat-sub">tải khách hàng / tốc độ khung</div></div>' +
         '<div class="stat"><div class="stat-label">Tổng overhead</div><div class="stat-value">' + esc(TV().fmtRate(acc.overheadKbps)) + '</div><div class="stat-sub">' + esc(byteMode ? n(acc.overheadKbps / 64, 0) + ' byte/125 µs' : 'cộng mọi cấp') + '</div></div>' +
       '</div>' + bar +
@@ -421,12 +492,18 @@
   }
 
   function renderCounters(t) {
-    var M = MUX(), root = lb.st.root, c = L().counts(t);
-    var items = (lb.lab.palette || []).filter(function (id) { return M[id] && L().maxCount(M, root, id) > 0; });
+    var M = MUX(), root = lb.st.root, c = L().counts(t, M);
+    var items = (lb.lab.palette || []).filter(function (id) { return M[id] && maxIn(root, id) > 0; });
     items.sort(function (a, b) { return (M[a].level || 0) - (M[b].level || 0); });
+    var vi = L().vcgInfo(M, t);
     return '<div class="section-title"><h2>Bộ đếm theo loại</h2><span class="muted">đã dùng / còn chứa được theo phương án đang chọn / tối đa của ' + esc(nm(root)) + '</span></div>' +
       '<div class="counters">' + items.map(function (id) {
-        var used = c[id] || 0, cap = L().capacityNow(M, t, root, id), max = L().maxCount(M, root, id);
+        var used, cap, max = maxIn(root, id);
+        if (isVcgItem(id)) {
+          // VCG: số VCG loại này; Ethernet: số client đang được VCG mang
+          used = vi.filter(function (v) { return L().isVcg(M, id) ? v.u === id : v.client === id; }).length;
+          cap = Math.max(used, L().vcgCapNow(M, t, id));
+        } else { used = c[id] || 0; cap = L().capacityNow(M, t, root, id); }
         var pct = cap ? used / cap * 100 : 0;
         return '<div class="ctr"><div class="ctr-top"><b>' + esc(nm(id)) + '</b><span class="ctr-num">' + used + '/' + cap +
           (cap !== max ? ' <span class="muted" title="Tối đa nếu đổi phương án">(tối đa ' + max + ')</span>' : '') + '</span></div>' +
@@ -487,6 +564,7 @@
       '<li>Thả bậc thấp vào bậc cao: các bước trung gian tự dựng, thông báo nêu overhead từng bước.</li>' +
       '<li>Hộp có nhiều phương án (VC-4, TUG-3) có ô chọn — đổi phương án sẽ xoá nội dung bên trong hộp đó.</li>' +
       '<li>OTN: OPU có lựa chọn <b>“Ghép TS”</b> — bể tributary slot cho trộn ODU0/ODU1/ODU2/ODUflex…; mỗi con được cấp các TS trống thấp nhất (thanh ô màu). Thiếu TS thì bị từ chối kèm số TS còn trống; gỡ con (×) trả lại TS.</li>' +
+      '<li>Ethernet qua SDH: thả <b>VCG</b> (VC-4-7v, VC-12-46v…) hoặc thả thẳng Ethernet — lab chọn VCG vừa với khung và rải thành viên vào VC trống bất kỳ (nhãn VCG#·SQ). Gỡ một thành viên (×) để thấy <b>LCAS</b>: dung lượng giảm, báo còn đủ/không đủ cho client.</li>' +
       '<li>Luồng PDH (E1, E2, E3, E4) mặc định là <b>nguyên khối</b> (client). Ô chọn của nó có “Nguyên khối (client)” và các phương án (vd 4×E2) — chọn để mở xem bên trong.</li>' +
       '<li>Bấm tên một đơn vị để xem chi tiết ở đây. Trạng thái tự lưu trong trình duyệt.</li></ol></div>';
   }
@@ -508,6 +586,7 @@
         (a.note ? '<br><span class="muted">' + esc(a.note) + '</span>' : '') + '</li>';
     }).join('');
     var parents = Object.keys(M).filter(function (k) { return (M[k].accepts || []).some(function (a) { return a.of === id; }); });
+    if (u.members) parents = [u.members.of].concat(parents); // VCG: rải vào các VC thành viên
     document.getElementById('detail').innerHTML = '<div class="detail-card"><span class="eyebrow">Đơn vị ghép · ' + esc(u.kind) + '</span>' +
       '<h2>' + esc(u.name) + '</h2>' + (u.summary ? '<p class="lead">' + esc(u.summary) + '</p>' : '') +
       '<dl class="kv">' +
@@ -515,6 +594,8 @@
           : esc(n(u.bytesPer125us, 0)) + ' byte/125 µs = ' + esc(TV().fmtRate(u.bytesPer125us * 64))) + '</dd>' +
         (u.tribSlots ? '<dt>Tributary slot</dt><dd>' + esc(u.tribSlots.n + ' × ' + TV().fmtRate(L().poolInfo(M, id).kbps) + (u.tribSlots.note ? ' · ' + u.tribSlots.note : '')) +
           ' <span class="muted">— các phương án có “TS mỗi cái” trộn được trong cùng ' + esc(nm(id)) + '</span></dd>' : '') +
+        (u.members ? '<dt>Thành viên</dt><dd>' + u.members.count + ' × <a href="#" data-lunit="' + esc(u.members.of) + '">' + esc(nm(u.members.of)) + '</a>, tải mỗi cái ' +
+          esc(nm(u.members.payloadOf)) + ' ' + esc(TV().fmtRate(L().unitKbps(M, u.members.payloadOf))) + ' <span class="muted">— ghép chuỗi ảo: thành viên đi độc lập, đặt vào VC trống bất kỳ</span></dd>' : '') +
         (u.leafOk ? '<dt>Dùng như</dt><dd>client nguyên khối (mặc định) hoặc mở theo một phương án bên dưới</dd>' : '') +
         (u.standard ? '<dt>Chuẩn</dt><dd>' + esc(u.standard) + '</dd>' : '') +
         (parents.length ? '<dt>Nằm trong</dt><dd>' + parents.map(function (p) { return '<a href="#" data-lunit="' + esc(p) + '">' + esc(nm(p)) + '</a>'; }).join(', ') + '</dd>' : '') +
@@ -529,6 +610,7 @@
   // ---------- hành động ----------
   function doPlace(path, X) {
     var M = MUX(), t = tree();
+    if (isVcgItem(X) && !L().reaches(M, t.u, X)) return doPlaceVcg(path, X);
     var res = L().place(M, t, path, X);
     if (!res.ok) {
       lb.msg = { ok: false, html: '<b>Không thả được ' + esc(nm(X)) + ':</b> ' + esc(res.reason) };
@@ -575,7 +657,14 @@
     if ((b = t.closest('[data-lpal]'))) { var id = b.getAttribute('data-lpal'); lb.armed = lb.armed === id ? null : id; render(); return; }
     if ((b = t.closest('[data-lfill]'))) {
       var X = b.getAttribute('data-lfill');
-      var cnt = L().fill(MUX(), tree(), [], X);
+      var cnt = 0;
+      if (isVcgItem(X) && !L().reaches(MUX(), tree().u, X)) {
+        // theo lô (tmodel.fillVcg): một bản sao cây, đếm chỗ trống một lần — STM-256 vẫn < 1 s
+        cnt = L().fillVcg(MUX(), tree(), X, lb.lab.roots, VCG_FILL_MAX).count;
+        lb.msg = cnt ? { ok: true, html: 'Đã thêm <b>' + cnt + ' ' + esc(nm(X)) + '</b>' + (L().isVcg(MUX(), X) ? '' : ' (mỗi cái một VCG)') + '.' } : { ok: false, html: 'Không còn chỗ cho ' + esc(nm(X)) + '.' };
+        lb.lastPath = null; save(); render(); return;
+      }
+      cnt = L().fill(MUX(), tree(), [], X);
       lb.msg = cnt ? { ok: true, html: 'Đã lấp thêm <b>' + cnt + ' ' + esc(nm(X)) + '</b>.' } : { ok: false, html: 'Không còn chỗ cho ' + esc(nm(X)) + ' — ' + esc(L().explainReject(MUX(), lb.st.root, X, tree())) };
       lb.lastPath = null; save(); render(); return;
     }
@@ -583,8 +672,29 @@
       e.stopPropagation();
       var p = parsePath(b.getAttribute('data-lremove'));
       var nd = L().getNode(tree(), p);
+      var before = L().vcgInfo(MUX(), tree());
       L().remove(tree(), p);
-      lb.msg = { ok: true, html: 'Đã gỡ ' + esc(nd ? nm(nd.u) : '') + (nd && nd.ts ? ' — trả lại ' + nd.ts.length + ' TS (#' + esc(tsList(nd.ts)) + ')' : '') + '.' }; lb.lastPath = null;
+      L().vcgSync(tree());
+      // LCAS: VCG nào mất thành viên → báo dung lượng còn lại và còn đủ cho client không
+      var after = L().vcgInfo(MUX(), tree()), lcas = [];
+      before.forEach(function (bv) {
+        var a2 = after.filter(function (x) { return x.g === bv.g; })[0];
+        if (!a2) lcas.push('VCG#' + bv.g + ' (' + nm(bv.u) + ') hết thành viên — đã bỏ' + (bv.client ? ', ' + nm(bv.client) + ' mất dịch vụ' : ''));
+        else if (a2.k < bv.k) lcas.push('LCAS: VCG#' + a2.g + ' còn ' + vcgLine(a2) + ' · SQ đánh lại 0…' + (a2.k - 1));
+      });
+      lb.msg = { ok: true, html: 'Đã gỡ ' + esc(nd ? nm(nd.u) : '') + (nd && nd.ts ? ' — trả lại ' + nd.ts.length + ' TS (#' + esc(tsList(nd.ts)) + ')' : '') + '.' +
+        (lcas.length ? '<br>' + lcas.map(esc).join('<br>') : '') }; lb.lastPath = null;
+      save(); render(); return;
+    }
+    if ((b = t.closest('[data-lvcgadd]'))) {
+      var gA = +b.getAttribute('data-lvcgadd'), rA = L().addVcgMember(MUX(), tree(), gA);
+      lb.msg = rA.ok ? { ok: true, html: 'LCAS: thêm thành viên SQ ' + rA.sq + ' cho VCG#' + gA + ' tại ' + esc(L().locText(MUX(), tree(), rA.path)) + '. ' + esc(vcgLine(vcgOf(gA))) + '.' }
+        : { ok: false, html: esc(rA.reason) };
+      lb.lastPath = rA.ok ? rA.path : null; save(); render(); return;
+    }
+    if ((b = t.closest('[data-lvcgdel]'))) {
+      var gD = +b.getAttribute('data-lvcgdel'), vD = vcgOf(gD), cD = L().removeVcg(tree(), gD);
+      lb.msg = { ok: true, html: 'Đã gỡ VCG#' + gD + (vD ? ' (' + esc(nm(vD.u)) + ')' : '') + ' — trả lại ' + cD + ' ' + esc(vD ? nm(vD.of) : '') + '.' }; lb.lastPath = null;
       save(); render(); return;
     }
     if ((b = t.closest('[data-lfillat]'))) {
@@ -651,7 +761,7 @@
     e.preventDefault();
     var p = parsePath(t.getAttribute('data-drop'));
     var nd = L().getNode(tree(), p), su = nd ? nd.u : L().slotUnit(MUX(), tree(), p);
-    var ok = L().reaches(MUX(), su, lb.drag) && (nd ? nd.u !== lb.drag : true);
+    var ok = isVcgItem(lb.drag) || (L().reaches(MUX(), su, lb.drag) && (nd ? nd.u !== lb.drag : true));
     if (!t.classList.contains('is-over') && !t.classList.contains('is-bad')) { clearOver(); t.classList.add(ok ? 'is-over' : 'is-bad'); }
     try { e.dataTransfer.dropEffect = ok ? 'copy' : 'none'; } catch (er) { /* bỏ qua */ }
   }

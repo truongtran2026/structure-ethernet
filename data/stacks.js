@@ -517,6 +517,69 @@ window.STACKS = window.STACKS || [];
       ],
     },
 
+    // ───────────────────────── Ethernet qua truyền dẫn ─────────────────────────
+    {
+      id: "gfp-f-eth",
+      name: "Ethernet over GFP-F",
+      category: "Ethernet qua truyền dẫn",
+      compareTo: "eth2-ipv4",
+      summary: "Khung Ethernet MAC (DA…FCS) được bọc nguyên vẹn trong một khung GFP-F để chở qua SDH/OTN (ITU-T G.7041).",
+      detail:
+        "So với Ethernet II + IPv4: Preamble/SFD và IFG bị bỏ (chúng chỉ có nghĩa trên dây Ethernet), thêm GFP core header 4 byte + payload header 4 byte và pFCS 4 byte tuỳ chọn; khung MAC giữ nguyên kể cả FCS. " +
+        "GFP không dùng cờ 0x7E như HDLC/POS: bên thu tìm ranh giới khung bằng cách kiểm cHEC (CRC-16 trên PLI) rồi nhảy theo PLI sang khung sau, nên không cần chèn byte và độ dài khung xác định trước. " +
+        "Vùng tải (payload header → pFCS) được scramble tự đồng bộ x⁴³+1; core header thì XOR với 0xB6AB31E0. " +
+        "Khi không có khung khách, bên phát chèn idle frame (4 byte, PLI = 0) để lấp đầy tốc độ của container. " +
+        "GFP-F (frame-mapped) đặt một khung khách vào một khung GFP, hợp với dữ liệu gói; GFP-T (transparent) giải mã 8B/10B của khách, chuyển mã sang khối 64B/65B, gom 8 khối thành superblock + CRC-16, đặt trong khung GFP độ dài cố định; độ trễ thấp, cho Fibre Channel/GbE trong suốt. " +
+        "Luồng GFP được đặt vào VCG ghép ảo VC-4-Xv / VC-3-Xv / VC-12-Xv (thường kèm LCAS) trong SDH, hoặc OPUk/ODUflex(GFP) trong OTN — xem mảng Truyền dẫn.",
+      roleNote: "Container SDH/OTN đóng vai link (không vẽ ở đây); GFP là lớp đóng gói; cả khung Ethernet MAC (kể cả FCS) là hành khách.",
+      tree: [
+        { role: "encap", added: true, header: "gfp-core", set: { pli: "110" }, note: "PLI = payload header 4 + khung MAC 102 + pFCS 4 = 110 byte (khung GFP dài 114 byte). Trên đường truyền, 4 byte này đã XOR với 0xB6AB31E0." },
+        { role: "encap", added: true, header: "gfp-payload-hdr", set: { pti: "000", pfi: "1", exi: "0000", upi: "0x01" }, note: "PTI 000 = dữ liệu khách; PFI 1 = có pFCS; EXI 0000 = không extension header; UPI 0x01 = Ethernet frame-mapped." },
+        {
+          group: "Ethernet MAC frame (khách hàng)", role: "passenger",
+          note: "Khung MAC nguyên vẹn từ Destination MAC tới FCS — GIỮ FCS Ethernet. Preamble/SFD và IFG bị bỏ khi đưa vào GFP; đầu thu GFP sẽ tự tạo lại khi phát ra cổng Ethernet.",
+          children: [
+            { header: "eth-mac" },
+            { header: "ethertype", set: { type: "0x0800" } },
+            { header: "ipv4", set: { protocol: "253", src: "192.168.1.10", dst: "192.168.1.20", ttl: "64" } },
+            payload(),
+            { header: "eth-fcs", note: "FCS Ethernet gốc được giữ nguyên và chở trong GFP, đầu xa kiểm lại được tính toàn vẹn đầu-cuối của khung MAC." },
+          ],
+        },
+        { role: "encap", added: true, header: "gfp-pfcs", note: "Có vì PFI = 1: CRC-32 trên khung MAC (phần thông tin khách). PFI = 0 thì không có trường này và PLI giảm 4." },
+      ],
+    },
+    {
+      id: "gfp-f-eth-cid",
+      name: "Ethernet over GFP-F + CID (linear extension)",
+      category: "Ethernet qua truyền dẫn",
+      compareTo: "gfp-f-eth",
+      summary: "Như Ethernet over GFP-F nhưng EXI = 0001 và thêm linear extension header 4 byte mang CID — nhiều luồng khách chung một VCG.",
+      detail:
+        "So với GFP-F cơ bản, EXI đổi từ 0000 sang 0001 và thêm extension header 4 byte: CID 8 bit + Spare 8 bit + eHEC 16 bit, nằm ngay sau payload type header. " +
+        "CID cho phép ghép theo khung tới 256 luồng khách (vd. nhiều cổng Ethernet của khách) trên cùng một kênh GFP/VCG; bên thu đọc CID để trả khung ra đúng cổng. " +
+        "PLI tăng thêm 4 byte vì extension header thuộc vùng tải và cũng được scramble x⁴³+1. " +
+        "Khung MAC bên trong vẫn giữ FCS, preamble/SFD/IFG vẫn bị bỏ.",
+      roleNote: "Container SDH/OTN là link (không vẽ); GFP + CID là lớp đóng gói, CID cho biết khung thuộc khách nào; khung Ethernet MAC là hành khách.",
+      tree: [
+        { role: "encap", header: "gfp-core", set: { pli: "114" }, note: "PLI = payload header 4 + extension 4 + khung MAC 102 + pFCS 4 = 114 byte (khung GFP 118 byte)." },
+        { role: "encap", header: "gfp-payload-hdr", set: { pti: "000", pfi: "1", exi: "0001", upi: "0x01" }, note: "EXI 0001 = có linear extension header ngay sau." },
+        { role: "encap", added: true, header: "gfp-ext-linear", set: { cid: "5", spare: "0x00" }, note: "CID = 5: khung thuộc luồng khách số 5 trên kênh GFP này." },
+        {
+          group: "Ethernet MAC frame (khách hàng)", role: "passenger",
+          note: "Khung MAC nguyên vẹn DA…FCS — GIỮ FCS Ethernet; preamble/SFD/IFG bị bỏ.",
+          children: [
+            { header: "eth-mac" },
+            { header: "ethertype", set: { type: "0x0800" } },
+            { header: "ipv4", set: { protocol: "253", src: "192.168.5.10", dst: "192.168.5.20", ttl: "64" } },
+            payload(),
+            { header: "eth-fcs", note: "FCS Ethernet gốc được giữ nguyên." },
+          ],
+        },
+        { role: "encap", header: "gfp-pfcs", note: "PFI = 1 → có pFCS CRC-32 trên khung MAC." },
+      ],
+    },
+
     // ───────────────────────── Truy nhập ─────────────────────────
     {
       id: "pppoe-session",

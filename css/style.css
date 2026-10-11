@@ -572,6 +572,7 @@ button { font: inherit; color: inherit; }
 .k-tug       { --kb: var(--l2_5-bg);    --kd: var(--l2_5-bd);    --kf: var(--l2_5-fg); }
 .k-au, .k-odu { --kb: var(--tunnel-bg); --kd: var(--tunnel-bd);  --kf: var(--tunnel-fg); }
 .k-aug, .k-opu { --kb: var(--trailer-bg); --kd: var(--trailer-bd); --kf: var(--trailer-fg); }
+.k-vcg       { --kb: var(--l2-bg);      --kd: var(--l2-bd);      --kf: var(--l2-fg); border-style: dashed; } /* VCG = nhóm VC ghép ảo: màu VC, viền đứt */
 .k-stm, .k-otu, .k-pdh { --kb: var(--phy-bg); --kd: var(--phy-bd); --kf: var(--phy-fg); }
 .swatch[class*="k-"], .lg-sw[class*="k-"] { background: var(--kb); border-color: var(--kd); }
 .k-reserved.lg-sw, .swatch.k-reserved { border-style: dotted; }
@@ -765,6 +766,22 @@ button { font: inherit; color: inherit; }
 .tp.is-wide .tp-l { position: sticky; left: 44px; padding: 0 10px; font-size: 12px; }
 .swatch[class*="k-"], .lg-sw[class*="k-"] { background: color-mix(in srgb, var(--kd) 70%, var(--kb)); }
 .lab-table .barcell { white-space: nowrap; }
+/* B7: bảng lab trên màn hẹp — co lại cho vừa; còn rộng hơn thì chỉ khung bọc cuộn ngang, trang không tràn */
+.tbl-wrap { max-width: 100%; min-width: 0; }
+.lab-table { min-width: 0; }
+@media (max-width: 560px) {
+  .lab-table { font-size: .78rem; }
+  .lab-table th, .lab-table td { padding: 4px 5px; }
+  .lab-table td.num, .lab-table th.num { font-size: .74rem; }
+  .lab-table .hbar-track { width: 36px; margin-right: 4px; }
+  .vcg-table .vcg-act .btn-sm { padding-left: 6px; padding-right: 6px; }
+}
+@media (max-width: 440px) {
+  .lab-table .hbar-track { display: none; } /* còn số % — thanh chỉ minh hoạ */
+  .lab-table { font-size: .74rem; }
+  .lab-table th, .lab-table td { padding: 3px 4px; }
+  .lab-table td.num, .lab-table th.num { font-size: .7rem; }
+}
 
 /* ---------- GD2: đa khung (perFrame), khung bit ---------- */
 .mf-bar { margin-top: 10px; }
@@ -772,3 +789,19 @@ button { font: inherit; color: inherit; }
 .tp.has-pf { background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, currentColor 14%, transparent) 5px 6px); }
 .pf-table tr.is-cur td { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .pf-table .pf-bits { font-size: 11px; white-space: normal; }
+
+/* VCAT: thành viên VCG mang màu của VCG (--tsh), nhãn "VCG#n · SQ k" */
+.lab-box.is-vcg { border-left: 4px solid hsl(var(--tsh, 210) 55% 50%); background: color-mix(in srgb, hsl(var(--tsh, 210) 70% 60%) 10%, var(--surface)); }
+.vcg-tag { display: inline-block; padding: 0 7px; border-radius: 99px; font-size: .78rem; font-weight: 600; white-space: nowrap;
+  background: hsl(var(--tsh, 210) 70% 78%); border: 1px solid hsl(var(--tsh, 210) 55% 40%); color: #14181f; font-variant-numeric: tabular-nums; }
+.vcg-ok { color: var(--add); font-weight: 600; }
+.vcg-bad { color: var(--err); font-weight: 600; }
+.vcg-mem { font-size: .78rem; line-height: 1.35; max-height: 9.5em; overflow: auto; margin-top: 2px; }
+.vcg-table td { vertical-align: top; }
+.vcg-act { white-space: nowrap; }
+
+/* bộ chọn khung gọn cho đa khung lớn (> 32 khung) */
+.mf-compact .mf-num { display: inline-flex; align-items: center; }
+.mf-compact .mf-num input { width: 4.8em; padding: 4px 6px; border: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  font: inherit; font-variant-numeric: tabular-nums; text-align: center; background: var(--surface); color: inherit; }
+.mf-compact .mf-jump select { max-width: min(26em, 100%); padding: 4px 6px; font: inherit; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; }

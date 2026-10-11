@@ -863,7 +863,9 @@ window.TLABS = window.TLABS || [];
   L.push({
     id: "sdh", name: "Ghép kênh SDH", family: "sdh",
     roots: ["stm-1", "stm-4", "stm-16", "stm-64", "stm-256"],
-    palette: ["e1", "e2", "e3", "e4", "c-12", "vc-12", "tu-12", "tug-2", "c-3", "vc-3", "tu-3", "tug-3", "c-4", "vc-4", "au-4", "aug-1", "aug-4", "pos-4c", "pos-16c", "10gbase-w", "pos-256c", "vc-4-4c", "vc-4-16c", "vc-4-64c"],
+    palette: ["e1", "e2", "e3", "e4", "c-12", "vc-12", "tu-12", "tug-2", "c-3", "vc-3", "tu-3", "tug-3", "c-4", "vc-4", "au-4", "aug-1", "aug-4", "pos-4c", "pos-16c", "10gbase-w", "pos-256c", "vc-4-4c", "vc-4-16c", "vc-4-64c",
+      // GD4: Ethernet qua SDH – client GFP-F + nhóm ghép chuỗi ảo (định nghĩa trong data/transport-eos.js)
+      "eth-10m-gfpf", "eth-100m-gfpf", "eth-1g-gfpf", "vc-12-5v", "vc-12-46v", "vc-3-2v", "vc-3-21v", "vc-4-7v"],
     intro: "Chọn khung STM-N đích rồi lắp dần từ dưới lên: E1 → C-12 → VC-12 → TU-12 → TUG-2 → TUG-3 → VC-4 → AU-4 → AUG → STM-N. Mỗi bước hiện số byte overhead được thêm, để thấy vì sao một STM-1 chứa đúng 63 E1 (3 TUG-3 × 7 TUG-2 × 3 TU-12). Mỗi TUG-3 có thể chọn mang 7 TUG-2 hoặc 1 TU-3 (E3)."
   });
 })();

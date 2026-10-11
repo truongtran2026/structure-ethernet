@@ -8,7 +8,7 @@ import vm from "node:vm";
 const root = path.resolve(process.argv[2] || ".");
 const dataDir = path.join(root, "data");
 const KINDS = ["fas", "soh", "pointer", "poh", "opu-oh", "payload", "stuff", "fec", "reserved", "tributary"];
-const UNIT_KINDS = ["client", "container", "vc", "tu", "tug", "au", "aug", "stm", "odu", "opu", "otu", "pdh"];
+const UNIT_KINDS = ["client", "container", "vc", "tu", "tug", "au", "aug", "stm", "odu", "opu", "otu", "pdh", "vcg"];
 const FAMILIES = ["pdh", "sdh", "otn"];
 const errors = [], warns = [];
 const err = (m) => errors.push(m), warn = (m) => warns.push(m);
@@ -107,6 +107,17 @@ for (const [key, u] of Object.entries(MUX)) {
   if (hasB === hasR) err(`${where}: cần đúng một trong bytesPer125us / rateKbps`);
   if (u.leafOk !== undefined && !(u.accepts || []).length) err(`${where}: leafOk chỉ dùng khi có accepts`);
   if (u.frame && !FR[u.frame]) err(`${where}: frame "${u.frame}" không tồn tại`);
+  if (u.kind === "vcg" || u.members) {
+    const m = u.members || {};
+    const mu = MUX[m.of], pu = MUX[m.payloadOf];
+    if (u.kind !== "vcg") err(`${where}: members chỉ dùng cho kind vcg`);
+    if (!mu || !pu || !Number.isInteger(m.count) || m.count < 1) err(`${where}: members {of, count, payloadOf} sai`);
+    else {
+      if (!(mu.accepts || []).some((a) => a.of === m.payloadOf)) err(`${where}: "${m.of}" không nhận "${m.payloadOf}"`);
+      const pk = pu.rateKbps ?? pu.bytesPer125us * 64;
+      if (!hasR || Math.abs(u.rateKbps - m.count * pk) > 1e-6 * u.rateKbps) err(`${where}: rateKbps phải = ${m.count} × ${pk} = ${m.count * pk}`);
+    }
+  }
   if (u.tribSlots && !(u.accepts || []).some((a) => a.slots !== undefined)) err(`${where}: tribSlots nhưng không phương án nào có slots`);
   for (const [i, a] of (u.accepts || []).entries()) {
     const aw = `${where} › accepts[${i}] (${a.count}×${a.of})`;

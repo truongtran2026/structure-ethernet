@@ -124,6 +124,16 @@ hàng `r … r+h-1`. Dùng cho TUG-3 trong VC-4, TU-12 trong TUG-2…
 - `carriedKbps` (tuỳ chọn trên phương án): tốc độ thực sự mang sau transcode (1GbE TTT, 40GbE 1024B/1027B);
   validator và lab dùng số này thay tốc độ con.
 
+### Mở rộng VCAT (GD4)
+
+```js
+{ id: "vc-4-7v", kind: "vcg", family: "sdh", rateKbps: 7 * 149760,
+  members: { of: "vc-4", count: 7, payloadOf: "c-4" },   // thành viên đi độc lập; dung lượng = count × payloadOf
+  accepts: [{ of: "eth-1g-gfpf", count: 1, fit: "le", carriedKbps: 1000000 * 1526 / 1538, mapping: "GFP-F" }] }
+```
+VCG không phải con của unit nào: lab rải thành viên vào vị trí trống kiểu `members.of` trong khung đích.
+Validator: `members.of` có `accepts` chứa `payloadOf`; `rateKbps = count × tốc độ payloadOf`.
+
 Một unit không có `accepts` là điểm đầu (client). Các con của cùng một phương án là độc lập:
 VC-4 nhận 3×TUG-3, mỗi TUG-3 tự chọn phương án riêng (7×TUG-2 hoặc 1×TU-3).
 
