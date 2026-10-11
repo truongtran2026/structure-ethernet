@@ -8,6 +8,7 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | Giai đoạn | Nội dung | Trạng thái |
 | --- | --- | --- |
 | GD1 | SDH: khung + đơn vị ghép + lab SDH | xong 2026-10-11 (review G.707 01/2007 ĐẠT vòng 2) |
+| GD1b | Ghép chuỗi liền kề VC-4-4c/16c/64c/256c | xong 2026-10-11 (review: sửa trích dẫn §11.1, WIS 64B/66B) |
 | GD2 | PDH: E1 (khung, đa khung CRC-4), E2/E3/E4 (chèn bit), lab PDH → SDH | chờ |
 | GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | chờ |
 | Sau | OTUCn/FlexO; Ethernet qua truyền dẫn (GFP-F, VCAT/LCAS, GMP, FlexE); máy tính tốc độ; quiz | chờ |
@@ -54,6 +55,26 @@ Mỗi frame có `unit` trỏ TMUX tương ứng (stm-1…, vc-4, tug-3, tu-3, tu
 | `aug-4` / `aug-16` / `aug-64` / `aug-256` | aug | 4× cấp dưới | 4×aug cấp dưới |
 | `stm-1` | stm | 2430 | 1×aug-1 + SOH 72 |
 | `stm-4` / `stm-16` / `stm-64` / `stm-256` | stm | 2430×N | 1×aug-N + SOH 72N |
+
+### GD1b — Ghép chuỗi liền kề VC-4-Xc (X = 4, 16, 64, 256) — G.707 §8.1.7 / §8.2
+
+Byte/125 µs (validator kiểm):
+
+| X | c-4-Xc | vc-4-Xc (= C + POH 9 + FS 9·(X−1)) | au-4-Xc (= VC + pointer 9·X) | = aug-X |
+| --- | --- | --- | --- | --- |
+| 4 | 9360 | 9396 | 9432 | aug-4 |
+| 16 | 37440 | 37584 | 37728 | aug-16 |
+| 64 | 149760 | 150336 | 150912 | aug-64 |
+| 256 | 599040 | 601344 | 603648 | aug-256 |
+
+- Unit `c-4-4c`, `vc-4-4c`, `au-4-4c` … `au-4-256c` (kind container / vc / au).
+- `aug-X` thêm phương án `{ of: "au-4-Xc", count: 1 }` bên cạnh `4×aug cấp dưới`.
+- Client lấp đầy C-4-Xc (rateKbps = dung lượng C-4-Xc, khách gói kiểu POS/ATM/GFP):
+  `pos-4c` 599040, `pos-16c` 2396160, `10gbase-w` 9584640 (10GBASE-W WAN PHY, IEEE 802.3 cl.50, vào VC-4-64c), `pos-256c` 38338560.
+- Frame: `vc-4-4c` (9×1044: POH + 3 cột FS + C-4-4c) và hàm sinh cho 16c/64c/256c (mức nhóm);
+  `au-4-xc-ptr` không cần frame riêng — mô tả chỉ thị ghép chuỗi (H1H2 = 1001SS11 11111111) trong desc unit au-4-Xc.
+- Lab `sdh`: palette thêm `pos-4c`, `pos-16c`, `10gbase-w`, `pos-256c`, `vc-4-4c`, `vc-4-16c`, `vc-4-64c`.
+- Ghép chuỗi ảo (VC-n-Xv, VCAT/LCAS) thuộc giai đoạn "Ethernet qua truyền dẫn", không làm ở đây.
 
 ### Lab (TLABS)
 

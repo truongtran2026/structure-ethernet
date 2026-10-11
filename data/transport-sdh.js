@@ -413,6 +413,29 @@ window.TLABS = window.TLABS || [];
   };
 
   // =====================================================================
+  // VC-4-Xc (X = 4, 16, 64, 256) – ghép chuỗi liền kề, mức nhóm
+  // 9 × 261X cột: POH 1 cột + fixed stuff (X−1) cột + C-4-Xc 260X cột.
+  // =====================================================================
+  [4, 16, 64, 256].forEach(function (X, i) {
+    var nm = "VC-4-" + X + "c", cols = 261 * X;
+    F["vc-4-" + X + "c"] = {
+      id: "vc-4-" + X + "c", name: nm, family: "sdh", category: "Container bậc cao", order: 30 + 10 * i,
+      standard: "ITU-T G.707 §11.1 (ghép chuỗi liền kề VC-4-Xc), §9.3.1 (POH)",
+      summary: "VC-4-" + X + "c ghép chuỗi liền kề: 9×" + cols + " byte, 1 cột POH + " + (X - 1) + " cột fixed stuff + C-4-" + X + "c " + 260 * X + " cột.",
+      detail: nm + " là một container liền khối (không phải " + X + " VC-4 độc lập): chỉ có MỘT POH ở cột đầu (J1…N1 như VC-4; B3 tính trên toàn " + nm + "), tiếp theo " + (X - 1) + " cột fixed stuff, rồi C-4-" + X + "c " + 260 * X + " cột (" + 9 * 260 * X + " byte ≈ " + (9 * 260 * X * 64 / 1000).toLocaleString("vi-VN") + " Mbit/s) mang tải gói (POS, ATM, GFP" + (X === 64 ? ", 10GBASE-W WAN PHY" : "") + ") dưới dạng một đường liền với tốc độ " + X + " lần C-4. Trong STM-" + X + ", " + nm + " + " + X + " con trỏ AU-4 (con trỏ #1 bình thường, " + (X - 1) + " con trỏ sau mang chỉ thị ghép chuỗi 1001SS11 11111111) tạo thành AU-4-" + X + "c và cả khối trôi theo con trỏ #1. Lưới vẽ căn hàng 1 ở mức nhóm cột.",
+      grid: { rows: 9, cols: cols, cellBits: 8 }, periodUs: 125, rateKbps: 9 * cols * 64, unit: "vc-4-" + X + "c",
+      regions: [
+        R("poh", "POH", nm + " Path Overhead (1 cột duy nhất)", "poh", [0, 0, 9, 1],
+          "Overhead luồng bậc cao duy nhất của " + nm + ": J1, B3 (tính trên toàn " + nm + "), C2, G1, F2, H4, F3, K3, N1 – cùng định dạng POH như VC-4.", { children: pohBytes("", 0, nm) }),
+        R("fs", "FS", "Fixed stuff (" + (X - 1) + " cột)", "stuff", [0, 1, 9, X - 1],
+          (X - 1) + " cột fixed stuff (" + 9 * (X - 1) + " byte) ngay sau POH – thay cho " + (X - 1) + " POH của các VC-4 thành phần, không mang thông tin."),
+        R("c4xc", "C-4-" + X + "c", "Container C-4-" + X + "c", "payload", [0, X, 9, 260 * X],
+          "Container C-4-" + X + "c: " + 9 * 260 * X + " byte/125 µs (" + (9 * 260 * X * 64 / 1000).toLocaleString("vi-VN") + " Mbit/s). Mang tải gói ánh xạ như POS, ATM, GFP" + (X === 64 ? "; 10GBASE-W (WAN PHY) khớp đúng dung lượng này (IEEE 802.3 Clause 50)" : "") + ".")
+      ]
+    };
+  });
+
+  // =====================================================================
   // TUG-3 (7×TUG-2) và TU-3
   // =====================================================================
   var tug2Cols = [];
@@ -613,9 +636,37 @@ window.TLABS = window.TLABS || [];
     var id = "aug-" + n;
     U({ id: id, name: "AUG-" + n, kind: "aug", level: 61 + i, bytesPer125us: 2358 * n, standard: "ITU-T G.707 §7.1.1.2",
       summary: "Nhóm đơn vị quản lý " + n + " = 4×" + prevAug.toUpperCase() + " ghép xen khối " + n / 4 + " byte (" + n + " AU-4).",
-      desc: "Ghép xen theo khối " + n / 4 + " byte (N = số AU-4 trong " + prevAug.toUpperCase() + (n === 4 ? ", nên trùng ghép xen từng byte" : "") + ") của 4 " + prevAug.toUpperCase() + " (hoặc mang một AU-4-" + n + "c ghép chuỗi). Thêm SOH " + 72 * n + " byte thành STM-" + n + ".",
-      accepts: [{ of: prevAug, count: 4, overhead: noOH, note: "4 × " + 2358 * n / 4 + " = " + 2358 * n + " byte." }] });
+      desc: "Ghép xen theo khối " + n / 4 + " byte (N = số AU-4 trong " + prevAug.toUpperCase() + (n === 4 ? ", nên trùng ghép xen từng byte" : "") + ") của 4 " + prevAug.toUpperCase() + " (hoặc mang một AU-4-" + n + "c chiếm trọn AUG-" + n + ", bắt đầu ở AU-4 #(k·" + n + "+1), §6.2.3). Thêm SOH " + 72 * n + " byte thành STM-" + n + ".",
+      accepts: [
+        { of: prevAug, count: 4, overhead: noOH, note: "4 × " + 2358 * n / 4 + " = " + 2358 * n + " byte." },
+        { of: "au-4-" + n + "c", count: 1, overhead: noOH, note: "Phương án ghép chuỗi liền kề: 1 AU-4-" + n + "c = " + 2358 * n + " byte." }
+      ] });
     prevAug = id;
+  });
+
+  // ---------- Ghép chuỗi liền kề VC-4-Xc (G.707 §11.1, §9.3.1, §8.1.2, §8.1.7, §6.2.3, §10.2.1/§10.3/§10.6) ----------
+  [4, 16, 64, 256].forEach(function (X, i) {
+    var cb = 9360 * (X / 4), vb = cb + 9 + 9 * (X - 1), ab = vb + 9 * X, sfx = X + "c";
+    var cMbit = (cb * 64 / 1000).toLocaleString("vi-VN");
+    var cl = { 4: ["pos-4c", "POS/ATM/GFP cổng 622 Mbit/s (tải 599,04 Mbit/s) trên STM-4c", 599040, "Packet over SONET/SDH (PPP/HDLC) hoặc ATM/GFP lấp đầy C-4-4c; ví dụ cổng POS OC-12c/STM-4c của router."],
+      16: ["pos-16c", "POS/GFP cổng 2,5 Gbit/s (tải 2396,16 Mbit/s) trên STM-16c", 2396160, "Packet over SONET/SDH hoặc GFP lấp đầy C-4-16c; ví dụ cổng POS OC-48c/STM-16c của router lõi."],
+      64: ["10gbase-w", "10GBASE-W (Ethernet 10G WAN PHY)", 9584640, "Ethernet 10G WAN PHY (IEEE 802.3 Clause 50) dùng khung SDH/SONET VC-4-64c; tốc độ payload 9,5846 Gbit/s khớp đúng dung lượng C-4-64c; WIS đặt trực tiếp luồng 64B/66B vào tải."],
+      256: ["pos-256c", "POS/GFP cổng 40 Gbit/s (tải 38338,56 Mbit/s) trên STM-256c", 38338560, "Packet over SONET/SDH hoặc GFP lấp đầy C-4-256c; ví dụ cổng POS OC-768c/STM-256c."] }[X];
+    U({ id: cl[0], name: cl[1], kind: "client", level: 5 + i, rateKbps: cl[2], standard: X === 64 ? "IEEE 802.3 Clause 50; ITU-T G.707 §11.1, Annex F" : "ITU-T G.707 §11.1 (ghép chuỗi liền kề)",
+      summary: "Tín hiệu gói lấp đầy C-4-" + sfx + ": " + cl[2].toLocaleString("vi-VN") + " kbit/s.",
+      desc: cl[3] });
+    U({ id: "c-4-" + sfx, name: "C-4-" + sfx, kind: "container", level: 53 + i / 10, bytesPer125us: cb, standard: "ITU-T G.707 §11.1 (C-4-Xc); tải: §10.2.1 (ATM), §10.3 (HDLC/POS), §10.6 (GFP)",
+      summary: "Container C-4-" + sfx + ": 9×" + 260 * X + " = " + cb + " byte/125 µs (" + cMbit + " Mbit/s).",
+      desc: "Container liền khối bằng " + X + " lần C-4, mang một tín hiệu gói duy nhất (POS, ATM, GFP" + (X === 64 ? ", 10GBASE-W" : "") + ") tốc độ cao hơn một VC-4 mà không chia nhỏ." + (X === 64 ? " Cũng dùng cho POS OC-192c/STM-64c." : ""),
+      accepts: [{ of: cl[0], count: 1, overhead: noOH, mapping: X === 64 ? "10GBASE-W WIS (64B/66B)" : "POS/ATM/GFP", note: cl[2] + " kbit/s ≤ " + cb * 64 + " kbit/s." }] });
+    U({ id: "vc-4-" + sfx, name: "VC-4-" + sfx, kind: "vc", level: 53.05 + i / 10, bytesPer125us: vb, frame: "vc-4-" + sfx, standard: "ITU-T G.707 §11.1 (ghép chuỗi liền kề VC-4-Xc), §9.3.1 (POH)",
+      summary: "Container ảo VC-4-" + sfx + " = C-4-" + sfx + " + POH 9 byte + fixed stuff " + 9 * (X - 1) + " byte.",
+      desc: "Chỉ một POH ở cột đầu (J1…N1; B3 tính trên toàn VC-4-" + sfx + ") và " + (X - 1) + " cột fixed stuff, sau đó là C-4-" + sfx + ". Tương đương " + X + " VC-4 nhưng là một luồng duy nhất.",
+      accepts: [{ of: "c-4-" + sfx, count: 1, overhead: { bytes: 9 + 9 * (X - 1), name: "POH + fixed stuff", desc: "POH 9 byte (cột 1) + fixed stuff " + 9 * (X - 1) + " byte (" + (X - 1) + " cột)." }, note: cb + " + " + (9 + 9 * (X - 1)) + " = " + vb + " byte." }] });
+    U({ id: "au-4-" + sfx, name: "AU-4-" + sfx, kind: "au", level: 53.08 + i / 10, bytesPer125us: ab, standard: "ITU-T G.707 §8.1.7 (AU-4-Xc), §8.1.2 (chỉ thị ghép chuỗi con trỏ, Hình 8-3), §6.2.3, §7.3.1.3–6",
+      summary: "Đơn vị quản lý AU-4-" + sfx + " = VC-4-" + sfx + " + " + X + " con trỏ AU-4 (" + 9 * X + " byte).",
+      desc: "Con trỏ AU-4 #1 hoạt động bình thường; " + (X - 1) + " con trỏ sau mang chỉ thị ghép chuỗi (concatenation indication): H1H2 = 1001SS11 11111111. AU-4-" + sfx + " chiếm trọn một AUG-" + X + "; trong STM-N bắt đầu ở AU-4 #(k·" + X + "+1) (căn theo biên AUG-" + X + ", §6.2.3, §7.3.1.3–6). Cả khối VC-4-" + sfx + " trôi theo con trỏ #1 (một lần chỉnh con trỏ chèn/bỏ " + 3 * X + " byte, §11.1) và " + (X - 1) + " con trỏ kia chỉ báo 'đi theo'. POH duy nhất ở cột đầu VC-4-" + sfx + ", B3 tính trên toàn VC-4-" + sfx + ".",
+      accepts: [{ of: "vc-4-" + sfx, count: 1, overhead: { bytes: 9 * X, name: "AU-4 pointers ×" + X, desc: "H1 Y Y H2 1* 1* H3 H3 H3 cho mỗi trong " + X + " AU-4; con trỏ #2…" + X + " mang chỉ thị ghép chuỗi 1001SS11 11111111." }, note: vb + " + " + 9 * X + " = " + ab + " byte." }] });
   });
 
   U({ id: "stm-1", name: "STM-1", kind: "stm", level: 70, bytesPer125us: 2430, frame: "stm-1", standard: "ITU-T G.707 §6.2, §9.2",
@@ -635,7 +686,7 @@ window.TLABS = window.TLABS || [];
   L.push({
     id: "sdh", name: "Ghép kênh SDH", family: "sdh",
     roots: ["stm-1", "stm-4", "stm-16", "stm-64", "stm-256"],
-    palette: ["e1", "e3", "e4", "c-12", "vc-12", "tu-12", "tug-2", "c-3", "vc-3", "tu-3", "tug-3", "c-4", "vc-4", "au-4", "aug-1", "aug-4"],
+    palette: ["e1", "e3", "e4", "c-12", "vc-12", "tu-12", "tug-2", "c-3", "vc-3", "tu-3", "tug-3", "c-4", "vc-4", "au-4", "aug-1", "aug-4", "pos-4c", "pos-16c", "10gbase-w", "pos-256c", "vc-4-4c", "vc-4-16c", "vc-4-64c"],
     intro: "Chọn khung STM-N đích rồi lắp dần từ dưới lên: E1 → C-12 → VC-12 → TU-12 → TUG-2 → TUG-3 → VC-4 → AU-4 → AUG → STM-N. Mỗi bước hiện số byte overhead được thêm, để thấy vì sao một STM-1 chứa đúng 63 E1 (3 TUG-3 × 7 TUG-2 × 3 TU-12). Mỗi TUG-3 có thể chọn mang 7 TUG-2 hoặc 1 TU-3 (E3)."
   });
 })();
