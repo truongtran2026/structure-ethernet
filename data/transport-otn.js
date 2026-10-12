@@ -25,7 +25,7 @@ window.TLABS = window.TLABS || [];
   }
   // Danh sách chỉ số khung 0..n-1 thoả điều kiện.
   function frames(n, fn) { var a = []; for (var i = 0; i < n; i++) if (fn(i)) a.push(i); return a; }
-  function vn(x, d) { return x.toLocaleString("vi-VN", { maximumFractionDigits: d === undefined ? 3 : d }); }
+  function vn(x, d) { return x.toLocaleString("vi-VN", { maximumFractionDigits: d === undefined ? 3 : d }).replace(/\./g, " "); }
 
   // ---------- Tốc độ (kbit/s) – G.709 Bảng 7-1/7-2/7-3, viết bằng biểu thức, không làm tròn ----------
   var RATE = {
@@ -491,7 +491,7 @@ window.TLABS = window.TLABS || [];
         note: "Khung MAC 1GbE qua GFP-F: 1 000 000 × 1526/1538 ≈ 992 198 kbit/s ≤ OPU0 ≈ 1 238 954 kbit/s; GFP Idle lấp phần thừa (G.709 §17.4 cho GFP vào OPUk k = 0,1,2,3,4,flex). Khác phương án 1000BASE-X: không trong suốt mức PCS." }] });
   U({ id: "odu0", name: "ODU0", kind: "odu", level: 11, rateKbps: RATE.odu0, leafOk: true, standard: STD + " §12; tốc độ Bảng 7-2",
     summary: "ODU0 = 1 244 160 kbit/s (đúng một nửa STM-16) – vừa 1 TS 1,25G.",
-    desc: "Đơn vị đấu chéo nhỏ nhất của OTN. Vào OPU1 bằng AMP (ODTU01, PT 20) hoặc vào OPU2/3/4 bằng GMP (ODTUk.1, PT 21), mỗi lần 1 TS.",
+    desc: "Đơn vị đấu chéo nhỏ nhất của OTN. Vào OPU1 bằng AMP (ODTU01, PT 20) hoặc vào OPU2/3/4 bằng GMP (ODTUk.1, PT 21), mỗi lần 1 TS. Không ghép 2 ODU0 để chở STM-16: tải OPU0 (≈ 1,239 Gbit/s) nhỏ hơn STM-16 và G.709 chỉ có ghép chuỗi ảo OPUk-Xv với k = 1..3 (§18.1.1), không có OPU0-Xv – STM-16 luôn đi bằng ODU1.",
     accepts: [{ of: "opu0", count: 1, overhead: oduOH("0"), note: "OPU0 × 239/238 = 1 244 160 kbit/s." }] });
 
   // ---------- k = 1 ----------
@@ -504,7 +504,7 @@ window.TLABS = window.TLABS || [];
         note: "STM-16 2 488 320 = OPU1 2 488 320 kbit/s (danh định); AMP chịu client ±45 ppm (tổng ±65 ppm cùng ±20 ppm của OPU), BMP cho client ±20 ppm (§17.2 NOTE 2)." },
       { of: "odu0", count: 2, slots: 1, mapping: "AMP (ODTU01)", note: "ODU0 1 244 160 ≤ 1 TS = 1 244 160 kbit/s; 2 ODU0 lấp đầy OPU1." }
     ] });
-  oduUnit("1", 21, "Mang 1 STM-16 hoặc 2 ODU0; vào OPU2 chiếm 2 TS (AMP), OPU3 2 TS (AMP), OPU4 2 TS (GMP).");
+  oduUnit("1", 21, "Mang 1 STM-16 hoặc 2 ODU0; vào OPU2 chiếm 2 TS (AMP), OPU3 2 TS (AMP), OPU4 2 TS (GMP). STM-16 (CBR2G5) chỉ ánh xạ vào OPU1 (§17.2) nên luôn thành một ODU1; 2 TS 1,25G nó chiếm thuộc MỘT ODTU (ODTU12/13 hoặc ODTU4.2) và được tách ra nguyên một ODU1 – không phải 2 ODU0. Với khe 2,5G kiểu cũ (PT 20) ODU1 chiếm 1 khe.");
   otuUnit("1", 22, "Giao diện 2,666 Gbit/s.");
 
   // ---------- ODUflex(CBR) cho FC-800 ----------

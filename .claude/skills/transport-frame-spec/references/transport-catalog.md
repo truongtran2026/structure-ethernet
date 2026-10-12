@@ -13,7 +13,8 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | xong 2026-10-11 (review G.709 02/2012 + Amd.4: 2 vòng, vá 3 trích dẫn; QA ĐẠT) |
 | GD4 | Ethernet qua SDH: GFP-F (mảng IP), VCAT/LCAS (VC-n-Xv), lab SDH nhận Ethernet; tồn đọng GD3 | xong 2026-10-12 (review G.707 01/2007, G.7042 03/2006, G.7041 08/2016: 2 vòng ĐẠT; QA ĐẠT) |
 | GD5 | ODUflex(GFP) + Ethernet GFP-F vào OTN; tồn đọng GD4 (đóng gói từng bước EoS, CẦN KIỂM cũ); sửa M1/M0 STM-N | xong 2026-10-12 (review G.709 02/2012, G.707 01/2007 ảnh Hình 9-3…9-7: 2 vòng; QA ĐẠT) |
-| Sau | OTUCn/FlexO (cần G.709 ≥ 2016 — chưa tải được); FlexE; máy tính tốc độ; quiz | chờ |
+| GD6 | Ôn tập (quiz tự sinh từ dữ liệu, 12 dạng) + Máy tính tốc độ (js/quiz.js, js/calc.js); định dạng số thống nhất; ghi chú P1/Q1 | xong 2026-10-12 (QA ĐẠT; lọc câu lộ đáp án) |
+| Sau | OTUCn/FlexO (cần G.709 ≥ 2016 — chưa tải được); FlexE | chờ |
 
 ## GD5 — ODUflex(GFP) + Ethernet GFP-F vào OTN (thêm vào `data/transport-otn.js`) — G.709 (02/2012) §7, §12.2.5, §17.4, §19; Bảng 7-8, 7-9
 

@@ -3,9 +3,9 @@
  *  - thanh bên trái dạng cây: IP / Ethernet · Truyền dẫn (PDH/SDH/OTN) · Phòng thí nghiệm ghép kênh;
  *    thu gọn/bung từng mảng/nhóm, LƯU trạng thái + mục đang xem (localStorage) để mở lại đúng như cũ;
  *  - ô tìm kiếm lọc toàn cây (tự bung nhóm có kết quả, không ghi đè trạng thái đã lưu);
- *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>;
+ *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>, #quiz/<chủ đề>, #calc;
  *  - giao diện sáng/tối, nút menu trên di động.
- * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab — mỗi view có init/show/hide.
+ * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab, window.QuizView, window.CalcView — mỗi view có init/show/hide.
  */
 (function () {
   'use strict';
@@ -18,7 +18,7 @@
     sdh: { name: 'SDH', hint: 'Phân cấp số đồng bộ (STM-N)', order: 2 },
     otn: { name: 'OTN', hint: 'Mạng truyền tải quang (OTUk/ODUk)', order: 3 }
   };
-  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab' };
+  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc' };
   var APP_NAME = 'Frame Structure';
 
   var nav = { domains: [], items: {}, route: null, query: '', store: { open: {}, last: null, scroll: 0 }, theme: 'auto' };
@@ -40,10 +40,11 @@
   function parseHash(h) {
     var s = decodeURIComponent(String(h || '').replace(/^#/, ''));
     if (!s) return null;
-    var m = /^(t|lab)\/(.+)$/.exec(s);
+    if (s === 'calc') return { view: 'calc', id: 'calc' };
+    var m = /^(t|lab|quiz)\/(.+)$/.exec(s);
     return m ? { view: m[1], id: m[2] } : { view: 'ip', id: s };
   }
-  function hashOf(r) { return '#' + (r.view === 'ip' ? '' : r.view + '/') + encodeURIComponent(r.id).replace(/%2F/g, '/'); }
+  function hashOf(r) { if (r.view === 'calc') return '#calc'; return '#' + (r.view === 'ip' ? '' : r.view + '/') + encodeURIComponent(r.id).replace(/%2F/g, '/'); }
   function keyOf(r) { return r.view + ':' + r.id; }
   function valid(r) { return !!(r && nav.items[keyOf(r)]); }
 
@@ -92,7 +93,7 @@
     if (!prev || keyOf(prev) !== keyOf(r)) window.scrollTo(0, 0);
   }
 
-  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab }[name]; }
+  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab, quiz: window.QuizView, calc: window.CalcView }[name]; }
   function showContainer(view) {
     Object.keys(CONTAINER).forEach(function (k) {
       var el = document.getElementById(CONTAINER[k]);
@@ -170,6 +171,20 @@
           return addItem({ view: 'lab', id: l.id }, l.name || l.id, (l.family || '').toUpperCase(),
             [l.id, l.name, l.intro, l.family].concat(l.roots || [], l.palette || []).join(' '), l.intro);
         }) });
+    }
+    // Ôn tập (chủ đề có câu hỏi) + Máy tính tốc độ
+    var topics = [];
+    if (window.QuizView) { try { topics = window.QuizView.items() || []; } catch (e) { topics = []; } }
+    if (topics.length) {
+      nav.domains.push({ key: 'd:quiz', name: 'Ôn tập', icon: '✎', count: topics.length,
+        items: topics.map(function (t) {
+          return addItem({ view: 'quiz', id: t.id }, t.name, '', 'ôn tập quiz trắc nghiệm câu hỏi ' + t.id + ' ' + t.name + ' ' + (t.hint || ''), t.hint || '');
+        }) });
+    }
+    if (window.CalcView) {
+      nav.domains.push({ key: 'd:calc', name: 'Công cụ', icon: '∑', count: 1,
+        items: [addItem({ view: 'calc', id: 'calc' }, 'Máy tính tốc độ', '', 'máy tính tốc độ calc hiệu suất overhead gfp ethernet tối đa',
+          'Tốc độ, chuỗi ghép, số nhánh tối đa, GFP-F, hiệu suất stack')] });
     }
   }
 
@@ -298,7 +313,7 @@
       nav.store.scroll = +saved.scroll || 0;
     }
     if (!window.IPView) { showFatal('Không nạp được <code>js/app.js</code>.'); return; }
-    ['IPView', 'TransView', 'MuxLab'].forEach(function (name) {
+    ['IPView', 'TransView', 'MuxLab', 'QuizView', 'CalcView'].forEach(function (name) {
       var v = window[name];
       if (!v || !v.init) return;
       try { v.init(); } catch (e) {

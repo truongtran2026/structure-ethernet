@@ -289,7 +289,7 @@ window.TLABS = window.TLABS || [];
       grp("r3-d2", "Δ", "Media-dependent", "reserved", 2, 5, 1, "Byte Δ phụ thuộc môi trường truyền dẫn."),
       grp("r3-res1", "—", "Reserved", "reserved", 2, 6, 1, "Dự trữ cho chuẩn hoá quốc tế."),
       byteGroup("d3", "D3", "DCC_R byte 3", 2, 7, "Byte 3/3 kênh quản lý DCC_R 192 kbit/s."),
-      grp("r3-res2", "—", "Reserved", "reserved", 2, 8, 2, "Dự trữ cho chuẩn hoá quốc tế." + (N >= 16 ? " Với STM-16/64/256, Q1 (FSI của FEC trong băng, tuỳ chọn) nằm ở S(3,9,3) – xem §9.2.4." : ""))
+      grp("r3-res2", "—", "Reserved", "reserved", 2, 8, 2, "Dự trữ cho chuẩn hoá quốc tế." + (N >= 16 ? " Một số vị trí dự trữ dành cho P1/Q1 – FEC trong băng tuỳ chọn (†/‡, G.707 Hình 9-5/9-6/9-7, §9.2.4). Với STM-16/64/256, Q1 (FSI của FEC trong băng, tuỳ chọn) nằm ở S(3,9,3) – xem §9.2.4." : ""))
     ];
     rsoh = rowA.concat([rsoh[0]], rowB, rsoh.slice(1));
     var ptr = [
@@ -317,7 +317,7 @@ window.TLABS = window.TLABS || [];
     var msoh = [
       grp("b2", "B2", "MS BIP-" + 24 * N, "soh", 4, 1, 3, "BIP-" + 24 * N + " (" + 3 * N + " byte) trên khung trước trừ RSOH – giám sát lỗi đoạn ghép."),
       byteGroup("k1", "K1", "APS K1", 4, 4, "Yêu cầu chuyển mạch bảo vệ APS (loại yêu cầu + số kênh)."),
-      grp("r5-a", "—", "Reserved", "reserved", 4, 5, 2, "Dự trữ cho chuẩn hoá quốc tế."),
+      grp("r5-a", "—", "Reserved", "reserved", 4, 5, 2, "Dự trữ cho chuẩn hoá quốc tế." + (N >= 16 ? " Một số vị trí có thể dành cho P1/Q1 – FEC trong băng tuỳ chọn (†/‡, G.707 §9.2.4)." : "")),
       byteGroup("k2", "K2", "APS K2", 4, 7, "Xác nhận APS, kiến trúc, chế độ; mang MS-AIS/MS-RDI."),
       grp("r5-b", "—", "Reserved", "reserved", 4, 8, 2, "Dự trữ cho chuẩn hoá quốc tế."),
       R("dccm", "D4–D12", "Multiplex Section DCC", "soh", [5, 0, 3, 3, 3 * N],
@@ -350,10 +350,10 @@ window.TLABS = window.TLABS || [];
     F[nm.toLowerCase()] = {
       id: nm.toLowerCase(), name: nm, family: "sdh", category: "Khung STM-N", order: order,
       standard: "ITU-T G.707 §6.2, §9.2",
-      summary: "Khung SDH " + (155.52 * N).toLocaleString("vi-VN") + " Mbit/s = " + N + " × STM-1 ghép xen byte; 9 hàng × " + 270 * N + " cột.",
+      summary: "Khung SDH " + (155.52 * N).toLocaleString("vi-VN").replace(/\./g, " ") + " Mbit/s = " + N + " × STM-1 ghép xen byte; 9 hàng × " + 270 * N + " cột.",
       detail: "STM-" + N + " giữ chu kỳ 125 µs nhưng mỗi hàng rộng gấp " + N + " lần: " + 9 * N + " cột SOH + " + 261 * N + " cột tải. SOH được ghép xen byte từ " + N + " STM-1 nhưng " + (N === 256 ? "chỉ B2 và con trỏ lặp đủ (A1/A2 chỉ có 64 + 64 byte, §9.2.2.1)" : "chỉ các byte A1/A2/B2/con trỏ lặp đủ") + "; J0, B1, E1, F1, D1–D12, K1, K2, S1, M1, E2 chỉ có một bản, phần còn lại là dự trữ. Lưới này vẽ ở mức nhóm: mỗi nhóm " + N + " cột ứng với một cột SOH của STM-1." +
         (N === 256 ? " Hàng 1 của STM-256: chỉ 64 A1 (cột 705–768) và 64 A2 (cột 769–832) không scramble; mọi byte còn lại của hàng 1 từ S(1,4,65) trở đi — kể cả J0/Z0 — đều bị scramble; chỉ 128 byte A1/A2 không scramble (§6.5 Note 3). STM-256 còn có DCC_M mở rộng D13–D156 (9216 kbit/s)." : " Hàng 1 của RSOH (9N byte) không bị scramble.") +
-        (N >= 16 ? " STM-16/64/256 có thể dùng FEC trong băng tuỳ chọn (byte P1/Q1, §9.2.4; STM-16 theo Appendix IX); Q1 (FSI) ở S(3,9,3)." : "") +
+        (N >= 16 ? " STM-16/64/256 có thể dùng FEC trong băng tuỳ chọn (byte P1/Q1, §9.2.4; STM-16 theo Appendix IX); Q1 (FSI) ở S(3,9,3). Một số vị trí dự trữ ở hàng 2, 3, 5–8 của SOH dành cho P1/Q1 – FEC trong băng tuỳ chọn (ký hiệu †/‡ trong G.707 Hình 9-5/9-6/9-7, §9.2.4)." : "") +
         (N >= 64 ? " STM-64/256 dùng cặp M0 + M1 cho MS-REI." : ""),
       grid: { rows: 9, cols: 270 * N, cellBits: 8 }, periodUs: 125, rateKbps: 155520 * N, unit: nm.toLowerCase(),
       regions: [
@@ -423,7 +423,7 @@ window.TLABS = window.TLABS || [];
       id: "vc-4-" + X + "c", name: nm, family: "sdh", category: "Container bậc cao", order: 30 + 10 * i,
       standard: "ITU-T G.707 §11.1 (ghép chuỗi liền kề VC-4-Xc), §9.3.1 (POH)",
       summary: "VC-4-" + X + "c ghép chuỗi liền kề: 9×" + cols + " byte, 1 cột POH + " + (X - 1) + " cột fixed stuff + C-4-" + X + "c " + 260 * X + " cột.",
-      detail: nm + " là một container liền khối (không phải " + X + " VC-4 độc lập): chỉ có MỘT POH ở cột đầu (J1…N1 như VC-4; B3 tính trên toàn " + nm + "), tiếp theo " + (X - 1) + " cột fixed stuff, rồi C-4-" + X + "c " + 260 * X + " cột (" + 9 * 260 * X + " byte ≈ " + (9 * 260 * X * 64 / 1000).toLocaleString("vi-VN") + " Mbit/s) mang tải gói (POS, ATM, GFP" + (X === 64 ? ", 10GBASE-W WAN PHY" : "") + ") dưới dạng một đường liền với tốc độ " + X + " lần C-4. Trong STM-" + X + ", " + nm + " + " + X + " con trỏ AU-4 (con trỏ #1 bình thường, " + (X - 1) + " con trỏ sau mang chỉ thị ghép chuỗi 1001SS11 11111111) tạo thành AU-4-" + X + "c và cả khối trôi theo con trỏ #1. Lưới vẽ căn hàng 1 ở mức nhóm cột.",
+      detail: nm + " là một container liền khối (không phải " + X + " VC-4 độc lập): chỉ có MỘT POH ở cột đầu (J1…N1 như VC-4; B3 tính trên toàn " + nm + "), tiếp theo " + (X - 1) + " cột fixed stuff, rồi C-4-" + X + "c " + 260 * X + " cột (" + 9 * 260 * X + " byte ≈ " + (9 * 260 * X * 64 / 1000).toLocaleString("vi-VN").replace(/\./g, " ") + " Mbit/s) mang tải gói (POS, ATM, GFP" + (X === 64 ? ", 10GBASE-W WAN PHY" : "") + ") dưới dạng một đường liền với tốc độ " + X + " lần C-4. Trong STM-" + X + ", " + nm + " + " + X + " con trỏ AU-4 (con trỏ #1 bình thường, " + (X - 1) + " con trỏ sau mang chỉ thị ghép chuỗi 1001SS11 11111111) tạo thành AU-4-" + X + "c và cả khối trôi theo con trỏ #1. Lưới vẽ căn hàng 1 ở mức nhóm cột.",
       grid: { rows: 9, cols: cols, cellBits: 8 }, periodUs: 125, rateKbps: 9 * cols * 64, unit: "vc-4-" + X + "c",
       regions: [
         R("poh", "POH", nm + " Path Overhead (1 cột duy nhất)", "poh", [0, 0, 9, 1],
@@ -431,7 +431,7 @@ window.TLABS = window.TLABS || [];
         R("fs", "FS", "Fixed stuff (" + (X - 1) + " cột)", "stuff", [0, 1, 9, X - 1],
           (X - 1) + " cột fixed stuff (" + 9 * (X - 1) + " byte) ngay sau POH – thay cho " + (X - 1) + " POH của các VC-4 thành phần, không mang thông tin."),
         R("c4xc", "C-4-" + X + "c", "Container C-4-" + X + "c", "payload", [0, X, 9, 260 * X],
-          "Container C-4-" + X + "c: " + 9 * 260 * X + " byte/125 µs (" + (9 * 260 * X * 64 / 1000).toLocaleString("vi-VN") + " Mbit/s). Mang tải gói ánh xạ như POS, ATM, GFP" + (X === 64 ? "; 10GBASE-W (WAN PHY) khớp đúng dung lượng này (IEEE 802.3 Clause 50)" : "") + ".")
+          "Container C-4-" + X + "c: " + 9 * 260 * X + " byte/125 µs (" + (9 * 260 * X * 64 / 1000).toLocaleString("vi-VN").replace(/\./g, " ") + " Mbit/s). Mang tải gói ánh xạ như POS, ATM, GFP" + (X === 64 ? "; 10GBASE-W (WAN PHY) khớp đúng dung lượng này (IEEE 802.3 Clause 50)" : "") + ".")
       ]
     };
   });
@@ -823,13 +823,13 @@ window.TLABS = window.TLABS || [];
   // ---------- Ghép chuỗi liền kề VC-4-Xc (G.707 §11.1, §9.3.1, §8.1.2, §8.1.7, §6.2.3, §10.2.1/§10.3/§10.6) ----------
   [4, 16, 64, 256].forEach(function (X, i) {
     var cb = 9360 * (X / 4), vb = cb + 9 + 9 * (X - 1), ab = vb + 9 * X, sfx = X + "c";
-    var cMbit = (cb * 64 / 1000).toLocaleString("vi-VN");
+    var cMbit = (cb * 64 / 1000).toLocaleString("vi-VN").replace(/\./g, " ");
     var cl = { 4: ["pos-4c", "POS/ATM/GFP cổng 622 Mbit/s (tải 599,04 Mbit/s) trên STM-4c", 599040, "Packet over SONET/SDH (PPP/HDLC) hoặc ATM/GFP lấp đầy C-4-4c; ví dụ cổng POS OC-12c/STM-4c của router."],
       16: ["pos-16c", "POS/GFP cổng 2,5 Gbit/s (tải 2396,16 Mbit/s) trên STM-16c", 2396160, "Packet over SONET/SDH hoặc GFP lấp đầy C-4-16c; ví dụ cổng POS OC-48c/STM-16c của router lõi."],
       64: ["10gbase-w", "10GBASE-W (Ethernet 10G WAN PHY)", 9584640, "Ethernet 10G WAN PHY (IEEE 802.3 Clause 50) dùng khung SDH/SONET VC-4-64c; tốc độ payload 9,5846 Gbit/s khớp đúng dung lượng C-4-64c; WIS đặt trực tiếp luồng 64B/66B vào tải."],
       256: ["pos-256c", "POS/GFP cổng 40 Gbit/s (tải 38338,56 Mbit/s) trên STM-256c", 38338560, "Packet over SONET/SDH hoặc GFP lấp đầy C-4-256c; ví dụ cổng POS OC-768c/STM-256c."] }[X];
     U({ id: cl[0], name: cl[1], kind: "client", level: 5 + i, rateKbps: cl[2], standard: X === 64 ? "IEEE 802.3 Clause 50; ITU-T G.707 §11.1, Annex F" : "ITU-T G.707 §11.1 (ghép chuỗi liền kề)",
-      summary: "Tín hiệu gói lấp đầy C-4-" + sfx + ": " + cl[2].toLocaleString("vi-VN") + " kbit/s.",
+      summary: "Tín hiệu gói lấp đầy C-4-" + sfx + ": " + cl[2].toLocaleString("vi-VN").replace(/\./g, " ") + " kbit/s.",
       desc: cl[3] });
     U({ id: "c-4-" + sfx, name: "C-4-" + sfx, kind: "container", level: 53 + i / 10, bytesPer125us: cb, standard: "ITU-T G.707 §11.1 (C-4-Xc); tải: §10.2.1 (ATM), §10.3 (HDLC/POS), §10.6 (GFP)",
       summary: "Container C-4-" + sfx + ": 9×" + 260 * X + " = " + cb + " byte/125 µs (" + cMbit + " Mbit/s).",
@@ -851,7 +851,7 @@ window.TLABS = window.TLABS || [];
     accepts: [{ of: "aug-1", count: 1, overhead: { bytes: 72, name: "SOH", desc: "RSOH 27 byte (hàng 1–3) + MSOH 45 byte (hàng 5–9), cột 1–9." }, note: "2358 + 72 = 2430 byte (9×270)." }] });
   [4, 16, 64, 256].forEach(function (n, i) {
     U({ id: "stm-" + n, name: "STM-" + n, kind: "stm", level: 71 + i, bytesPer125us: 2430 * n, frame: "stm-" + n, standard: "ITU-T G.707 §6.2, §9.2",
-      summary: "Khung STM-" + n + " " + (155.52 * n).toLocaleString("vi-VN") + " Mbit/s = AUG-" + n + " + SOH " + 72 * n + " byte.",
+      summary: "Khung STM-" + n + " " + (155.52 * n).toLocaleString("vi-VN").replace(/\./g, " ") + " Mbit/s = AUG-" + n + " + SOH " + 72 * n + " byte.",
       desc: "Chứa " + n + " VC-4 (= " + 63 * n + " E1). SOH ghép xen từ " + n + " STM-1 nhưng nhiều byte chỉ dùng một bản.",
       accepts: [{ of: "aug-" + n, count: 1, overhead: { bytes: 72 * n, name: "SOH", desc: "RSOH " + 27 * n + " byte + MSOH " + 45 * n + " byte." }, note: 2358 * n + " + " + 72 * n + " = " + 2430 * n + " byte (9×" + 270 * n + ")." }] });
   });
