@@ -107,6 +107,24 @@
       clientK = best ? lab.vcgNeedKbps(M, best.v, X) : lab.unitKbps(M, X);
     }
     res.max = n;
+    // maxPorts (OPUCn) ràng buộc: n = số đặt trực tiếp vào TS; nested = số tối đa qua ODU lồng (vd ODU4 chứa 80 ODU0)
+    if (res.via === 'tree' && n > 0 && lab.portsBinding && lab.portsBinding(M, R, X)) {
+      res.direct = n; res.nested = lab.maxCountNested(M, R, X);
+      var seen = {}, queue = [R], pool = null;
+      while (queue.length && !pool) {
+        var cu = queue.shift(); if (seen[cu] || !M[cu]) continue; seen[cu] = 1;
+        if (M[cu].tribSlots && M[cu].tribSlots.maxPorts) pool = cu;
+        (M[cu].accepts || []).forEach(function (a) { queue.push(a.of); });
+      }
+      if (pool) {
+        res.poolUnit = pool; res.maxPorts = M[pool].tribSlots.maxPorts;
+        (M[pool].accepts || []).forEach(function (a) {
+          if (!a.slots || a.of === X) return;
+          var m = lab.maxCountNested(M, a.of, X);
+          if (m > 1 && (!res.nestedVia || m > res.nestedVia.m)) res.nestedVia = { u: a.of, m: m };
+        });
+      }
+    }
     res.clientKbps = clientK;
     res.usedKbps = n * clientK;
     res.effPct = res.totalKbps ? res.usedKbps / res.totalKbps * 100 : 0;
@@ -382,6 +400,10 @@
       stat('Tải ' + nm(M, X), esc(rate(r.usedKbps)), esc(n(r.max, 0)) + ' × ' + esc(rate(r.clientKbps))) +
       stat('Hiệu suất', esc(pct(r.effPct)), 'trên ' + esc(rate(r.totalKbps))) +
       stat('Còn lại', esc(rate(r.spareKbps)), 'overhead + chèn + chỗ trống') + '</div>';
+    if (r.nested) {
+      html += '<p class="calc-small"><b>Trực tiếp vào TS: ' + esc(n(r.direct, 0)) + '</b> <span class="muted">(giới hạn ' + esc(n(r.maxPorts, 0)) + ' cổng nhánh của ' + esc(nm(M, r.poolUnit)) + ' — nhiều TS hơn số cổng)</span>' +
+        '<br><b>Qua ' + esc(r.nestedVia ? nm(M, r.nestedVia.u) : 'ODU lớn hơn') + ' (lồng): ' + esc(n(r.nested, 0)) + '</b> <span class="muted">(đặt ' + esc(nm(M, X)) + ' trong một ODU lớn rồi ghép ODU đó vào ' + esc(nm(M, r.poolUnit)) + ')</span></p>';
+    }
     var b = r.breakdown;
     if (b) {
       var parts = [['Tải khách hàng', b.clientKbps, 'k-payload'], ['Overhead các cấp', b.overheadKbps, 'k-poh'], ['Chèn / bù tốc độ', b.justificationKbps, 'k-stuff'], ['Còn trống', b.emptyKbps, 'k-reserved']];

@@ -334,8 +334,22 @@
     var p = poolInfo(MUX, n.u);
     return p ? p.n - Object.keys(tsUsed(n)).length : 0;
   }
-  /** Cấp k TS trống thấp nhất (không cần liền kề); null nếu không đủ. */
+  /** Số cổng nhánh tối đa của bể (tribSlots.maxPorts; OPUCn: 10n dù có 20n TS) — Infinity nếu không giới hạn. */
+  function maxPorts(MUX, uid) {
+    var t = MUX[uid] && MUX[uid].tribSlots;
+    return t && t.maxPorts > 0 ? t.maxPorts : Infinity;
+  }
+  /** Bể đã đủ số cổng nhánh (dù còn TS trống). */
+  function portsFull(MUX, n) { return (n.kids || []).length >= maxPorts(MUX, n.u); }
+  /** Số cổng nhánh còn đặt thêm được. */
+  function portsLeft(MUX, n) { return Math.max(0, maxPorts(MUX, n.u) - (n.kids || []).length); }
+  /** count hiệu lực của phương án a trong uid: bể TS bị chặn bởi maxPorts. */
+  function effCount(MUX, uid, a) {
+    return a && a.slots ? Math.min(a.count, maxPorts(MUX, uid)) : (a ? a.count : 0);
+  }
+  /** Cấp k TS trống thấp nhất (không cần liền kề); null nếu không đủ TS hoặc đủ cổng nhánh. */
   function allocTs(MUX, n, k) {
+    if (portsFull(MUX, n)) return null;
     var p = poolInfo(MUX, n.u), used = tsUsed(n), out = [];
     for (var s = 0; p && s < p.n && out.length < k; s++) if (!used[s]) out.push(s);
     return out.length === k ? out : null;
@@ -713,13 +727,39 @@
     if (memo[key] != null) return memo[key];
     memo[key] = 0;
     var u = MUX[unitId], best = 0;
+    // Bể TS có giới hạn cổng nhánh (OPUCn): nếu nhận thẳng X thì lab cấp TS cho X trực tiếp (poolCandidates ưu tiên
+    // X trước), nên số tối đa là min(count, maxPorts) — không tính đường vòng (ODU4 chứa 80 ODU0) để bộ đếm khớp "Lấp đầy".
+    if (u && u.tribSlots && u.tribSlots.maxPorts) {
+      var direct = (u.accepts || []).filter(function (a) { return a.slots && a.of === X; })[0];
+      if (direct) return (memo[key] = effCount(MUX, unitId, direct));
+    }
     (u && u.accepts || []).forEach(function (a) {
       var m = a.of === X ? 1 : autoOpen(MUX, unitId, a.of) ? maxCount(MUX, a.of, X) : 0;
-      best = Math.max(best, a.count * m);
+      best = Math.max(best, effCount(MUX, unitId, a) * m);
     });
     memo[key] = best;
     return best;
   }
+  /**
+   * Như maxCount nhưng tính cả đường lồng khi bể có maxPorts (vd OTUC1: ODU0 qua 1 ODU4 = 80, trong khi đặt trực
+   * tiếp vào TS tối đa 10). Không có maxPorts ràng buộc thì bằng maxCount.
+   */
+  function maxCountNested(MUX, unitId, X) {
+    var memo = memoOf(MUX, '__maxNestMemo');
+    var key = unitId + '>' + X;
+    if (unitId === X) return 1;
+    if (memo[key] != null) return memo[key];
+    memo[key] = 0;
+    var u = MUX[unitId], best = 0;
+    (u && u.accepts || []).forEach(function (a) {
+      var m = a.of === X ? 1 : autoOpen(MUX, unitId, a.of) ? maxCountNested(MUX, a.of, X) : 0;
+      best = Math.max(best, effCount(MUX, unitId, a) * m);
+    });
+    memo[key] = best;
+    return best;
+  }
+  /** maxPorts đang là giới hạn ràng buộc: số đặt trực tiếp (maxCount) khác số tối đa qua đường lồng. */
+  function portsBinding(MUX, unitId, X) { return maxCountNested(MUX, unitId, X) !== maxCount(MUX, unitId, X); }
   /** Số X còn có thể có (đã đặt + còn chỗ) theo các phương án đang chọn. parentU: đơn vị cha (bỏ trống = gốc). */
   function capacityNow(MUX, node, slotU, X, parentU) {
     if (!node) {
@@ -735,9 +775,12 @@
       var sum = 0, free = tsFree(MUX, node);
       node.kids.forEach(function (k) { sum += capacityNow(MUX, k, k.u, X, node.u); });
       var best = 0;
-      slotOpts(MUX, node.u).forEach(function (s) {
+      var sopts = slotOpts(MUX, node.u);
+      // giới hạn cổng nhánh: X nhận thẳng thì chỉ tính đường trực tiếp (khớp maxCount/Lấp đầy)
+      if (maxPorts(MUX, node.u) < Infinity && sopts.some(function (s) { return s.a.of === X; })) sopts = sopts.filter(function (s) { return s.a.of === X; });
+      sopts.forEach(function (s) {
         var m = s.a.of === X ? 1 : autoOpen(MUX, node.u, s.a.of) ? maxCount(MUX, s.a.of, X) : 0;
-        best = Math.max(best, Math.floor(free / s.a.slots) * m);
+        best = Math.max(best, Math.min(Math.floor(free / s.a.slots), portsLeft(MUX, node)) * m);
       });
       return sum + best;
     }
@@ -903,7 +946,7 @@
       if (i > 0) {
         var from = up[i - 1];
         var a = (MUX[id].accepts || []).filter(function (x) { return x.of === from; })[0] || {};
-        step.from = from; step.count = a.count; step.overhead = a.overhead || { bytes: 0 };
+        step.from = from; step.count = effCount(MUX, id, a); step.overhead = a.overhead || { bytes: 0 };
         step.ohKbps = ohKbps(a);
         step.mapping = a.mapping; step.note = a.note;
         step.slots = a.slots || 0; step.fit = a.fit || '';
@@ -985,6 +1028,19 @@
         var opts = poolCandidates(MUX, n.u, X);
         if (opts.length) {
           var a = opts[0].a, free = tsFree(MUX, n);
+          if (portsFull(MUX, n) && a.slots <= free) {
+            var un0 = nameOf(MUX, n.u);
+            msg = un0 + ' tối đa ' + maxPorts(MUX, n.u) + ' cổng nhánh, đã dùng ' + n.kids.length + '; còn ' + free + ' TS trống — gỡ bớt con để nhường cổng.';
+            // gợi ý đường lồng: X nằm trong một ODU lớn hơn rồi ghép ODU đó vào bể
+            var alt = null;
+            slotOpts(MUX, n.u).forEach(function (so) {
+              if (so.a.of === X || !canReach(MUX, n.u, so.a.of, X)) return;
+              var m = maxCountNested(MUX, so.a.of, X);
+              if (!alt || m > alt.m) alt = { id: so.a.of, m: m, slots: so.a.slots };
+            });
+            if (alt && alt.m > 1) msg += ' Muốn nhiều ' + nameOf(MUX, X) + ' hơn: đặt chúng trong một ' + nameOf(MUX, alt.id) + ' (' + alt.slots + ' TS, 1 cổng) rồi ghép ODU đó vào ' + nameOf(MUX, n.u) + ' — qua ' + nameOf(MUX, alt.id) + ' chở được ' + alt.m + ' ' + nameOf(MUX, X) + '.';
+            return;
+          }
           if (a.slots > free) {
             var xn = nameOf(MUX, X), un = nameOf(MUX, n.u);
             msg = (a.of === X ? xn + ' cần ' + a.slots + ' TS' : xn + ' cần ' + nameOf(MUX, a.of) + ' (' + a.slots + ' TS)') +
@@ -1559,7 +1615,7 @@
       pathDown: pathDown, stepsUp: stepsUp, stepsUpVcg: stepsUpVcg, explainReject: explainReject, acceptsText: acceptsText, nameOf: nameOf, parentsOf: parentsOf,
       // bể tributary slot (OTN)
       isTs: isTs, chosen: chosen, choices: choices, choiceText: choiceText, optObj: optObj, slotOpts: slotOpts, hasPool: hasPool,
-      poolInfo: poolInfo, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,
+      poolInfo: poolInfo, maxCountNested: maxCountNested, portsBinding: portsBinding, maxPorts: maxPorts, portsFull: portsFull, portsLeft: portsLeft, effCount: effCount, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,
       poolShortage: poolShortage, routeHint: routeHint,
       guestLabs: guestLabs, guestHosts: guestHosts, placeGuest: placeGuest, guestPlaceable: guestPlaceable,
       // khoá ổn định trong bể TS

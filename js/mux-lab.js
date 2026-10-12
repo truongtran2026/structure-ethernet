@@ -365,10 +365,10 @@
           '<div class="box-kids ts-kids">' + pn.kids.map(function (k, i) {
             return renderBox(k, k.u, last.path.concat(i), depth + 1, String(i + 1), big, { ts: k.ts || [], hue: tsHue(i), pa: L().slotOptFor(M, pn.u, k.u) });
           }).join('') +
-          (free ? '<div class="lab-slot ts-free" data-drop="' + pkey(last.path) + '" role="button" tabindex="0" title="Thả ODU/tín hiệu vào bể TS của ' + esc(nm(pn.u)) + '">' +
+          (free && !L().portsFull(M, pn) ? '<div class="lab-slot ts-free" data-drop="' + pkey(last.path) + '" role="button" tabindex="0" title="Thả ODU/tín hiệu vào bể TS của ' + esc(nm(pn.u)) + '">' +
             '<span class="slot-name">' + free + ' TS trống</span><span class="slot-hint">thả ' + esc(L().slotOpts(M, pn.u).map(function (s) { return nm(s.a.of) + ' (' + s.a.slots + ')'; }).join(', ')) + ' hoặc tín hiệu khách hàng</span>' +
             (lb.armed && L().reaches(M, pn.u, lb.armed) ? '<button type="button" class="slot-open" data-lfillat="' + pkey(last.path) + '" title="Lấp các TS trống bằng ' + esc(nm(lb.armed)) + '">lấp đầy bằng ' + esc(nm(lb.armed)) + '</button>' : '') +
-            '</div>' : '<div class="muted ts-full">' + esc(nm(pn.u)) + ' đã dùng hết ' + pi.n + ' TS — gỡ bớt con (×) để trả lại TS.</div>') +
+            '</div>' : free ? '<div class="muted ts-full">' + esc(nm(pn.u)) + ' tối đa ' + L().maxPorts(M, pn.u) + ' cổng nhánh, đã dùng ' + pn.kids.length + '; còn ' + free + ' TS trống — gỡ bớt con (×) để nhường cổng.</div>' : '<div class="muted ts-full">' + esc(nm(pn.u)) + ' đã dùng hết ' + pi.n + ' TS — gỡ bớt con (×) để trả lại TS.</div>') +
           '</div>';
       }
     } else if (lu && lu.accepts && last.node.opt >= 0) {
@@ -414,7 +414,7 @@
     }
     var free = L().tsFree(MUX(), pn);
     return '<div class="ts-wrap"><div class="ts-legend muted">Bể ' + pi.n + ' tributary slot × ' + esc(TV().fmtRate(pi.kbps)) + (pi.note ? ' · ' + esc(pi.note) : '') +
-      ' · đã dùng ' + (pi.n - free) + ', trống ' + free + ' · cấp TS trống thấp nhất, không cần liền kề</div>' +
+      ' · đã dùng ' + (pi.n - free) + ', trống ' + free + (L().maxPorts(MUX(), pn.u) < Infinity ? ' · cổng nhánh ' + pn.kids.length + '/' + L().maxPorts(MUX(), pn.u) : '') + ' · cấp TS trống thấp nhất, không cần liền kề</div>' +
       '<div class="ts-bar" data-drop="' + pkey(path) + '" role="img" aria-label="' + esc('Tributary slot: ' + (pi.n - free) + '/' + pi.n + ' đã dùng') + '">' + cells + '</div></div>';
   }
 
@@ -547,7 +547,8 @@
         } else { used = c[id] || 0; cap = L().capacityNow(M, t, root, id); }
         var pct = cap ? used / cap * 100 : 0;
         return '<div class="ctr"><div class="ctr-top"><b>' + esc(nm(id)) + '</b><span class="ctr-num">' + used + '/' + cap +
-          (cap !== max ? ' <span class="muted" title="Tối đa nếu đổi phương án">(tối đa ' + max + ')</span>' : '') + '</span></div>' +
+          (cap !== max ? ' <span class="muted" title="Tối đa nếu đổi phương án">(tối đa ' + max + ')</span>' : '') +
+          (L().portsBinding && !isGuest[id] && !isVcgItem(id) && L().portsBinding(M, root, id) ? ' <span class="muted" title="Giới hạn cổng nhánh (maxPorts) của bể TS; muốn nhiều hơn: đặt trong ODU lớn rồi ghép vào OPUC (qua ODU lồng tối đa ' + L().maxCountNested(M, root, id) + ')">trực tiếp vào TS</span>' : '') + '</span></div>' +
           '<div class="ctr-bar"><span style="width:' + pct + '%"></span></div>' +
           '<button type="button" class="btn-ghost btn-sm" data-lfill="' + esc(id) + '"' + (used >= cap ? ' disabled' : '') + ' title="Lấp mọi chỗ còn trống bằng ' + esc(nm(id)) + '">Lấp đầy</button></div>';
       }).join('') + '</div>';
@@ -660,7 +661,7 @@
     var acc = (u.accepts || []).map(function (a) {
       var oh = a.overhead || {};
       return '<li><b>' + a.count + '×<a href="#" data-lunit="' + esc(a.of) + '">' + esc(nm(a.of)) + '</a></b>' +
-        (a.slots ? ' <span class="pill-ts">' + a.slots + ' TS mỗi cái</span>' : '') +
+        (a.slots ? ' <span class="pill-ts">' + a.slots + ' TS mỗi cái</span>' + (L().effCount(M, id, a) < a.count ? ' <span class="muted">(tối đa ' + L().effCount(M, id, a) + ' do giới hạn cổng nhánh)</span>' : '') : '') +
         (a.fit === 'le' ? ' <span class="muted">(≤, có chèn/khoảng trống)</span>' : '') +
         (a.carriedKbps != null ? ' <span class="pill-ts">mang ' + esc(TV().fmtRate(a.carriedKbps)) + (/GFP/.test(a.mapping || '') ? ' sau GFP-F' : ' sau transcode') + '</span>' : '') +
         (ohPhrase(a) ? ' ' + esc(ohPhrase(a)) : ' <span class="muted">(không thêm overhead)</span>') +

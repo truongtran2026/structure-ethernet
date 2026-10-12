@@ -132,8 +132,10 @@ for (const [key, u] of Object.entries(MUX)) {
       if ((ch.accepts || []).length && !ch.leafOk) err(`${aw}: con "${a.of}" vào TS phải là client hoặc leafOk`);
       const ts = u.tribSlots;
       if (!ts || !Number.isInteger(ts.n) || !(ts.kbps > 0)) { err(`${aw}: slots cần unit.tribSlots {n, kbps}`); continue; }
+      if (ts.maxPorts !== undefined && !(Number.isInteger(ts.maxPorts) && ts.maxPorts >= 1 && ts.maxPorts <= ts.n)) err(`${where}: tribSlots.maxPorts phải là số nguyên 1..n`);
       if (!Number.isInteger(a.slots) || a.slots < 1 || a.slots > ts.n) { err(`${aw}: slots sai`); continue; }
-      if (a.count !== Math.floor(ts.n / a.slots)) err(`${aw}: count phải = ⌊${ts.n}/${a.slots}⌋ = ${Math.floor(ts.n / a.slots)}`);
+      const cmax = Math.min(Math.floor(ts.n / a.slots), ts.maxPorts ?? Infinity);
+      if (a.count !== cmax) err(`${aw}: count phải = min(⌊${ts.n}/${a.slots}⌋, maxPorts) = ${cmax}`);
       if (childKbps > a.slots * ts.kbps * (1 + 1e-9)) err(`${aw}: ${childKbps} kbps > ${a.slots} TS × ${ts.kbps} = ${a.slots * ts.kbps}`);
       if (ts.n * ts.kbps > (hasB ? u.bytesPer125us * 64 : u.rateKbps) * (1 + 1e-9)) err(`${where}: tribSlots n × kbps vượt tốc độ unit`);
       continue;

@@ -119,6 +119,7 @@ hàng `r … r+h-1`. Dùng cho TUG-3 trong VC-4, TU-12 trong TUG-2…
 - `tribSlots` + các phương án có `slots` tạo thành **bể TS**: lab coi tất cả phương án có `slots` của
   cùng unit là MỘT lựa chọn "ghép TS" và cho **trộn** các loại con, miễn tổng `slots` ≤ `tribSlots.n`.
   `count` = ⌊n / slots⌋ (số tối đa khi chỉ dùng một loại). Phương án không có `slots` vẫn là lựa chọn riêng.
+- `tribSlots.maxPorts` (tuỳ chọn, GD7): số con tối đa trong bể TS (OPUCn: 10n cổng nhánh dù có 20n TS) — lab từ chối khi đủ số con dù còn TS.
 - `fit: "le"` (chỉ cho cha theo tốc độ): count × con + overhead.kbps ≤ cha (ánh xạ có chèn/khoảng trống,
   vd STM-16 vào OPU1, 100GbE vào OPU4). Không có `fit` thì phải bằng đúng như PDH.
 - `carriedKbps` (tuỳ chọn trên phương án): tốc độ thực sự mang sau transcode (1GbE TTT, 40GbE 1024B/1027B);
@@ -162,7 +163,7 @@ VC-4 nhận 3×TUG-3, mỗi TUG-3 tự chọn phương án riêng (7×TUG-2 ho�
    - cha theo tốc độ (ghép PDH) → `parent.rateKbps = count × tốc độ con + overhead.kbps` (danh định; chèn bit
      bù sai lệch, ghi trong desc).
    - Con có `accepts` mà không `leafOk` thì không phải client.
-   - `fit: "le"` → `≤` thay vì `=`; `slots` → cần `tribSlots`, `count = ⌊n/slots⌋`, (carriedKbps ?? tốc độ con) ≤ slots × tribSlots.kbps; con phải là client hoặc leafOk.
+   - `fit: "le"` → `≤` thay vì `=`; `slots` → cần `tribSlots`, `count = min(⌊n/slots⌋, maxPorts)`, (carriedKbps ?? tốc độ con) ≤ slots × tribSlots.kbps; con phải là client hoặc leafOk.
 5. Mọi `of`, `frame`, `unit`, `roots`, `palette` trỏ tới id có thật; id duy nhất; `desc`/`summary` không rỗng.
 6. Mọi frame có `unit` thì kích thước khớp (unit theo tốc độ: `frame.rateKbps = unit.rateKbps`): `rows × cols × cellBits / 8 × 125 / periodUs = unit.bytesPer125us`
    (bỏ qua nếu unit có rateKbps).

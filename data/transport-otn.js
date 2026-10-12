@@ -624,8 +624,9 @@ window.TLABS = window.TLABS || [];
   // =====================================================================
   L.push({
     id: "otn", name: "Ghép kênh OTN", family: "otn",
-    roots: ["otu1", "otu2", "otu2e", "otu3", "otu4"],
-    palette: ["1gbe", "eth-1g-gfpf", "stm-16", "fc-800", "10gbe", "eth-10g-gfpf", "stm-64", "40gbe", "eth-40g-gfpf", "stm-256", "100gbe", "odu0", "oduflex-gfp-1", "odu1", "oduflex-fc800", "oduflex-gfp-8", "odu2", "odu2e", "oduflex-gfp-32", "odu3"],
-    intro: "Chọn OTUk đích rồi lắp từ dưới lên: client → OPUk (ánh xạ AMP/BMP/GMP) → ODUk (+ ODU OH) → OTUk (+ FEC). Chọn 'ghép TS' để trộn ODU0 / ODU1 / ODU2 / ODUflex trong cùng một OPU theo tributary slot 1,25G – miễn tổng TS không vượt (2, 8, 32 hoặc 80). Thử thả 10GbE vào OPU2 hay 40GbE chưa chuyển mã để thấy vì sao cần ODU2e và 1024B/1027B. So sánh với Ethernet chỉ mang khung MAC (GFP-F): 10G GFP-F vừa thẳng OPU2 hoặc ODUflex(GFP) 8 TS; ODUflex(GFP) 32 TS vào OPU3 nhưng không vào OPU2, và ở OPU4 vẫn chiếm 32 TS (ODU3 chỉ 31)."
+    // GD7: roots otuc*/flexo-* và các unit OPUCn/ODUCn định nghĩa trong data/transport-b100g.js (trang phải nạp file đó).
+    roots: ["otu1", "otu2", "otu2e", "otu3", "otu4", "otuc1", "otuc2", "otuc4", "flexo-1", "flexo-2", "flexo-4"],
+    palette: ["1gbe", "eth-1g-gfpf", "stm-16", "fc-800", "10gbe", "eth-10g-gfpf", "stm-64", "40gbe", "eth-40g-gfpf", "stm-256", "100gbe", "odu0", "oduflex-gfp-1", "odu1", "oduflex-fc800", "oduflex-gfp-8", "odu2", "odu2e", "oduflex-gfp-32", "odu3", "odu4"],
+    intro: "Chọn OTUk đích rồi lắp từ dưới lên: client → OPUk (ánh xạ AMP/BMP/GMP) → ODUk (+ ODU OH) → OTUk (+ FEC). Chọn 'ghép TS' để trộn ODU0 / ODU1 / ODU2 / ODUflex trong cùng một OPU theo tributary slot 1,25G – miễn tổng TS không vượt (2, 8, 32 hoặc 80). Thử thả 10GbE vào OPU2 hay 40GbE chưa chuyển mã để thấy vì sao cần ODU2e và 1024B/1027B. So sánh với Ethernet chỉ mang khung MAC (GFP-F): 10G GFP-F vừa thẳng OPU2 hoặc ODUflex(GFP) 8 TS; ODUflex(GFP) 32 TS vào OPU3 nhưng không vào OPU2, và ở OPU4 vẫn chiếm 32 TS (ODU3 chỉ 31). Beyond 100G: OTUC1/2/4 chỉ chở ODUk qua TS 5G (20 TS mỗi lát 100G) – ODU0/ODU1 tốn trọn 1 TS 5G, ODU2 2 TS, ODU3 8 TS, ODU4 20 TS; OTUC4 chở 4 ODU4 hoặc 40 ODU2. FlexO-n bọc OTUCn thêm AM/EOH/BOH (FEC thêm ở giao diện)."
   });
 })();

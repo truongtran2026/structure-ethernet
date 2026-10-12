@@ -14,7 +14,38 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD4 | Ethernet qua SDH: GFP-F (mảng IP), VCAT/LCAS (VC-n-Xv), lab SDH nhận Ethernet; tồn đọng GD3 | xong 2026-10-12 (review G.707 01/2007, G.7042 03/2006, G.7041 08/2016: 2 vòng ĐẠT; QA ĐẠT) |
 | GD5 | ODUflex(GFP) + Ethernet GFP-F vào OTN; tồn đọng GD4 (đóng gói từng bước EoS, CẦN KIỂM cũ); sửa M1/M0 STM-N | xong 2026-10-12 (review G.709 02/2012, G.707 01/2007 ảnh Hình 9-3…9-7: 2 vòng; QA ĐẠT) |
 | GD6 | Ôn tập (quiz tự sinh từ dữ liệu, 12 dạng) + Máy tính tốc độ (js/quiz.js, js/calc.js); định dạng số thống nhất; ghi chú P1/Q1 | xong 2026-10-12 (QA ĐẠT; lọc câu lộ đáp án) |
-| Sau | OTUCn/FlexO (cần G.709 ≥ 2016 — chưa tải được); FlexE | chờ |
+| GD7 | OTUCn (OTUC/ODUC/OPUC, n = 1, 2, 4; TS 5G, maxPorts 10n) + FlexO (G.709.1 03/2024) | xong 2026-10-12 (review G.709 06/2020 + G.709.1 03/2024: 3 SAI mô tả đã sửa; QA test ĐẠT) |
+| Sau | FlexE (OIF); Ethernet 200/400GbE vào ODUflex | chờ |
+
+## GD7 — OTUCn + FlexO (file mới `data/transport-b100g.js`) — G.709 (06/2020), G.709.1 (03/2024)
+
+Nguồn text (scratchpad g709new/): `g709_2020_part.txt` (trích từ 10 MB đầu của PDF 15 MB — đủ §11–§15, §19–20 cần thì kiểm; lỗi font nhẹ "ȝs" = µs),
+`g7091.txt` (G.709.1 trọn). Trích số mục theo hai bản này. Nếu mục cần thiết không có trong bản dở → ghi CHƯA XÁC MINH, đừng đoán.
+
+Tốc độ (orchestrator đã tính, khớp text): OTUC = ODUC = 239/226 × 99 532 800 ≈ 105 258 138,053 kbit/s (không FEC trong OTUC — FEC ở giao diện FlexO);
+OPUC payload = 238/226 × 99 532 800 ≈ 104 817 727,434 (khớp "n × 104 817 727.434 kbit/s (OPUCn Payload)"); TS 5G = OPUC/20 ≈ 5 240 886,372;
+khung OTUC 4 × 3824 byte, chu kỳ ≈ 1,1626 µs; FlexO-n = n × 491384/462961 × 99 532 800 ≈ n × 105 643 510,782 (= 4112/4097 × OTUC, G.709.1 Bảng 8-1);
+khung FlexO 128 × 5140 bit, chu kỳ ≈ 6,228 µs, đa khung 8 (MFAS 3 bit thấp).
+Tỉ lệ ODUk / TS 5G: ODU0 0,24; ODU1 0,48; ODU2 1,92; ODU2e 1,98; ODU3 7,69; ODU4 20,00 → số TS theo bảng chuẩn (ODU0/ODU1 1 TS "không lấp đầy khe").
+
+### Unit (TMUX), family `otn`
+| id | kind | rateKbps | accepts |
+| --- | --- | --- | --- |
+| `opuc1` / `opuc2` / `opuc4` | opu | n × OPUC | TS: `tribSlots` n = 20n, `maxPorts` = 10n (§20, NOTE 3 §7.4), kbps = TS 5G; slots theo chuẩn cho odu0, odu1, odu2, odu2e, odu3, odu4, oduflex-* (GMP) |
+| `oduc1` / `oduc2` / `oduc4` | odu | n × ODUC | 1×opucN + ODUC OH (+ OPUC OH) |
+| `otuc1` / `otuc2` / `otuc4` | otu | n × OTUC (= ODUCn) | 1×oducN + OTUC OH (overhead.kbps = 0 hoặc đúng theo chuẩn — OTUC không FEC; FA/OTUC OH nằm ở hàng 1 cột 1–14 của mỗi lát) |
+| `flexo-1` / `flexo-2` / `flexo-4` | otu (hoặc kind mới nếu cần, báo orchestrator) | n × FlexO | 1×otucN BMP (G.709.1 §10.1), overhead = AM + EOH + BOH + fixed stuff (tỉ lệ 4112/4097; tốc độ FlexO-n KHÔNG gồm FEC – G.709.1 §7.1, Bảng 8-1; sửa theo transport-expert) |
+
+### Frame (TFRAMES), family `otn`, category "OTUCn / FlexO"
+| id | Lưới | Ghi chú |
+| --- | --- | --- |
+| `otuc` | 4 × 3824 byte (một lát OTUC) | FA OH, OTUC OH (SM, GCC0, RES cột 13–14 – OTUCn không có OSMC, Hình 15-12), ODUC OH, OPUC OH (PSI, OMFI, TSOH/JC cho TS 5G), payload 3808 cột; không có vùng FEC. Desc: OTUCn = n lát OTUC ghép xen (theo chuẩn), OH lát #1 khác các lát #2..n ở đâu. unit `otuc1` |
+| `opuc-ts` | 4 × 3810 (cột 15–3824) | OPUC 20 TS 5G: bố cục TS theo chuẩn (190,4 cột/TS — nếu không biểu diễn chính xác bằng rect thì mô tả trong desc, không vẽ sai) |
+| `flexo` | 128 × 5140 bit (cellBits 1) | AM hàng 1 cột 1–480, EOH 481–960, BOH 961–1280, payload; bitFields BOH/EOH chính theo G.709.1 §9; đa khung 8. unit `flexo-1` |
+
+### Lab
+`otn`: roots thêm `otuc1`, `otuc2`, `otuc4`, `flexo-1`, `flexo-2`, `flexo-4`; palette thêm `odu4` (chưa có). Điểm học: ODU0/ODU1 tốn trọn 1 TS 5G;
+OTUC4 chở 4 ODU4 hoặc 40 ODU2…; FlexO thêm FEC/AM bên ngoài OTUCn.
 
 ## GD5 — ODUflex(GFP) + Ethernet GFP-F vào OTN (thêm vào `data/transport-otn.js`) — G.709 (02/2012) §7, §12.2.5, §17.4, §19; Bảng 7-8, 7-9
 
@@ -244,3 +275,5 @@ Byte/125 µs (validator kiểm):
 ### Lab (TLABS)
 
 `sdh`: roots stm-1…stm-256; palette e1, e3, e4, c-12, vc-12, tu-12, tug-2, c-3, vc-3, tu-3, tug-3, c-4, vc-4, au-4, aug-1, aug-4.
+
+Ghi chú GD7: G.709 (06/2020) đã bỏ FTFL và TCM ACT; khung OTUk ở transport-otn.js vẫn vẽ theo bản 02/2012 (ghi rõ trong standard) — cập nhật sau nếu cần.

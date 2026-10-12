@@ -551,13 +551,14 @@
         if (!(palette[X] || L.isClient(M, X))) return;
         var via = 'tree', n = L.maxCount(M, R, X);
         if (!n && M[X].members) { n = L.vcgMax(M, R, X); via = 'vcg'; }
+        if (n >= 2 && L.portsBinding && L.portsBinding(M, R, X)) return; // maxPorts ràng buộc: số trực tiếp ≠ số qua đường lồng → câu hai nghĩa
         if (n >= 2) pairs.push({ R: R, X: X, n: n, via: via, topic: unitIsEos(M, X) || unitIsEos(M, R) ? 'eos' : (M[R].family || 'sdh') });
       });
     });
     pairs.forEach(function (p) {
       out.push({ key: 'u-max|' + p.R + '|' + p.X, topic: p.topic, type: 'u-max', make: function (rng) {
         var pool = pairs.filter(function (o) { return o.topic === p.topic; }).map(function (o) { return o.n; });
-        (M[p.R].accepts || []).forEach(function (a) { pool.push(a.count); });
+        (M[p.R].accepts || []).forEach(function (a) { pool.push(L.effCount(M, p.R, a)); });
         var fmtC = function (v) { return fmtNum(v, 0); };
         var d = numDistractors(p.n, pool, fmtC, rng) || numDistractors(p.n, pairs.map(function (o) { return o.n; }), fmtC, rng);
         var q = { prompt: 'Một ' + nm(p.R) + ' chứa tối đa bao nhiêu ' + nm(p.X) + '?',
@@ -604,6 +605,7 @@
       });
     });
     var slotPool = uniq(tsl.map(function (x) { return x.a.slots; }).concat(ids.filter(function (B) { return M[B].tribSlots; }).map(function (B) { return M[B].tribSlots.n; })));
+    tsl = tsl.filter(function (x) { return !(L.effCount && L.effCount(M, x.B, x.a) < x.a.count); }); // bỏ ODU0/ODU1... trong OPUCn (maxPorts ràng buộc)
     tsl.forEach(function (x) {
       out.push({ key: 'u-ts|' + x.B + '|' + x.a.of, topic: x.topic, type: 'u-ts', make: function (rng) {
         var t = M[x.B].tribSlots, fmtT = function (v) { return fmtNum(v, 0) + ' TS'; };
@@ -612,7 +614,7 @@
         if (!oname) return null;
         var q = { prompt: 'Trong ' + nm(x.B) + ' (' + t.n + ' tributary slot' + (t.size ? ' × ' + t.size : '') + '), một ' + oname + ' chiếm bao nhiêu tributary slot?',
           objNames: [oname],
-          explain: (x.a.note || M[x.a.of].summary || '') + (x.a.mapping ? ' Ánh xạ: ' + x.a.mapping + '.' : '') + ' Tối đa ' + x.a.count + ' ' + nm(x.a.of) + ' khi chỉ dùng loại này.',
+          explain: (x.a.note || M[x.a.of].summary || '') + (x.a.mapping ? ' Ánh xạ: ' + x.a.mapping + '.' : '') + ' Tối đa ' + (L.effCount ? L.effCount(M, x.B, x.a) : x.a.count) + ' ' + nm(x.a.of) + ' khi chỉ dùng loại này.',
           open: openUnit(D, x.a.of, x.B), check: { B: x.B, of: x.a.of } };
         return assemble(q, fmtT(x.a.slots), d, rng);
       } });
@@ -630,7 +632,7 @@
       (M[cur].accepts || []).forEach(function (a) {
         if (pick) return;
         var m = a.of === X ? 1 : L.maxCount(M, a.of, X);
-        if (m > 0 && a.count * m === want) pick = a;
+        if (m > 0 && L.effCount(M, cur, a) * m === want) pick = a;
       });
       if (!pick) break;
       steps.push({ from: cur, a: pick });
@@ -640,10 +642,10 @@
       var p = L.pathDown(M, R, X);
       return 'Theo cây ghép: ' + (p ? p.map(nm).join(' → ') : '') + '.';
     }
-    var prod = steps.reduce(function (t, s) { return t * s.a.count; }, 1);
+    var prod = steps.reduce(function (t, s) { return t * L.effCount(M, s.from, s.a); }, 1);
     return 'Nhân các count dọc chuỗi: ' +
-      steps.map(function (s) { return nm(s.from) + ' = ' + s.a.count + ' × ' + nm(s.a.of); }).join('; ') +
-      ' ⇒ ' + steps.map(function (s) { return s.a.count; }).join(' × ') + ' = ' + fmtNum(prod, 0) +
+      steps.map(function (s) { return nm(s.from) + ' = ' + L.effCount(M, s.from, s.a) + ' × ' + nm(s.a.of); }).join('; ') +
+      ' ⇒ ' + steps.map(function (s) { return L.effCount(M, s.from, s.a); }).join(' × ') + ' = ' + fmtNum(prod, 0) +
       ' ' + nm(X) + (prod === n ? '' : ' (tối đa ' + fmtNum(n, 0) + ')') + '.';
   }
   /**
