@@ -15,6 +15,7 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD5 | ODUflex(GFP) + Ethernet GFP-F vào OTN; tồn đọng GD4 (đóng gói từng bước EoS, CẦN KIỂM cũ); sửa M1/M0 STM-N | xong 2026-10-12 (review G.709 02/2012, G.707 01/2007 ảnh Hình 9-3…9-7: 2 vòng; QA ĐẠT) |
 | GD6 | Ôn tập (quiz tự sinh từ dữ liệu, 12 dạng) + Máy tính tốc độ (js/quiz.js, js/calc.js); định dạng số thống nhất; ghi chú P1/Q1 | xong 2026-10-12 (QA ĐẠT; lọc câu lộ đáp án) |
 | GD7 | OTUCn (OTUC/ODUC/OPUC, n = 1, 2, 4; TS 5G, maxPorts 10n) + FlexO (G.709.1 03/2024) | xong 2026-10-12 (review G.709 06/2020 + G.709.1 03/2024: 3 SAI mô tả đã sửa; QA test ĐẠT) |
+| GD8 | Khung OTUk/ODUk theo G.709 06/2020: TCM ACT, FTFL → EXP (4 byte); cập nhật số mục/bảng/hình theo bản 2020 | xong 2026-10-12 (review G.709 06/2020 + đối chiếu 02/2012: 0 SAI ở otn.js, 1 SAI số mục ở b100g.js đã sửa; test ĐẠT) |
 | Sau | FlexE (OIF); Ethernet 200/400GbE vào ODUflex | chờ |
 
 ## GD7 — OTUCn + FlexO (file mới `data/transport-b100g.js`) — G.709 (06/2020), G.709.1 (03/2024)
@@ -161,7 +162,7 @@ ODU3/TS OPU4 = 30,97 → 31; FC-800 ODUflex/TS = 6,83 (OPU2), 6,56 (OPU4) → 7.
 
 | id | category | Lưới | Chu kỳ | Ghi chú |
 | --- | --- | --- | --- | --- |
-| `otu2` | Khung OTUk | 4×4080 byte | 4·4080·8·1000 / rate | Chi tiết từng byte (OPU OH kiểu AMP; otu4 dùng biến thể GMP): FAS (OA1×3 0xF6, OA2×3 0x28), MFAS (đa khung 256), SM (TTI/BIP-8/byte 3 bitFields BEI/BIAE·BDI·IAE·RES), GCC0, OTU RES/OSMC theo bản G.709 đang trích; ODU OH: RES, PM&TCM, TCM ACT, TCM1–6, FTFL, PM, EXP, GCC1/2, APS/PCC, RES; PM byte 3 bitFields; OPU OH chung (JC/RES, PSI, NJO); payload; FEC. `multiframe` 256 (TTI 64 byte, PSI 256). unit `otu2` |
+| `otu2` | Khung OTUk | 4×4080 byte | 4·4080·8·1000 / rate | Chi tiết từng byte (OPU OH kiểu AMP; otu4 dùng biến thể GMP): FAS (OA1×3 0xF6, OA2×3 0x28), MFAS (đa khung 256), SM (TTI/BIP-8/byte 3 bitFields BEI/BIAE·BDI·IAE·RES), GCC0, OTU RES/OSMC theo bản G.709 đang trích; ODU OH (G.709 06/2020 Hình 15-17): RES, PM&TCM, EXP (hàng 2 cột 4, 14; hàng 3 cột 13–14), TCM1–6, PM, GCC1/2, APS/PCC, RES; PM byte 3 bitFields; OPU OH chung (JC/RES, PSI, NJO); payload; FEC. `multiframe` 256 (TTI 64 byte, PSI 256). unit `otu2` |
 | `otu1`, `otu2e`, `otu3`, `otu4` | Khung OTUk | 4×4080 | theo tốc độ | Sinh bằng hàm cùng bố cục `otu2`, đổi chu kỳ/tốc độ/ghi chú (OTU4: FEC bắt buộc §11.1, OPU OH kiểu GMP; OTU2e: G.Sup43, OPU2e BMP PT 0x03) |
 | `opu1-amp` | Ánh xạ vào OPU | 4×3810 (cột 15–3824) | = OTU1 | OPU1 chở STM-16 AMP (§17.2): JC hàng 1–3 cột 16, NJO hàng 4 cột 16, PJO hàng 4 cột 17, PSI; bitFields JC; không gán `unit` (unit opu1 = chỉ payload) — unit `opu1`.frame trỏ tới |
 | `opu2-ts` | Ánh xạ vào OPU | 4×3810 | = OTU2 | OPU2 PT 21, 8 TS 1,25G ghép xen theo cột (step 8 từ cột 17); OH JC theo TS xoay vòng MFAS mod 8 (`multiframe` 8, `perFrame`), PSI (PT + MSI), OMFI không dùng ở OPU2 |
@@ -276,4 +277,4 @@ Byte/125 µs (validator kiểm):
 
 `sdh`: roots stm-1…stm-256; palette e1, e3, e4, c-12, vc-12, tu-12, tug-2, c-3, vc-3, tu-3, tug-3, c-4, vc-4, au-4, aug-1, aug-4.
 
-Ghi chú GD7: G.709 (06/2020) đã bỏ FTFL và TCM ACT; khung OTUk ở transport-otn.js vẫn vẽ theo bản 02/2012 (ghi rõ trong standard) — cập nhật sau nếu cần.
+Ghi chú GD7/GD8: G.709 (06/2020) đã bỏ FTFL (§15.8.2.5) và TCM ACT (§15.8.2.2.7); từ GD8 khung OTUk ở transport-otn.js vẽ theo bản 06/2020 (hai byte đó thành EXP), desc giữ một câu lịch sử bản 2012.

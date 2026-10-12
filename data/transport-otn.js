@@ -1,11 +1,14 @@
 // Mảng Truyền dẫn – GD3: OTN (khung OTUk, ODUk/OPUk overhead, FEC, ODU0/ODUflex, tributary slot 1,25G, lab OTN).
 // GD5: ODUflex(GFP) 1/8/32 TS + Ethernet GFP-F vào OPU2/OPU3 (client eth-*-gfpf định nghĩa trong data/transport-eos.js).
 // Schema: .claude/skills/transport-frame-spec/references/transport-schema.md (mục "Mở rộng OTN (GD3)")
-// Nguồn: ITU-T G.709/Y.1331 (02/2012) + Amd.4 (01/2015) – bản đã đối chiếu nguyên văn; đánh số mục theo bản 2012
-//        (đánh số bản 06/2020 CHƯA XÁC MINH): khung §11–13, overhead §15 (FA OH §15.6, OTU OH §15.7 – Hình 15-9,
-//        ODU OH §15.8 – Hình 15-12, OPU OH §15.9), bảo trì §16, ánh xạ client §17, ghép ODTU/TS §19, FEC Annex A,
-//        GMP Annex D; OSMC theo Amd.4 §15.7.2.3/15.7.2.4; G.873.1 (APS ODU, chỉ bố cục byte);
-//        ITU-T G.Sup43 (02/2011) cho OTU2e (IaDI, Bảng 8-1).
+// GD8: cập nhật theo ITU-T G.709/Y.1331 (06/2020) – đã đối chiếu nguyên văn (text + render hình/bảng PDF):
+//   FA OH §15.6 (Hình 15-9), OTU OH §15.7 (Hình 15-12), ODU OH §15.8 (Hình 15-17…15-19), OPU OH §15.9 (Hình 15-26);
+//   bảng: 7-1/7-2/7-3 (tốc độ), 7-8 (ODUflex(GFP,n,k)), 7-9 (số TS), 15-1 (BEI/BIAE OTU), 15-3 (OSMC), 15-4/15-5 (PM BEI/STAT),
+//   15-7 (TCM STAT), 15-8 (APS/PCC theo MFAS), 15-9 (PT); khung §11–13, bảo trì §16, ánh xạ client §17 (CBR §17.2/17.7, GFP §17.4,
+//   BMP §17.9), §18 để trống, ghép ODTU/TS §19 (MSI §19.4.1, OMFI §19.4.4, GMP §19.6), FEC Annex A, GMP Annex D, Phụ lục XI.
+//   Thay đổi so với bản 02/2012 + Amd.4: FTFL (§15.8.2.5) và TCM ACT (§15.8.2.2.7) không còn – hai byte đó thành EXP;
+//   OSMC đã nằm trong thân chuẩn (Bảng 15-3); VCAT OPUk-Xv (§18) bỏ; số hình/bảng §17/§19 đã đánh số lại.
+//   G.873.1 (APS ODU, chỉ bố cục byte); ITU-T G.Sup43 (02/2011) cho OTU2e (IaDI, Bảng 8-1).
 // CHƯA XÁC MINH: mã Request/State của APS/PCC (G.873.1).
 // Nạp SAU data/transport-sdh.js (OPU1/2/3 nhận stm-16/64/256 định nghĩa ở đó).
 window.TFRAMES = window.TFRAMES || {};
@@ -14,7 +17,7 @@ window.TLABS = window.TLABS || [];
 
 (function () {
   var F = window.TFRAMES, M = window.TMUX, L = window.TLABS;
-  var STD = "ITU-T G.709/Y.1331 (02/2012) + Amd.4 (01/2015)";
+  var STD = "ITU-T G.709/Y.1331 (06/2020)";
 
   // Tạo region. rect = [r, c, h, w, step?] (0-based).
   function R(id, abbr, name, kind, rect, desc, extra) {
@@ -86,7 +89,7 @@ window.TLABS = window.TLABS || [];
   }
 
   // APS/PCC: ý nghĩa đổi theo MFAS bit 6–8 (MFAS mod 8).
-  var APS_LAYER = ["ODUk path (PM), SNC/Ne, CL-SNCG/I, Client SNC/I, SRP-p", "TCM1", "TCM2", "TCM3", "TCM4", "TCM5", "TCM6", "ODUk server layer trail (OTUk hoặc HO ODUk) – ODUk SNC/I"];
+  var APS_LAYER = ["ODUk path (PM), SNC/Ne, CL-SNCG/I, Client SNC/I, SRP-p", "TCM1", "TCM2", "TCM3", "TCM4", "TCM5", "TCM6 (kể cả ODU SRP-1)", "ODUk server layer trail (OTUk hoặc HO ODUk) – ODUk SNC/I"];
   var APS_ABBR = ["APS PM", "APS TCM1", "APS TCM2", "APS TCM3", "APS TCM4", "APS TCM5", "APS TCM6", "APS server"];
   var APS_BITS = [
     { name: "Request/State", abbr: "Req/State", bits: 4, desc: "Yêu cầu/trạng thái bảo vệ: Lockout, Forced Switch, Signal Fail, Signal Degrade, Manual Switch, Wait-to-Restore, Exercise, Reverse Request, Do Not Revert, No Request… (mã theo G.873.1 – CHƯA XÁC MINH mã Req/State)." },
@@ -100,20 +103,8 @@ window.TLABS = window.TLABS || [];
   ];
   var APS_PF = APS_LAYER.map(function (lay, j) {
     return { frames: frames(256, function (k) { return k % 8 === j; }), abbr: APS_ABBR[j], name: "APS/PCC cho " + lay + " (MFAS bit 6–8 = " + ("00" + j.toString(2)).slice(-3) + ")",
-      desc: "Khi MFAS mod 8 = " + j + ", 4 byte APS/PCC mang kênh bảo vệ tự động cho " + lay + " (G.709 §15.8.2.4, Bảng 15-6).", bitFields: APS_BITS };
+      desc: "Khi MFAS mod 8 = " + j + ", 4 byte APS/PCC mang kênh bảo vệ tự động cho " + lay + " (G.709 §15.8.2.4, Bảng 15-8).", bitFields: APS_BITS };
   });
-
-  var FTFL_FAULT = [
-    { name: "Fault indication code", abbr: "Fault", bits: 8, desc: "Mã loại lỗi: 0x00 = không lỗi; 0x01 = Signal Fail; 0x02 = Signal Degrade; 0x03–0xFF dự trữ." }
-  ];
-  var FTFL_PF = [
-    { frames: [0], abbr: "Fwd fault", name: "FTFL byte 0 – Forward fault type indication", desc: "Loại lỗi theo chiều đi (phía trước, nơi phát sinh AIS).", bitFields: FTFL_FAULT },
-    { frames: frames(256, function (k) { return k >= 1 && k <= 9; }), abbr: "Fwd OpID", name: "FTFL byte 1–9 – Forward operator identifier", desc: "Định danh nhà khai thác nơi xảy ra lỗi chiều đi (§15.8.2.5.2, Hình 15-22): byte 1–3 = mã quốc gia ISO 3166 (3 ký tự); byte 4–9 = ICC (mã nhà khai thác, 1–6 ký tự theo M.1400), đệm NUL." },
-    { frames: frames(256, function (k) { return k >= 10 && k <= 127; }), abbr: "Fwd Op-spec", name: "FTFL byte 10–127 – Forward operator-specific", desc: "Thông tin riêng nhà khai thác về lỗi chiều đi (vd. vị trí chi tiết)." },
-    { frames: [128], abbr: "Bwd fault", name: "FTFL byte 128 – Backward fault type indication", desc: "Loại lỗi theo chiều về (báo ngược, đi kèm BDI).", bitFields: FTFL_FAULT },
-    { frames: frames(256, function (k) { return k >= 129 && k <= 137; }), abbr: "Bwd OpID", name: "FTFL byte 129–137 – Backward operator identifier", desc: "Định danh nhà khai thác nơi xảy ra lỗi chiều về, cấu trúc như chiều đi: byte 129–131 = mã quốc gia ISO 3166 (3 ký tự); byte 132–137 = ICC (1–6 ký tự theo M.1400), đệm NUL." },
-    { frames: frames(256, function (k) { return k >= 138; }), abbr: "Bwd Op-spec", name: "FTFL byte 138–255 – Backward operator-specific", desc: "Thông tin riêng nhà khai thác về lỗi chiều về." }
-  ];
 
   // PSI: PSI[0] PT, PSI[1] RES, PSI[2] CSF (bit 1) + RES (bit 2–8) cho CBR/GMP, PSI[3–255] RES.
   // msi (tuỳ chọn) = { last, desc, bitFields }: khi ghép ODU (PT 20/21) PSI[2…last] là MSI (không có CSF), phần còn lại RES.
@@ -123,7 +114,7 @@ window.TLABS = window.TLABS || [];
   function psiPF(pt, ptDesc, msi) {
     var out = [
       { frames: [0], abbr: "PT", name: "PSI[0] – Payload Type", desc: "Kiểu tải PT = " + pt + ": " + ptDesc + " Đầu thu so với PT mong đợi; sai → PLM (Payload Mismatch).",
-        bitFields: [{ name: "Payload type", abbr: "PT", bits: 8, desc: "Mã kiểu tải (G.709 Bảng 15-8): 0x02 ánh xạ CBR không đồng bộ (AMP), 0x03 CBR đồng bộ bit (BMP), 0x05 GFP, 0x07 Ethernet chuyển mã/PCS (1GbE, 40GbE, 100GbE GMP), 0x20 ghép ODU chỉ ODTUjk (AMP), 0x21 ghép ODU ODTUk.ts (GMP + AMP), 0xFD NULL test, 0xFE PRBS…" }] },
+        bitFields: [{ name: "Payload type", abbr: "PT", bits: 8, desc: "Mã kiểu tải (G.709 §15.9.2.1.1, Bảng 15-9): 0x02 ánh xạ CBR không đồng bộ (AMP), 0x03 CBR đồng bộ bit (BMP), 0x05 GFP, 0x07 Ethernet chuyển mã/PCS (1000BASE-X vào OPU0, 40GBASE-R vào OPU3, 100GBASE-R vào OPU4), 0x09 GFP vào OPU2 mở rộng, 0x0F FC-800 vào OPUflex, 0x20 ghép ODU chỉ ODTUjk (AMP), 0x21 ghép ODU ODTUk.ts (GMP + AMP), 0x22 ghép ODU vào OPUCn (ODTUCn.ts), 0xFD NULL test, 0xFE PRBS…" }] },
       { frames: [1], abbr: "RES", name: "PSI[1] – Reserved", desc: "Byte dự trữ, đặt 0 (CSF không nằm ở đây mà ở PSI[2])." }];
     if (msi) {
       out.push({ frames: frames(256, function (k) { return k >= 2 && k <= msi.last; }), abbr: "MSI", name: "PSI[2–" + msi.last + "] – Multiplex Structure Identifier", desc: msi.desc, bitFields: msi.bitFields });
@@ -134,7 +125,7 @@ window.TLABS = window.TLABS || [];
     }
     return out;
   }
-  // MSI (§19.4.1, Hình 19-17…19-20B)
+  // MSI (§19.4.1, Hình 19-19…19-24B)
   var MSI_OPU2 = [
     { name: "ODTU type", abbr: "Type", bits: 2, desc: "Loại ODTU của TS (OPU2, PT 21): 00 = ODTU12, 01 = dự trữ, 10 = ODTU2.ts, 11 = chưa cấp." },
     { name: "Tributary port number − 1", abbr: "Port−1", bits: 6, desc: "Bit 3–8: số cổng nhánh (tributary port) trừ 1 mà TS này thuộc về." }];
@@ -178,7 +169,7 @@ window.TLABS = window.TLABS || [];
     });
     ["JC4", "JC5", "JC6"].forEach(function (n, i) {
       out.push(R(pfx + n.toLowerCase(), n, "GMP " + n + " – ΣCnD / CRC-5", "opu-oh", [i, cOff, 1, 1],
-        "Byte " + n + " (hàng " + (i + 1) + ", cột 15): JC4–JC5 mang ΣCnD (D1–D10) – phần lẻ tích luỹ dưới mức byte để đầu thu khôi phục chính xác pha/tần số đồng hồ client (giảm jitter); JC6 mang CRC-5 bảo vệ D1–D10 (Annex D §D.4, Hình 17-16/19-14C). 3 bit đầu dự trữ.", { bitFields: JC456[n] }));
+        "Byte " + n + " (hàng " + (i + 1) + ", cột 15): JC4–JC5 mang ΣCnD (D1–D10) – phần lẻ tích luỹ dưới mức byte để đầu thu khôi phục chính xác pha/tần số đồng hồ client (giảm jitter); JC6 mang CRC-5 bảo vệ D1–D10 (Annex D §D.4, Hình 17-15 cho OPU4, Hình 19-18C cho ODTUk.ts). 3 bit đầu dự trữ.", { bitFields: JC456[n] }));
     });
     return out;
   }
@@ -200,7 +191,7 @@ window.TLABS = window.TLABS || [];
                   R("oa2", "OA2", "Framing byte OA2", "fas", [0, 3, 1, 3], "Byte đồng bộ khung thứ hai, cố định 0x28 (00101000), 3 byte.", { values: [{ v: "0x28", m: "00101000" }] })
                 ] }),
             R("mfas", "MFAS", "MultiFrame Alignment Signal", "fas", [0, 6, 1, 1],
-              "Bộ đếm đa khung 0–255, tăng 1 mỗi khung. Mọi overhead trải trên nhiều khung đều căn theo MFAS: TTI 64 byte (MFAS mod 64), PSI và FTFL 256 byte, APS/PCC theo MFAS bit 6–8, TSOH của OPU2/OPU3 theo MFAS bit 6–8 / 4–8. Mất căn đa khung → LOM.", {
+              "Bộ đếm đa khung 0–255, tăng 1 mỗi khung. Mọi overhead trải trên nhiều khung đều căn theo MFAS: TTI 64 byte (MFAS mod 64), PSI 256 byte (§15.9.2.1), APS/PCC theo MFAS bit 6–8, TSOH của OPU2/OPU3 theo MFAS bit 6–8 / 4–8. Mất căn đa khung → LOM.", {
                 values: [{ v: "0x00…0xFF", m: "số thứ tự khung trong đa khung 256" }],
                 bitFields: [{ name: "Multiframe counter", abbr: "MFAS", bits: 8, desc: "Bit 1 là MSB, bit 8 là LSB. Các bit thấp (bit 6–8 = MFAS mod 8, bit 3–8 = mod 64) dùng để chọn byte của các đa khung con." }] })
           ] }),
@@ -215,32 +206,32 @@ window.TLABS = window.TLABS || [];
             R("gcc0", "GCC0", "General Communication Channel 0", "soh", [0, 10, 1, 2],
               "Kênh truyền thông chung giữa hai điểm kết cuối OTU (cột 11–12, 2 byte/khung, không định dạng sẵn) – dùng làm DCN/kênh quản lý giống DCC_R của SDH. Tốc độ ≈ " + vn(o.rate * 16 / (4 * 4080 * 8), 1) + " kbit/s ở " + oK + "."),
             R("osmc", "OSMC", "OTN Synchronisation Messaging Channel", "soh", [0, 12, 1, 1],
-              "Kênh bản tin đồng bộ OTN (cột 13 hàng 1; thêm bởi G.709 (2012) Amd.4 (01/2015), §15.7.2.3/15.7.2.4, Hình 15-2/15-9): mang SSM và PTP, đóng gói GFP-F (G.7041). Tuỳ chọn, chỉ dùng cho OTM-0/OTM-nr liên miền (IrDI)." + (o.osmc ? " Băng thông ở " + oK + ": " + o.osmc + " kbit/s (Bảng 15-1bis)." : " OSMC áp dụng cho OTU1–4; OTU2e nằm ngoài G.709 nên không có băng thông quy định.")),
+              "Kênh bản tin đồng bộ OTN (hàng 1 cột 13; §15.7.2.4, Hình 15-12): mang SSM, eSSM và PTP, đóng gói GFP-F (G.7041), GFP Idle chèn giữa các khung GFP. Tuỳ chọn (§15.7.2.4 NOTE 1), dùng trên giao diện SOTU/MOTU (điểm-điểm và mạng quang OTN; bản 2012 gọi OTM-0/OTM-nr; OSMC do Amd.4 01/2015 thêm vào, bản 06/2020 đã nằm trong thân chuẩn)." + (o.osmc ? " Băng thông ở " + oK + ": " + o.osmc + " kbit/s (Bảng 15-3)." : " OSMC áp dụng cho OTU1–4 (Bảng 15-3); OTU2e nằm ngoài G.709 nên không có băng thông quy định.")),
             R("otu-res", "RES", "Reserved (OTU)", "reserved", [0, 13, 1, 1],
               "Byte dự trữ của OTU OH (cột 14) cho chuẩn hoá quốc tế sau này, đặt 0x00.")
           ] }),
       // ---- Hàng 2–4, cột 1–14: ODU OH ----
       R("odu-oh", "ODU OH", dK + " Overhead", "poh", [1, 0, 3, 14],
-        "Overhead luồng ODU (hàng 2–4, cột 1–14): giám sát đầu-cuối (PM), 6 mức TCM, kênh quản lý GCC1/2, bảo vệ APS/PCC, định vị lỗi FTFL – tương đương POH + MSOH của SDH. Hàng 1 cột 1–7 là FA OH, áp dụng cả cho ODU" + K + "; khi ODUj được ghép vào ODTU thì chỉ cột 8–14 (chỗ OTU OH) là toàn 0 (§12.1 NOTE, §15.6.1, §19.5/19.6).", {
+        "Overhead luồng ODU (hàng 2–4, cột 1–14): giám sát đầu-cuối (PM), 6 mức TCM, kênh quản lý GCC1/2, bảo vệ APS/PCC, 4 byte EXP thử nghiệm – tương đương POH + MSOH của SDH. (Bản 02/2012 còn kênh TCM ACT ở hàng 2 cột 4 và kênh FTFL ở hàng 2 cột 14; bản 06/2020 bỏ cả hai, hai byte đó thành EXP.) Hàng 1 cột 1–7 là FA OH, áp dụng cả cho ODU" + K + "; khi ODUj được ghép vào ODTU thì chỉ cột 8–14 (chỗ OTU OH) là toàn 0 (§12.1 NOTE, §15.6.1, §19.5/19.6).", {
           children: [
-            R("odu-res1", "RES", "Reserved (ODU, hàng 2)", "reserved", [1, 0, 1, 2], "Hai byte dự trữ hàng 2 cột 1–2, đặt 0x00."),
+            R("odu-res1", "RES", "Reserved (ODU, hàng 2)", "reserved", [1, 0, 1, 2], "Hai byte dự trữ hàng 2 cột 1–2, đặt 0x00 (§15.8.2.7: ODUk có 8 byte + 1 bit RES – hàng 2 cột 1–2, hàng 4 cột 9–14, và bit 8 của hàng 2 cột 3)."),
             R("pm-tcm", "PM&TCM", "PM & TCM (delay measurement)", "poh", [1, 2, 1, 1],
-              "Byte đo trễ: mỗi bit DM là một bit đảo chiều – đầu phát lật bit, đầu xa vòng lại, đầu phát đo số khung tới khi thấy bit lật quay về → trễ hai chiều của luồng ODU (DMp) hoặc đoạn TCMi (DMti).", {
+              "Byte đo trễ (hàng 2 cột 3; §15.8.2.1.6, §15.8.2.2.8): mỗi bit DM là một bit đảo chiều – đầu phát lật bit, đầu xa vòng lại, đầu phát đo số khung tới khi thấy bit lật quay về → trễ hai chiều của luồng ODU (DMp, bit 7) hoặc đoạn TCMi (DMti, bit 1–6); bit 8 dự trữ.", {
                 bitFields: [1, 2, 3, 4, 5, 6].map(function (i) { return { name: "Delay measurement TCM" + i, abbr: "DMt" + i, bits: 1, desc: "Tín hiệu đo trễ của TCM" + i + "." }; }).concat([
                   { name: "Delay measurement PM", abbr: "DMp", bits: 1, desc: "Tín hiệu đo trễ của luồng ODU (PM)." },
-                  { name: "Reserved", abbr: "RES", bits: 1, desc: "Dự trữ." }]) }),
-            R("tcm-act", "TCM ACT", "TCM Activation/Deactivation", "poh", [1, 3, 1, 1],
-              "Kênh điều khiển kích hoạt/khử kích hoạt TCM – nội dung để nghiên cứu thêm (for further study), hiện chưa định nghĩa."),
+                  { name: "Reserved", abbr: "RES", bits: 1, desc: "Bit 8 dự trữ, đặt 0 (§15.8.2.7)." }]) }),
+            R("exp-r2c4", "EXP", "Experimental (byte 1/4)", "reserved", [1, 3, 1, 1],
+              "Byte thử nghiệm thứ nhất trong 4 byte EXP (§15.8.2.6; hàng 2 cột 4 và 14, hàng 3 cột 13 và 14): không chuẩn hoá, hãng/nhà khai thác dùng trong mạng con của mình. Lịch sử (bản 02/2012): chỗ này là TCM ACT (kênh kích hoạt/khử kích hoạt TCM, vốn 'for further study', chưa định nghĩa nội dung); bản 06/2020 bỏ TCM ACT (§15.8.2.2.7 để trống) và dùng làm EXP."),
             tcm(6, 1, 4), tcm(5, 1, 7), tcm(4, 1, 10),
-            R("ftfl", "FTFL", "Fault Type & Fault Location", "poh", [1, 13, 1, 1],
-              "Kênh báo loại lỗi và vị trí lỗi: bản tin 256 byte theo MFAS – 128 byte chiều đi (forward, kèm AIS) và 128 byte chiều về (backward, kèm BDI), mỗi nửa có mã loại lỗi + định danh nhà khai thác + phần riêng. Giúp xác định lỗi nằm trong mạng nhà khai thác nào.", { perFrame: FTFL_PF }),
+            R("exp-r2c14", "EXP", "Experimental (byte 2/4)", "reserved", [1, 13, 1, 1],
+              "Byte thử nghiệm thứ hai trong 4 byte EXP (§15.8.2.6): không chuẩn hoá, dùng trong mạng con của hãng/nhà khai thác. Lịch sử (bản 02/2012): chỗ này là FTFL (Fault Type & Fault Location) – bản tin 256 byte theo MFAS, 128 byte chiều đi (forward, kèm AIS) và 128 byte chiều về (backward, kèm BDI), mỗi nửa gồm mã loại lỗi (0x00 không lỗi, 0x01 Signal Fail, 0x02 Signal Degrade) + định danh nhà khai thác (mã quốc gia ISO 3166 + ICC theo M.1400) + phần riêng nhà khai thác, giúp biết lỗi nằm ở mạng nhà khai thác nào. Bản 06/2020 đã bỏ FTFL (§15.8.2.5 để trống) nên byte này thành EXP."),
             tcm(3, 2, 0), tcm(2, 2, 3), tcm(1, 2, 6),
             R("pm", "PM", "Path Monitoring", "poh", [2, 9, 1, 3],
               "Giám sát luồng ODU đầu-cuối (hàng 3, cột 10–12): TTI, BIP-8, BEI·BDI·STAT. Kết cuối ở hai đầu luồng ODU" + K + " (nơi ánh xạ/giải ánh xạ client) – tương đương J1/B3/G1 của VC-4.", {
                 children: ohTriple("pm", "PM", 2, 9, PM3_BITS,
                   "Byte 3 của PM: BEI (bit 1–4), BDI (bit 5), STAT (bit 6–8) – STAT cho biết ODU bình thường hay đang là tín hiệu bảo trì LCK/OCI/AIS.", BIP_TXT("luồng ODU")) }),
-            R("exp", "EXP", "Experimental", "reserved", [2, 12, 1, 2],
-              "Hai byte thử nghiệm: nhà sản xuất/nhà khai thác dùng tuỳ ý trong mạng con của mình, không đảm bảo liên vận hành."),
+            R("exp", "EXP", "Experimental (byte 3–4/4)", "reserved", [2, 12, 1, 2],
+              "Hai byte thử nghiệm (hàng 3 cột 13–14), cùng với hàng 2 cột 4 và cột 14 là tổng 4 byte EXP (§15.8.2.6): nhà sản xuất/nhà khai thác dùng tuỳ ý trong mạng con của mình, không chuẩn hoá, không cần chuyển tiếp ra ngoài mạng con, không đảm bảo liên vận hành."),
             R("gcc1", "GCC1", "General Communication Channel 1", "poh", [3, 0, 1, 2],
               "Kênh truyền thông chung 1 (2 byte) giữa các phần tử truy nhập được khung ODU – dùng cho quản lý/điều khiển."),
             R("gcc2", "GCC2", "General Communication Channel 2", "poh", [3, 2, 1, 2],
@@ -252,7 +243,7 @@ window.TLABS = window.TLABS || [];
       // ---- Cột 15–16: OPU OH ----
       R("opu-oh", "OPU OH", pK + " Overhead", "opu-oh", [0, 14, 4, 2],
         o.gmp
-          ? "Overhead của OPU kiểu GMP (cột 15–16, 4 hàng; " + o.ampEx + "): hàng 1–3 cột 16 là JC1–JC3, cột 15 là JC4–JC6; hàng 4 cột 15 là PSI, cột 16 là RES (client) hoặc OMFI (PT 21). OPU4 không có ánh xạ AMP (§17.7.5, Hình 17-16, §19.4.4)."
+          ? "Overhead của OPU kiểu GMP (cột 15–16, 4 hàng; " + o.ampEx + "): hàng 1–3 cột 16 là JC1–JC3, cột 15 là JC4–JC6; hàng 4 cột 15 là PSI, cột 16 là RES (client) hoặc OMFI (PT 21). OPU4 không có ánh xạ AMP (§17.7.5, Hình 17-15, §19.4.4)."
           : "Overhead của OPU (cột 15–16, 4 hàng): PSI ở hàng 4 cột 15 cho mọi ánh xạ; các byte còn lại tuỳ kiểu ánh xạ. Lưới vẽ kiểu AMP/BMP (vd. " + o.ampEx + "): RES + JC + NJO. Với GMP thì hàng 1–3 cột 15–16 là JC1–JC6; với ghép ODU (PT 20/21) là TSOH luân phiên theo TS.", {
           children: o.gmp
             ? gmpJcRegions("", " Cm cho khung kế tiếp; client 100GBASE-R.", 14).concat([
@@ -260,7 +251,7 @@ window.TLABS = window.TLABS || [];
                   "Định danh cấu trúc tải: bản tin 256 byte theo MFAS. PSI[0] = PT = 0x07 (100GBASE-R), PSI[1] RES, PSI[2] CSF + RES, PSI[3–255] RES; khi ghép ODU (PT 21) PSI[2…] là MSI." + MSI_NOTE, {
                     perFrame: psiPF("0x07", "ánh xạ 100GBASE-R vào OPU4 bằng GMP.") }),
                 R("omfi", "RES/OMFI", "Reserved / OMFI", "opu-oh", [3, 15, 1, 1],
-                  "Hàng 4 cột 16: RES (dự trữ, toàn 0) khi OPU4 chở client (vd. PT 0x07, 100GBASE-R) – khi đó bitFields dưới đây không áp dụng; là OMFI (OPU Multi-Frame Identifier) khi ghép ODU (PT 21), dùng thay MFAS vì 256 không chia hết cho 80; cho biết TS nào mang TSOH; tuỳ chọn căn OMFI = 0 trùng MFAS = 0 mỗi 1280 khung (G.709 §15.6.2.2 NOTE, Bảng 19-4, §19.4.4 NOTE).", {
+                  "Hàng 4 cột 16: RES (dự trữ, toàn 0) khi OPU4 chở client (vd. PT 0x07, 100GBASE-R) – khi đó bitFields dưới đây không áp dụng; là OMFI (OPU Multi-Frame Identifier) khi ghép ODU (PT 21), dùng thay MFAS vì 256 không chia hết cho 80; cho biết TS nào mang TSOH; tuỳ chọn căn OMFI = 0 trùng MFAS = 0 mỗi 1280 khung (G.709 §15.6.2.2 NOTE 1, Bảng 19-4 và Hình 19-27, §19.4.4 NOTE).", {
                     bitFields: [
                       { name: "OMFI bit 1 (cố định 0)", abbr: "0", bits: 1,
                         desc: "Bit 1 (MSB) của OMFI luôn = 0 (chỉ cần 7 bit để đếm tới 79). Khi OPU4 chở client thay vì ghép ODU, cả byte là RES." },
@@ -318,7 +309,7 @@ window.TLABS = window.TLABS || [];
     { key: "4", order: 40, std: STD + " §11–13, §15, Annex A; tốc độ Bảng 7-1",
       ampEx: "100GBASE-R trong OPU4; xem khung opu4-100ge", osmc: "6 851,101", gmp: true,
       payload: "Chỉ 3800 cột đầu (17–3816) mang tải; 8 cột 3817–3824 là fixed stuff – tốc độ danh định OPU4 payload (3808 cột) = 238/227 × 99 532 800 kbit/s, được chọn để 3800 cột hiệu dụng vừa 100GBASE-R và 80 TS. Mang 100GBASE-R (GMP, xem khung opu4-100ge) hoặc 80 TS 1,25G (PT 21).",
-      fec: "Với OTU4 FEC RS(255,239) là bắt buộc (không được phát toàn 0), §11.1.",
+      fec: "Với OTU4 FEC RS(255,239) là bắt buộc (không được phát toàn 0), §11.1; biến thể OTU4-SC dùng Staircase FEC theo G.709.2 (không vẽ ở đây).",
       summary: "Khung OTU4 111,81 Gbit/s: 4 × 4080 byte, chu kỳ ≈ 1,168 µs; mang 100GbE hoặc 80 TS 1,25G.",
       extra: "OTU4 ≈ 111,809974 Gbit/s; FEC bắt buộc (§11.1). Ở OPU4 hàng 4 cột 16 là OMFI (bộ đếm đa khung 0–79) khi ghép ODU." }
   ];
@@ -328,9 +319,9 @@ window.TLABS = window.TLABS || [];
     F[id] = {
       id: id, name: "OTU" + o.key + " (" + vn(rate / 1e6, 3) + " Gbit/s)", family: "otn", category: "Khung OTUk", order: o.order,
       standard: o.std, summary: o.summary,
-      detail: "Mọi OTUk dùng cùng một khung 4 hàng × 4080 cột byte, truyền theo hàng; chỉ tốc độ (và chu kỳ khung) khác nhau. Cột 1–14: hàng 1 là FA OH (FAS + MFAS, cột 1–7) và OTU OH (SM, GCC0, OSMC, RES, cột 8–14), hàng 2–4 là ODU OH; cột 15–16 là OPU OH; cột 17–3824 là payload OPU; cột 3825–4080 là FEC. Tỉ lệ OPU payload : ODU : OTU = 3808 : 3824 : 4080 = 238 : 239 : 255. Với k = 1…3, OTUk = 255/(239 − k) × tốc độ STM tương ứng; OTU4 = 255/227 × 99 532 800 kbit/s (= 40 × STM-16) và OTU2e = 255/237 × 10 312 500 kbit/s không theo công thức này (G.709 Bảng 7-1, §12.2.1). Đa khung 256 theo MFAS: TTI 64 byte, PSI/FTFL 256 byte, APS/PCC theo MFAS mod 8. " + o.extra,
+      detail: "Mọi OTUk dùng cùng một khung 4 hàng × 4080 cột byte, truyền theo hàng; chỉ tốc độ (và chu kỳ khung) khác nhau. Cột 1–14: hàng 1 là FA OH (FAS + MFAS, cột 1–7) và OTU OH (SM, GCC0, OSMC, RES, cột 8–14), hàng 2–4 là ODU OH; cột 15–16 là OPU OH; cột 17–3824 là payload OPU; cột 3825–4080 là FEC. Tỉ lệ OPU payload : ODU : OTU = 3808 : 3824 : 4080 = 238 : 239 : 255. Với k = 1…3, OTUk = 255/(239 − k) × tốc độ STM tương ứng; OTU4 = 255/227 × 99 532 800 kbit/s (= 40 × STM-16) và OTU2e = 255/237 × 10 312 500 kbit/s không theo công thức này (G.709 Bảng 7-1, §12.2.1). Đa khung 256 theo MFAS: TTI 64 byte, PSI 256 byte, APS/PCC theo MFAS mod 8. Bản G.709 06/2020 không còn kênh FTFL (256 byte) và TCM ACT của bản 02/2012: hai byte đó (hàng 2 cột 4 và 14) nay là EXP. " + o.extra,
       grid: { rows: 4, cols: 4080, cellBits: 8 }, periodUs: 4 * 4080 * 8 * 1000 / rate, rateKbps: rate, unit: id,
-      multiframe: { frames: 256, note: "Đa khung 256 khung đánh số bằng MFAS (0–255). TTI của SM/PM/TCM lặp mỗi 64 khung (4 lần trong đa khung); PSI và FTFL là bản tin 256 byte; APS/PCC đổi lớp theo MFAS bit 6–8. Bấm TTI, FTFL, PSI, APS/PCC để xem nghĩa theo khung." },
+      multiframe: { frames: 256, note: "Đa khung 256 khung đánh số bằng MFAS (0–255). TTI của SM/PM/TCM lặp mỗi 64 khung (4 lần trong đa khung); PSI là bản tin 256 byte; APS/PCC đổi lớp theo MFAS bit 6–8. Bấm TTI, PSI, APS/PCC để xem nghĩa theo khung." },
       regions: otuRegions(o.key, o)
     };
   });
@@ -401,7 +392,7 @@ window.TLABS = window.TLABS || [];
                 perFrame: tsPF,
                 children: gmpJcRegions("", " Thuộc TS = (MFAS mod 8) + 1.") }),
             R("psi", "PSI", "Payload Structure Identifier", "opu-oh", [3, 0, 1, 1],
-              "PSI 256 byte theo MFAS (đa khung 256, không phải đa khung 8 của lưới này): PSI[0] = 0x21, PSI[1] RES, PSI[2–9] = MSI cho TS1–TS8 (không có CSF), PSI[10–255] RES. Mỗi byte MSI: bit 1–2 = loại ODTU (00 ODTU12, 01 RES, 10 ODTU2.ts, 11 chưa cấp), bit 3–8 = số cổng nhánh − 1 (§19.4.1.5, Hình 19-19A/19-19B; vị trí PSI Hình 19-14A). bitFields dưới đây chỉ áp cho PSI[2–9] (PSI[0] là PT).", {
+              "PSI 256 byte theo MFAS (đa khung 256, không phải đa khung 8 của lưới này): PSI[0] = 0x21, PSI[1] RES, PSI[2–9] = MSI cho TS1–TS8 (không có CSF), PSI[10–255] RES. Mỗi byte MSI: bit 1–2 = loại ODTU (00 ODTU12, 01 RES, 10 ODTU2.ts, 11 chưa cấp), bit 3–8 = số cổng nhánh − 1 (§19.4.1.5, Hình 19-23A/19-23B; vị trí MSI trong PSI Hình 19-18B/19-18C; PSI ở hàng 4 cột 15 theo Hình 15-26). bitFields dưới đây chỉ áp cho PSI[2–9] (PSI[0] là PT).", {
                 bitFields: MSI_OPU2 }),
             R("njo", "NJO", "NJO (TSOH hàng 4)", "opu-oh", [3, 1, 1, 1],
               "Hàng 4 cột 16: NJO của ODTU12 (AMP) dùng TS đang tới lượt; với ODTU2.ts (GMP) là byte dự trữ.", { perFrame: njoPF })
@@ -417,7 +408,7 @@ window.TLABS = window.TLABS || [];
     var per = opuPeriod("4");
     F["opu4-100ge"] = {
       id: "opu4-100ge", name: "OPU4 chở 100GbE (GMP)", family: "otn", category: MAP_CAT, order: 30,
-      standard: STD + " §17.7.5, Hình 17-16 (100GBASE-R vào OPU4), Annex D (GMP), §19.4.4 (OPU4 80 TS)",
+      standard: STD + " §17.7.5, Hình 17-15 + Bảng 17-12 (100GBASE-R vào OPU4, m = 640), Annex D (GMP), §19.4.4 (OPU4 80 TS)",
       summary: "Vùng OPU4 (cột 15–3824) chở 100GBASE-R bằng GMP: JC1–JC6, PSI, 3800 cột tải + 8 cột fixed stuff.",
       detail: "Luồng 100GBASE-R 64B/66B (103,125 Gbit/s, sau khi gom/sắp lại 20 PCS lane) được ánh xạ GMP vào 4 × 3800 byte tải; 8 cột 3817–3824 là fixed stuff. GMP chia tải thành các từ m bit và dùng thuật toán sigma-delta rải đều Cm từ dữ liệu + (tổng − Cm) từ chèn trong khung; Cm (14 bit, JC1–JC2) báo trước cho khung kế tiếp, ΣCnD (JC4–JC5) báo phần lẻ để khôi phục đồng hồ client mịn. Với 100GBASE-R, m = 640 bit (80 byte), Cm ≈ 188,154 từ/khung; 8 cột fixed stuff 3817–3824 (§17.7.5). PSI[0] = 0x07. Bố cục 80 TS của OPU4 khi PT 21 (không vẽ ở đây): 3800 cột tải của 4 hàng xếp nối tiếp thành 15 200 byte và chia vòng 80 TS theo từng byte – hàng 1 cột 17–96 là TS1–TS80, lặp lại; vì 3800 = 47,5 × 80 nên hàng 2 và 4 bắt đầu bằng TS41; mỗi TS có 190 byte/khung; TSOH và OMFI (hàng 4 cột 16, đếm 0–79) quay vòng theo đa khung 80.",
       grid: { rows: 4, cols: 3810, cellBits: 8 }, periodUs: per, rateKbps: 4 * 3810 * 8 * 1000 / per,
@@ -425,7 +416,7 @@ window.TLABS = window.TLABS || [];
       regions: [
         R("oh", "OPU4 OH", "OPU4 Overhead (GMP)", "opu-oh", [0, 0, 4, 2], "Cột 15–16 của khung OTU4: JC1–JC6, PSI, RES.", {
           children: gmpJcRegions("", " Cm cho khung kế tiếp; client 100GBASE-R.").concat([
-            R("psi", "PSI", "Payload Structure Identifier", "opu-oh", [3, 0, 1, 1], "PSI 256 byte theo MFAS; PSI[0] = PT = 0x07 (Ethernet PCS – 100GBASE-R GMP), PSI[1] RES, PSI[2] = CSF (bit 1) + RES, PSI[3–255] RES. Khi ghép ODU (PT 21) PSI[2…] là MSI: bit 1 = TS bị chiếm/không, bit 2–8 = cổng nhánh − 1 (cổng 1–80; toàn 0 khi bit 1 = 0) (§19.4.1.4, Hình 19-18A/19-18B).", {
+            R("psi", "PSI", "Payload Structure Identifier", "opu-oh", [3, 0, 1, 1], "PSI 256 byte theo MFAS; PSI[0] = PT = 0x07 (Ethernet PCS – 100GBASE-R GMP), PSI[1] RES, PSI[2] = CSF (bit 1) + RES, PSI[3–255] RES. Khi ghép ODU (PT 21) PSI[2…] là MSI: bit 1 = TS bị chiếm/không, bit 2–8 = cổng nhánh − 1 (cổng 1–80; toàn 0 khi bit 1 = 0) (§19.4.1.4, Hình 19-22A/19-22B; MSI chiếm PSI[2…81]).", {
               perFrame: psiPF("0x07", "ánh xạ 100GBASE-R vào OPU4 bằng GMP.") }),
             R("res", "RES", "Reserved", "reserved", [3, 1, 1, 1], "Hàng 4 cột 16: dự trữ với ánh xạ client (khi OPU4 ghép ODU, PT 21, đây là OMFI 0–79).")
           ]) }),
@@ -443,7 +434,7 @@ window.TLABS = window.TLABS || [];
   function U(o) { o.family = "otn"; M[o.id] = o; }
 
   // ---------- Client ----------
-  U({ id: "1gbe", name: "1GbE (1000BASE-X)", kind: "client", level: 1, rateKbps: 1250000, standard: "IEEE 802.3 Clause 36; G.709 §17.7.1",
+  U({ id: "1gbe", name: "1GbE (1000BASE-X)", kind: "client", level: 1, rateKbps: 1250000, standard: "IEEE 802.3 Clause 36; G.709 §17.7.1, §17.7.1.1 (chuyển mã TTT), §17.8.1",
     summary: "Gigabit Ethernet 1000BASE-X: 1,25 Gbaud mã 8B/10B.",
     desc: "Vào OTN qua ODU0: chuyển mã TTT (timing transparent transcoding) xuống 15/16 tốc độ đường dây = 1 171 875 kbit/s rồi GMP vào OPU0 – giữ được cả định thời và ký tự điều khiển." });
   U({ id: "fc-800", name: "FC-800 (8GFC)", kind: "client", level: 2, rateKbps: 8500000, standard: "INCITS FC-PI-4; G.709 §17.9 (OPUflex BMP)",
@@ -451,7 +442,7 @@ window.TLABS = window.TLABS || [];
     desc: "Không vừa ODU nào cố định một cách tiết kiệm, nên đi bằng ODUflex(CBR) có tốc độ = 239/238 × 8,5 Gbit/s, ánh xạ BMP (PT 0x0F); chiếm 7 TS 1,25G." });
   U({ id: "10gbe", name: "10GbE (10GBASE-R)", kind: "client", level: 3, rateKbps: 10312500, standard: "IEEE 802.3 Clause 49; G.709 §17.2.4 (OPU2e, BMP), §17.4 (GFP-F)",
     summary: "10 Gigabit Ethernet LAN PHY: 10,3125 Gbit/s mã 64B/66B.",
-    desc: "Lớn hơn OPU2 (≈ 9,995 Gbit/s) nên KHÔNG vào OPU2 trọn vẹn: hoặc ép xung thành ODU2e/OPU2e (BMP trong suốt, G.709 §17.2.4), hoặc GFP-F chỉ mang khung MAC (G.Sup43 §6.2 = G.709 §17.4, OPU2 PT 0x05 – xem client 'Ethernet 10G (GFP-F)'). GFP-F mang payload + preamble là G.709 §17.4.1 (OPU2 mở rộng, PT 0x09)." });
+    desc: "Lớn hơn OPU2 (≈ 9,995 Gbit/s) nên KHÔNG vào OPU2 trọn vẹn: hoặc ép xung thành ODU2e/OPU2e (BMP trong suốt, G.709 §17.2.4), hoặc GFP-F chỉ mang khung MAC (G.Sup43 §6.2 = G.709 §17.4, OPU2 PT 0x05 – xem client 'Ethernet 10G (GFP-F)'). GFP-F vào OPU2 mở rộng (mượn 7 byte OPU OH) là G.709 §17.4.1 (PT 0x09)." });
   U({ id: "40gbe", name: "40GbE (40GBASE-R)", kind: "client", level: 4, rateKbps: 41250000, standard: "IEEE 802.3 Clause 82; G.709 §17.7.4",
     summary: "40 Gigabit Ethernet: 4 lane × 10,3125 Gbit/s = 41,25 Gbit/s mã 64B/66B.",
     desc: "41,25 Gbit/s lớn hơn OPU3 (≈ 40,15 Gbit/s) nên phải chuyển mã 64B/66B → 1024B/1027B (gộp 16 khối 66 bit thành 1027 bit) còn 40,117 Gbit/s rồi mới GMP vào OPU3." });
@@ -470,7 +461,7 @@ window.TLABS = window.TLABS || [];
     U({ id: "odu" + k, name: "ODU" + k, kind: "odu", level: level, rateKbps: RATE["odu" + k], leafOk: true,
       standard: STD + " §12, §15.8; tốc độ Bảng 7-2" + (k === "2e" ? "; ODU2e theo Bảng 7-2/7-3, §17.2.4" : ""),
       summary: "Đơn vị dữ liệu quang ODU" + k + " = OPU" + k + " + ODU OH: " + mbps(RATE["odu" + k]) + ".",
-      desc: "Luồng đầu-cuối được đấu chéo trong chuyển mạch ODU: OH có PM (TTI/BIP-8/BEI/BDI/STAT), 6 mức TCM, GCC1/2, APS/PCC, FTFL. " + extra,
+      desc: "Luồng đầu-cuối được đấu chéo trong chuyển mạch ODU: OH có PM (TTI/BIP-8/BEI/BDI/STAT), 6 mức TCM, GCC1/2, APS/PCC, EXP (bản 02/2012 còn FTFL và TCM ACT, bản 06/2020 bỏ). " + extra,
       accepts: [{ of: "opu" + k, count: 1, overhead: oduOH(k), note: "OPU" + k + " × 239/238 = ODU" + k + " (" + mbps(RATE["opu" + k]) + " + " + mbps(RATE["odu" + k] - RATE["opu" + k]) + ")." }] });
   }
   function otuUnit(k, level, extra) {
@@ -484,14 +475,14 @@ window.TLABS = window.TLABS || [];
   // ---------- ODU0 ----------
   U({ id: "opu0", name: "OPU0", kind: "opu", level: 10, rateKbps: RATE.opu0, standard: STD + " §13, §17.7.1; tốc độ Bảng 7-3",
     summary: "OPU0: payload " + mbps(RATE.opu0) + " (= 238/239 × 1 244 160), cho client ~1 Gbit/s.",
-    desc: "OPU nhỏ nhất, sinh ra để chở 1GbE mà không phí cả ODU1. Không có OTU0 – ODU0 luôn được ghép vào TS 1,25G của OPU bậc cao.",
+    desc: "OPU nhỏ nhất, sinh ra để chở 1GbE mà không phí cả ODU1. G.709 không định nghĩa OTU0 (Bảng 7-1 NOTE 2; chỉ có OTU0LL độ trễ thấp ở Annex G) – ODU0 được ghép vào TS 1,25G của OPU bậc cao.",
     accepts: [{ of: "1gbe", count: 1, fit: "le", carriedKbps: 1250000 * 15 / 16, mapping: "GMP (TTT 15/16)",
       note: "1000BASE-X sau chuyển mã TTT còn 1 171 875 kbit/s ≤ OPU0 ≈ 1 238 954 kbit/s; GMP rải byte chèn. PT 0x07." },
       { of: "eth-1g-gfpf", count: 1, fit: "le", carriedKbps: 1000000 * 1526 / 1538, mapping: "GFP-F (PT 0x05)",
         note: "Khung MAC 1GbE qua GFP-F: 1 000 000 × 1526/1538 ≈ 992 198 kbit/s ≤ OPU0 ≈ 1 238 954 kbit/s; GFP Idle lấp phần thừa (G.709 §17.4 cho GFP vào OPUk k = 0,1,2,3,4,flex). Khác phương án 1000BASE-X: không trong suốt mức PCS." }] });
   U({ id: "odu0", name: "ODU0", kind: "odu", level: 11, rateKbps: RATE.odu0, leafOk: true, standard: STD + " §12; tốc độ Bảng 7-2",
     summary: "ODU0 = 1 244 160 kbit/s (đúng một nửa STM-16) – vừa 1 TS 1,25G.",
-    desc: "Đơn vị đấu chéo nhỏ nhất của OTN. Vào OPU1 bằng AMP (ODTU01, PT 20) hoặc vào OPU2/3/4 bằng GMP (ODTUk.1, PT 21), mỗi lần 1 TS. Không ghép 2 ODU0 để chở STM-16: tải OPU0 (≈ 1,239 Gbit/s) nhỏ hơn STM-16 và G.709 chỉ có ghép chuỗi ảo OPUk-Xv với k = 1..3 (§18.1.1), không có OPU0-Xv – STM-16 luôn đi bằng ODU1.",
+    desc: "Đơn vị đấu chéo nhỏ nhất của OTN. Vào OPU1 bằng AMP (ODTU01, PT 20) hoặc vào OPU2/3/4 bằng GMP (ODTUk.1, PT 21), mỗi lần 1 TS. Không ghép 2 ODU0 để chở STM-16: tải OPU0 (≈ 1,239 Gbit/s) nhỏ hơn STM-16 và G.709 không có OPU0-Xv (bản 02/2012 chỉ có ghép chuỗi ảo OPUk-Xv với k = 1..3, §18.1.1; bản 06/2020 bỏ hẳn: §18 là 'Blank clause') – STM-16 luôn đi bằng ODU1.",
     accepts: [{ of: "opu0", count: 1, overhead: oduOH("0"), note: "OPU0 × 239/238 = 1 244 160 kbit/s." }] });
 
   // ---------- k = 1 ----------
@@ -510,23 +501,23 @@ window.TLABS = window.TLABS || [];
   // ---------- ODUflex(CBR) cho FC-800 ----------
   U({ id: "oduflex-fc800", name: "ODUflex (FC-800)", kind: "odu", level: 25, rateKbps: RATE.flexFc800, leafOk: true, standard: STD + " §12.2.3, §17.9.1 (BMP vào OPUflex); tốc độ Bảng 7-2 (ODUflex CBR = 239/238 × client)",
     summary: "ODUflex(CBR) chở FC-800: " + mbps(RATE.flexFc800) + " = 239/238 × 8,5 Gbit/s.",
-    desc: "ODU có tốc độ co giãn theo client CBR: OPUflex = đúng tốc độ client (BMP, không chèn), ODUflex = 239/238 × client. Chiếm ⌈tốc độ/TS⌉ tributary slot: 7 TS ở OPU2/OPU3/OPU4 (Bảng 7-9): số TS = Ceiling(ODUflex × (1 + 100 ppm) / (ODTUk.ts × (1 − 20 ppm))) (Bảng 7-9 NOTE 1–3).",
+    desc: "ODU có tốc độ co giãn theo client CBR: OPUflex = đúng tốc độ client (BMP, không chèn), ODUflex = 239/238 × client. Chiếm ⌈tốc độ/TS⌉ tributary slot: 7 TS ở OPU2/OPU3/OPU4 (Bảng 7-9): số TS M = Ceiling(ODUflex × (1 + 100 ppm + 60 ppm) / (ODTUk.1 × (1 − 20 ppm))) (phương trình 19-1a, §19.6; Bảng 7-9 chỉ ghi tham chiếu phương trình này; dung sai 100 ppm: Bảng 7-2 NOTE 2–3).",
     accepts: [{ of: "fc-800", count: 1, mapping: "BMP (OPUflex, PT 0x0F)", overhead: { kbps: RATE.flexFc800 - 8500000, name: "ODU OH + OPUflex OH", desc: "16 cột × 4 hàng mỗi khung (ODU OH + OPU OH + chỗ FA/OTU OH): ODUflex = 239/238 × OPUflex." },
       note: "8 500 000 × 239/238 = " + vn(RATE.flexFc800, 1) + " kbit/s. Không có unit OPUflex riêng – OPUflex = client." }] });
 
   // ---------- ODUflex(GFP) – G.709 §12.2.5, Bảng 7-8, §17.4, §19.6; Phụ lục XI ----------
   // ODUflex(GFP) n TS = n × ODUk.ts (Bảng 7-8): n 1–8 → ODU2.ts, 9–32 → ODU3.ts, 33–80 → ODU4.ts.
   // ODUk.ts thấp hơn 1 TS 1,25G của HO OPUk 186 ppm (Phụ lục XI.2) để ODUflex +100 ppm / HO OPUk −20 ppm vẫn vừa.
-  // Số TS chiếm = n ở MỌI HO OPU2/3/4 (Bảng 7-9 hàng ODUflex(GFP): n, n, n; Bảng 19-10B có M = 32 vào ODTU4.M):
-  // Bảng 7-9 NOTE 1–3 (công thức Ceiling) chỉ áp cho ODUflex(CBR).
+  // Số TS chiếm = n ở MỌI HO OPU2/3/4 (Bảng 7-9 hàng ODUflex(GFP,n,k): n, n, n; phương trình 19-1b §19.6: M = n):
+  // công thức Ceiling (19-1a) chỉ áp cho ODUj ≠ flex(GFP,n,k), vd. ODUflex(CBR).
   var ODU_TS = { 2: 1249177.230, 3: 1254470.354, 4: 1301467.133 };   // kbit/s, Bảng 7-8
   var GFPF = 1526 / 1538;   // Ethernet khung 1518 B qua GFP-F (G.7041 §7.1) – như data/transport-eos.js
   function flexGfp(n) { var k = n <= 8 ? 2 : n <= 32 ? 3 : 4; return { k: k, rate: n * ODU_TS[k] }; }
-  var HAO_NOTE = " Đồng hồ ODUflex(GFP) lấy từ đồng hồ nội bộ (HO ODUk/OTUk hoặc đồng hồ thiết bị, ±100 ppm – Bảng 7-8; §12.2.5), không theo client: GFP-F tự chèn khung Idle để lấp OPUflex. OPUflex = ODUflex × 238/239 chở GFP-F trực tiếp (PT 0x05, §17.4) như mọi OPUk. Vào HO OPUk bằng GMP (ODTUk.ts, PT 21). Chọn ODUk.ts theo n để ODUflex chiếm ĐÚNG n TS trên mọi HO OPU2/3/4 dọc tuyến – giữ nguyên số TS khi khôi phục qua tuyến khác (Phụ lục XI.1–XI.2). HAO (G.7044, LCR + BWR) cho phép thêm/bớt ít nhất 1 TS mỗi lần đổi cỡ (Phụ lục XI.1) mà không gián đoạn dịch vụ – chỉ mô tả, lab không mô phỏng.";
+  var HAO_NOTE = " Đồng hồ ODUflex(GFP) lấy từ đồng hồ nội bộ (HO ODUk/OTUk, ODUCn/OTUCn hoặc đồng hồ thiết bị, ±100 ppm – Bảng 7-8; §12.2.5; ví dụ phát đồng hồ ở Phụ lục XI.3 và XV), không theo client: GFP-F tự chèn khung Idle để lấp OPUflex. OPUflex = ODUflex × 238/239 chở GFP-F trực tiếp (PT 0x05, §17.4) như mọi OPUk. Vào HO OPUk bằng GMP (ODTUk.ts, PT 21). Chọn ODUk.ts theo n để ODUflex chiếm ĐÚNG n TS trên mọi HO OPU2/3/4 dọc tuyến – giữ nguyên số TS khi khôi phục qua tuyến khác (Phụ lục XI.1–XI.2). HAO (G.7044, LCR + BWR) cho phép thêm/bớt ít nhất 1 TS mỗi lần đổi cỡ (Phụ lục XI.1) mà không gián đoạn dịch vụ – chỉ mô tả, lab không mô phỏng.";
   function flexGfpUnit(o) {
     var f = flexGfp(o.n), opuflex = f.rate * 238 / 239, carried = o.eth * GFPF;
     U({ id: "oduflex-gfp-" + o.n, name: "ODUflex(GFP) " + o.n + " TS", kind: "odu", level: o.level, rateKbps: f.rate, leafOk: true,
-      standard: STD + " §12.2.5, §17.4, §19.6; tốc độ Bảng 7-8; số TS Bảng 7-9; Cn Bảng " + o.cn + "; Phụ lục XI; HAO: ITU-T G.7044",
+      standard: STD + " §12.2.5, §17.4, §19.6; tốc độ Bảng 7-8; số TS Bảng 7-9 + phương trình 19-1b; tham số GMP Bảng D.1, ODTUk.ts Bảng 19-8; Phụ lục XI; HAO: ITU-T G.7044",
       summary: "ODUflex(GFP) " + o.n + " TS = " + o.n + " × ODU" + f.k + ".ts = " + mbps(f.rate) + " (±100 ppm), chở " + o.client + " qua GFP-F.",
       desc: o.desc + HAO_NOTE,
       accepts: [{ of: o.of, count: 1, fit: "le", carriedKbps: carried, mapping: "GFP-F (OPUflex, PT 0x05)",
@@ -534,12 +525,12 @@ window.TLABS = window.TLABS || [];
           desc: "16 cột × 4 hàng mỗi khung (ODU OH, OPU OH với PSI/PT = 0x05 và bit CSF, chỗ FA/OTU OH): ODUflex = 239/238 × OPUflex." },
         note: vn(o.eth, 0) + " × 1526/1538 ≈ " + vn(carried, 0) + " kbit/s ≤ OPUflex = " + o.n + " × " + vn(ODU_TS[f.k], 3) + " × 238/239 ≈ " + vn(opuflex, 0) + " kbit/s; phần thừa lấp bằng khung GFP Idle. Tỉ lệ 1526/1538: khung 1518 B bỏ preamble+SFD 8 B và IFG 12 B, thêm core header 4 B + payload header 4 B, không pFCS." }] });
   }
-  flexGfpUnit({ n: 1, level: 13, of: "eth-1g-gfpf", eth: 1000000, client: "Gigabit Ethernet", cn: "19-8A/19-9A/19-10A",
+  flexGfpUnit({ n: 1, level: 13, of: "eth-1g-gfpf", eth: 1000000, client: "Gigabit Ethernet",
     desc: "ODUflex nhỏ nhất cho dịch vụ gói: 1 × ODU2.ts ≈ 1,249 Gbit/s, chiếm 1 TS ở OPU2, OPU3 và OPU4. So với ODU0 (chở 1000BASE-X trong suốt bằng TTT + GMP, giữ cả ký tự điều khiển) đây chỉ mang khung MAC qua GFP-F – không cần chuyển mã, nhưng không trong suốt mức PCS." });
-  flexGfpUnit({ n: 8, level: 36, of: "eth-10g-gfpf", eth: 10000000, client: "10 Gigabit Ethernet", cn: "19-8A/19-9A/19-10A",
+  flexGfpUnit({ n: 8, level: 36, of: "eth-10g-gfpf", eth: 10000000, client: "10 Gigabit Ethernet",
     desc: "8 × ODU2.ts ≈ 9,993 Gbit/s – cỡ lớn nhất còn đi được qua OPU2 (lấp đủ 8 TS OPU2; 8 TS ở OPU3, OPU4). Khung MAC 10GbE (1518 B) qua GFP-F cần ≈ 9,922 Gbit/s nên vừa; với khung jumbo 9618 B cần ≈ 9,988 Gbit/s (+100 ppm: 9 988 548 kbit/s) > OPUflex 8 TS ≈ 9 951 604 kbit/s (−100 ppm: 9 950 609) nên KHÔNG đủ 10GbE line-rate khi khung > ≈ 2,46 KB (GFP-F thẳng vào OPU2, 9 995 277 kbit/s, vẫn đủ – G.Sup43 §6.2). 10GBASE-R CBR (10,3125 Gbit/s) không vừa – phải dùng ODU2e. Khác ODU2 thật sự: ODUflex có cỡ n linh hoạt (1–80 TS) và đổi cỡ không gián đoạn nhờ HAO; so với GFP-F thẳng vào OPU2 (cố định 1 ODU2) đó là ưu điểm chính." });
-  flexGfpUnit({ n: 32, level: 44, of: "eth-40g-gfpf", eth: 40000000, client: "40 Gigabit Ethernet", cn: "19-9B/19-10B",
-    desc: "n = 9–32 dùng ODU3.ts: 32 × ODU3.ts ≈ 40,143 Gbit/s – lấp đủ 32 TS OPU3, KHÔNG vào được OPU2 (chỉ 8 TS). Ở OPU4 vẫn chiếm 32 TS dù theo tốc độ chỉ cần ≈ 30,84 TS (ODU4.ts lớn hơn ODU3.ts): Bảng 7-9 ghi n cho mọi HO OPU và Bảng 19-10B có M = 32 – khác ODU3 (31 TS) và ODUflex(CBR) (tính theo công thức Ceiling). Đổi lại, số TS như nhau trên mọi chặng/tuyến khôi phục – điều kiện để HAO thêm/bớt TS (Phụ lục XI.1)." });
+  flexGfpUnit({ n: 32, level: 44, of: "eth-40g-gfpf", eth: 40000000, client: "40 Gigabit Ethernet",
+    desc: "n = 9–32 dùng ODU3.ts: 32 × ODU3.ts ≈ 40,143 Gbit/s – lấp đủ 32 TS OPU3, KHÔNG vào được OPU2 (chỉ 8 TS). Ở OPU4 vẫn chiếm 32 TS dù theo tốc độ chỉ cần ≈ 30,84 TS (ODU4.ts lớn hơn ODU3.ts): Bảng 7-9 ghi n cho mọi HO OPU và phương trình 19-1b (§19.6) cho M = n = 32 (ODTU4.M, Hình 19-37) – khác ODU3 (31 TS) và ODUflex(CBR) (tính theo công thức Ceiling). Đổi lại, số TS như nhau trên mọi chặng/tuyến khôi phục – điều kiện để HAO thêm/bớt TS (Phụ lục XI.1)." });
 
   // Ghi chú TS cho ODUflex(GFP) n vào HO OPUk có 1 TS = tsk kbit/s.
   function gfpTsNote(n, tsk) {
@@ -614,7 +605,7 @@ window.TLABS = window.TLABS || [];
       { of: "oduflex-fc800", count: 11, slots: 7, mapping: "GMP (ODTU4.ts)", note: "≈ 6,56 TS → 7 TS." },
       { of: "oduflex-gfp-1", count: 80, slots: 1, mapping: "GMP (ODTU4.1)", note: gfpTsNote(1, ts4) },
       { of: "oduflex-gfp-8", count: 10, slots: 8, mapping: "GMP (ODTU4.8)", note: gfpTsNote(8, ts4) },
-      { of: "oduflex-gfp-32", count: 2, slots: 32, mapping: "GMP (ODTU4.32)", note: gfpTsNote(32, ts4) + " Theo tốc độ chỉ cần 31 TS nhưng chuẩn cấp đủ 32 (Bảng 19-10B M = 32) – khác ODU3 vào OPU4 chỉ 31 TS." }
+      { of: "oduflex-gfp-32", count: 2, slots: 32, mapping: "GMP (ODTU4.32)", note: gfpTsNote(32, ts4) + " Theo tốc độ chỉ cần 31 TS nhưng chuẩn cấp đủ 32 (Bảng 7-9: n; phương trình 19-1b M = n = 32) – khác ODU3 vào OPU4 chỉ 31 TS." }
     ] });
   oduUnit("4", 51, "Đơn vị 100G: mang 100GbE hoặc tổ hợp ODU thấp hơn trong 80 TS.");
   otuUnit("4", 52, "Giao diện 111,81 Gbit/s.");
