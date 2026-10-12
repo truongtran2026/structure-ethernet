@@ -642,6 +642,7 @@
     if (target.vcg) return { ok: false, reason: nameOf(MUX, target.u) + ' là thành viên VCG#' + target.vcg.g + ' (SQ ' + target.vcg.sq + ') — tải của nó thuộc VCG; gỡ thành viên trước khi dùng vào việc khác.' };
     if (target.u === X) return { ok: false, reason: nameOf(MUX, X) + ' đã có ở vị trí này — thả vào ô trống hoặc nút cha.' };
     var p3 = placeIn(MUX, target, X, path, true);
+    if (!p3 && !path.length) p3 = placeGuest(MUX, tree, X); // thả lên gốc: tìm khung khách (STM-N trong OTU) có chỗ
     if (!p3) return { ok: false, reason: explainReject(MUX, target.u, X, target, tree) };
     return { ok: true, path: p3, chain: chainAlong(tree, path, p3) };
   }
@@ -1083,6 +1084,92 @@
   }
   function reachesAnyParent(MUX, id) { return parentsOf(MUX, id).length > 0; }
 
+
+  // =====================================================================
+  //  Lab khách: đơn vị của lab khác family nằm trong cây (vd STM-N trong OTU) — palette riêng của lab đó
+  // =====================================================================
+  /**
+   * Các lab khách của cây: [{ lab, ids (palette của lab khách trừ id đã có ở lab chủ), roots (gốc của lab khách mà gốc cây chứa được) }].
+   * Lab khách = lab khác family, có id mới và có gốc nằm trong gốc cây.
+   */
+  function guestLabs(MUX, tree) {
+    var sc = scopeOf(MUX, tree), out = [];
+    if (!sc) return out;
+    var host = {};
+    (sc.lab.palette || []).concat(sc.lab.roots || []).forEach(function (id) { host[id] = true; });
+    ((typeof window !== 'undefined' && window.TLABS) || []).forEach(function (l) {
+      if (l === sc.lab || l.family === sc.lab.family) return;
+      var ids = (l.palette || []).filter(function (id) { return MUX[id] && !host[id]; });
+      var roots = (l.roots || []).filter(function (r) { return MUX[r] && MUX[r].accepts && r !== tree.u && reaches(MUX, tree.u, r); });
+      if (ids.length && roots.length) out.push({ lab: l, ids: ids, roots: roots });
+    });
+    return out;
+  }
+  /** Các node khung khách trong cây: [{ path, node, open }] (open = đã chọn phương án, không còn nguyên khối). */
+  function guestHosts(tree, g) {
+    var out = [];
+    (function walk(nd, path) {
+      if (!nd) return;
+      if (path.length && !nd.vcg && g.roots.indexOf(nd.u) >= 0) out.push({ path: path, node: nd, open: chosen(nd) });
+      (nd.kids || []).forEach(function (k, i) { walk(k, path.concat(i)); });
+    })(tree, []);
+    return out;
+  }
+  /** Đặt X vào khung khách đầu tiên còn chỗ: ưu tiên khung đang mở, rồi tới khung nguyên khối (tự mở). Trả path hoặc null. */
+  function placeGuest(MUX, tree, X) {
+    var gs = guestLabs(MUX, tree).filter(function (g) { return g.ids.indexOf(X) >= 0; });
+    for (var gi = 0; gi < gs.length; gi++) {
+      var hs = guestHosts(tree, gs[gi]).filter(function (h) { return reaches(MUX, h.node.u, X); });
+      for (var pass = 0; pass < 2; pass++) {
+        for (var i = 0; i < hs.length; i++) {
+          var h = hs[i];
+          if (h.open !== (pass === 0)) continue;
+          var snap = { opt: h.node.opt, kids: h.node.kids };
+          var p = placeIn(MUX, h.node, X, h.path, true);
+          if (p) return p;
+          h.node.opt = snap.opt; h.node.kids = snap.kids; // không có chỗ: trả lại như cũ (khung nguyên khối vẫn nguyên khối)
+        }
+      }
+    }
+    return null;
+  }
+  /** X có thể thả vào cây qua khung khách không (có khung phù hợp, chưa xét còn chỗ). */
+  function guestPlaceable(MUX, tree, X) {
+    return guestLabs(MUX, tree).some(function (g) {
+      return g.ids.indexOf(X) >= 0 && guestHosts(tree, g).some(function (h) { return reaches(MUX, h.node.u, X); });
+    });
+  }
+  /** Câu hướng dẫn: X thuộc lab khác nên phải nằm trong khung khách (STM-N) chở bởi `at`. '' nếu không áp dụng. */
+  function guestRoute(MUX, at, X, sc) {
+    if (!sc) return '';
+    var hostIds = {};
+    (sc.lab.palette || []).concat(sc.lab.roots || []).forEach(function (id) { hostIds[id] = true; });
+    if (hostIds[X]) return '';
+    var best = null, bestLab = null, cands = 0;
+    ((typeof window !== 'undefined' && window.TLABS) || []).forEach(function (l) {
+      if (l === sc.lab || l.family === sc.lab.family || (l.palette || []).indexOf(X) < 0) return;
+      (l.roots || []).forEach(function (r) {
+        if (!MUX[r] || r === X || !reaches(MUX, r, X) || !sc.roots.some(function (h) { return reaches(MUX, h, r); })) return;
+        cands++;
+        if (!best || unitKbps(MUX, r) < unitKbps(MUX, best)) { best = r; bestLab = l; }
+      });
+    });
+    if (!best) return '';
+    var carriers = sc.roots.filter(function (h) { return reaches(MUX, h, best); }).map(function (h) { return nameOf(MUX, h); });
+    var rn = nameOf(MUX, best), gen = rn.replace(/\d+$/, 'N'), xn = nameOf(MUX, X);
+    var where = reaches(MUX, at, best) ? nameOf(MUX, at) : carriers.join('/') + ' (' + nameOf(MUX, at) + ' không chở được ' + rn + ')';
+    var maps = [];
+    parentsOf(MUX, best).forEach(function (p) {
+      MUX[p].accepts.forEach(function (a) { if (a.of === best && a.mapping && maps.indexOf(a.mapping) < 0) maps.push(a.mapping); });
+    });
+    var fam = (sc.lab.family || '').toUpperCase();
+    var hasGfp = (sc.lab.palette || []).some(function (id) { return /gfp/i.test(id) && MUX[id]; });
+    return xn + ' phải nằm trong khung ' + (bestLab.family || '').toUpperCase() + ': thả ' + rn + (cands > 1 ? ' (hoặc ' + gen + ' đủ lớn)' : '') +
+      ' vào ' + where + ', mở nó rồi thả ' + xn + ' vào trong.' +
+      (fam ? ' ' + fam + ' chở ' + gen + ' trong suốt' + (maps.length ? ' (' + maps.join('/') + ')' : '') + ';' : '') +
+      (hasGfp ? ' gói tin muốn vào thẳng ' + fam + ' thì dùng GFP-F (Ethernet GFP-F / ODUflex(GFP)).' : '');
+  }
+
   /** Giải thích vì sao không thả được X vào đơn vị `at` (node = node hiện có, có thể null). */
   function explainReject(MUX, at, X, node, tree) {
     var sc = scopeOf(MUX, tree);
@@ -1104,6 +1191,8 @@
       return un + ' đã đầy — không còn chỗ cho ' + xn + '.';
     }
     if (!reaches(MUX, at, X)) {
+      var gr = guestRoute(MUX, at, X, sc);
+      if (gr) return gr;
       var hint = routeHint(MUX, at, X, sc);
       if (hint) return hint + otherLabNote(MUX, sc, X);
     }
@@ -1472,6 +1561,7 @@
       isTs: isTs, chosen: chosen, choices: choices, choiceText: choiceText, optObj: optObj, slotOpts: slotOpts, hasPool: hasPool,
       poolInfo: poolInfo, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,
       poolShortage: poolShortage, routeHint: routeHint,
+      guestLabs: guestLabs, guestHosts: guestHosts, placeGuest: placeGuest, guestPlaceable: guestPlaceable,
       // khoá ổn định trong bể TS
       ensureKeys: ensureKeys, stableKey: stableKey,
       // VCAT/LCAS

@@ -141,20 +141,55 @@
     return armed + '<div class="alert ' + (m.ok ? 'alert--ok' : 'alert--error') + '">' + m.html + '</div>';
   }
 
+  function palSize(u) { return u.members ? u.members.count + '×' + nm(u.members.of) : u.bytesPer125us != null ? n(u.bytesPer125us, 0) + ' B' : TV().fmtRate(u.rateKbps); }
+  function palItem(id, tip, na) {
+    var M = MUX(), u = M[id], client = L().isClient(M, id);
+    return '<button type="button" class="pal-item k-' + (client ? 'client' : u.kind) + (lb.armed === id ? ' is-armed' : '') + (na ? ' is-na' : '') +
+      '" draggable="true" data-lpal="' + esc(id) + '" aria-pressed="' + (lb.armed === id) + '" title="' + esc((u.summary || '') + tip) + '">' +
+      '<span class="pal-name">' + esc(nm(id)) + '</span><span class="pal-size">' + esc(palSize(u)) + '</span></button>';
+  }
+  /** Nhóm palette của lab khách (vd "Bên trong STM-N (SDH)"): chỉ hiện đơn vị khi cây có khung khách đang mở. */
+  function guestGroups() {
+    var M = MUX(), t = tree();
+    return L().guestLabs(M, t).map(function (g) {
+      var hosts = L().guestHosts(t, g), open = hosts.filter(function (h) { return h.open; });
+      var gen = nm(g.roots[0]).replace(/\d+$/, 'N'), fam = (g.lab.family || g.lab.id).toUpperCase();
+      g.hostsOpen = open.length; g.hostsAll = hosts.length; g.title = 'Bên trong ' + gen + ' (' + fam + ')'; g.gen = gen; g.fam = fam;
+      g.ids = g.ids.filter(function (id) { return !isVcgItem(id); });
+      g.ids.sort(function (a, b) { return (M[a].level || 0) - (M[b].level || 0); });
+      return g;
+    }).filter(function (g) { return g.ids.length; });
+  }
+  function renderGuestPalette() {
+    var M = MUX(), t = tree();
+    return guestGroups().map(function (g) {
+      var folded = !!(lb.guestFold && lb.guestFold[g.lab.id]);
+      var head = '<button type="button" class="pal-guest-h" data-lguest="' + esc(g.lab.id) + '" aria-expanded="' + !folded + '">' +
+        '<span class="pal-guest-caret">' + (folded ? '▸' : '▾') + '</span> ' + esc(g.title) +
+        '<span class="muted"> · ' + (g.hostsOpen ? g.hostsOpen + ' ' + esc(g.gen) + ' đang mở' : 'chưa mở') + '</span></button>';
+      var body;
+      if (!g.hostsOpen) {
+        body = '<p class="muted pal-hint">Mở một ' + esc(g.gen) + ' trong cây (đổi ô chọn của nó từ “Nguyên khối” sang một phương án) để thả đơn vị ' + esc(g.fam) + ' vào.' +
+          (g.hostsAll ? ' Hoặc thả thẳng đơn vị ' + esc(g.fam) + ' lên gốc: ' + esc(g.gen) + ' nguyên khối trong cây sẽ tự mở.' : '') + '</p>';
+        if (!g.hostsAll) return '<div class="pal-guest is-dim">' + head + (folded ? '' : body) + '</div>';
+      }
+      var list = '<div class="pal-list">' + g.ids.map(function (id) {
+        var ok = L().guestPlaceable(M, t, id);
+        return palItem(id, ok ? ' — thả vào ' + g.gen + ' đang mở (hoặc thả lên gốc)' : ' — ' + g.gen + ' trong cây không chứa được', !ok || !g.hostsOpen);
+      }).join('') + '</div>';
+      return '<div class="pal-guest' + (g.hostsOpen ? '' : ' is-dim') + '">' + head + (folded ? '' : (g.hostsOpen ? '' : body) + list) + '</div>';
+    }).join('');
+  }
+
   function renderPalette() {
     var M = MUX(), root = lb.st.root;
     var items = (lb.lab.palette || []).filter(function (id) { return M[id]; });
     items.sort(function (a, b) { return (M[a].level || 0) - (M[b].level || 0); });
     return '<div class="section-title"><h2>Đơn vị</h2><span class="muted">từ bé đến lớn</span></div>' +
       '<div class="pal-list">' + items.map(function (id) {
-        var u = M[id], client = L().isClient(M, id);
         var max = maxIn(root, id);
-        var size = u.members ? u.members.count + '×' + nm(u.members.of) : u.bytesPer125us != null ? n(u.bytesPer125us, 0) + ' B' : TV().fmtRate(u.rateKbps);
-        return '<button type="button" class="pal-item k-' + (client ? 'client' : u.kind) + (lb.armed === id ? ' is-armed' : '') + (max ? '' : ' is-na') +
-          '" draggable="true" data-lpal="' + esc(id) + '" aria-pressed="' + (lb.armed === id) + '" title="' +
-          esc((u.summary || '') + (max ? ' — tối đa ' + max + ' trong ' + nm(root) : ' — không ghép được vào ' + nm(root))) + '">' +
-          '<span class="pal-name">' + esc(nm(id)) + '</span><span class="pal-size">' + esc(size) + '</span></button>';
-      }).join('') + '</div>' +
+        return palItem(id, max ? ' — tối đa ' + max + ' trong ' + nm(root) : ' — không ghép được vào ' + nm(root), !max);
+      }).join('') + '</div>' + renderGuestPalette() +
       '<p class="muted pal-hint">' + palHint(root) +
       (items.some(function (id) { return M[id].members; }) ? ' <b>VCAT</b>: thả VCG (VC-n-Xv) hoặc Ethernet vào khung — các thành viên được rải vào VC trống bất kỳ (không cần liền kề), mỗi thành viên mang nhãn VCG#·SQ; gỡ một thành viên để thấy LCAS giảm băng thông.' : '') + '</p>';
   }
@@ -495,11 +530,17 @@
     var M = MUX(), root = lb.st.root, c = L().counts(t, M);
     var items = (lb.lab.palette || []).filter(function (id) { return M[id] && maxIn(root, id) > 0; });
     items.sort(function (a, b) { return (M[a].level || 0) - (M[b].level || 0); });
+    // đơn vị của khung khách đang mở (vd VC-4 trong STM-N nằm trong OTU): đếm trong các khung đang mở
+    var guestIds = [];
+    guestGroups().forEach(function (g) { if (g.hostsOpen) g.ids.forEach(function (id) { if (L().capacityNow(M, t, root, id) > 0) guestIds.push(id); }); });
+    var isGuest = {}; guestIds.forEach(function (id) { isGuest[id] = true; });
+    items = items.concat(guestIds);
     var vi = L().vcgInfo(M, t);
     return '<div class="section-title"><h2>Bộ đếm theo loại</h2><span class="muted">đã dùng / còn chứa được theo phương án đang chọn / tối đa của ' + esc(nm(root)) + '</span></div>' +
       '<div class="counters">' + items.map(function (id) {
         var used, cap, max = maxIn(root, id);
-        if (isVcgItem(id)) {
+        if (isGuest[id]) { used = c[id] || 0; cap = max = L().capacityNow(M, t, root, id); }
+        else if (isVcgItem(id)) {
           // VCG: số VCG loại này; Ethernet: số client đang được VCG mang
           used = vi.filter(function (v) { return L().isVcg(M, id) ? v.u === id : v.client === id; }).length;
           cap = Math.max(used, L().vcgCapNow(M, t, id));
@@ -696,6 +737,7 @@
       lb.msg = { ok: true, html: 'Đã xoá hết ' + esc(nm(lb.st.root)) + '.' }; lb.lastPath = null;
       save(); render(); return;
     }
+    if ((b = t.closest('[data-lguest]'))) { var gid = b.getAttribute('data-lguest'); lb.guestFold = lb.guestFold || {}; lb.guestFold[gid] = !lb.guestFold[gid]; render(); return; }
     if ((b = t.closest('[data-lpal]'))) { var id = b.getAttribute('data-lpal'); lb.armed = lb.armed === id ? null : id; render(); return; }
     if ((b = t.closest('[data-lfill]'))) {
       var X = b.getAttribute('data-lfill');
@@ -804,7 +846,7 @@
     e.preventDefault();
     var p = parsePath(t.getAttribute('data-drop'));
     var nd = L().getNode(tree(), p), su = nd ? nd.u : L().slotUnit(MUX(), tree(), p);
-    var ok = isVcgItem(lb.drag) || (L().reaches(MUX(), su, lb.drag) && (nd ? nd.u !== lb.drag : true));
+    var ok = isVcgItem(lb.drag) || (L().reaches(MUX(), su, lb.drag) && (nd ? nd.u !== lb.drag : true)) || (!p.length && L().guestPlaceable(MUX(), tree(), lb.drag));
     if (!t.classList.contains('is-over') && !t.classList.contains('is-bad')) { clearOver(); t.classList.add(ok ? 'is-over' : 'is-bad'); }
     try { e.dataTransfer.dropEffect = ok ? 'copy' : 'none'; } catch (er) { /* bỏ qua */ }
   }

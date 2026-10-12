@@ -654,6 +654,11 @@ button { font: inherit; color: inherit; }
 .pal-name { font-weight: 700; }
 .pal-size { font-family: var(--mono); font-size: .72rem; opacity: .85; white-space: nowrap; }
 .pal-hint { font-size: .78rem; margin: 10px 0 0; }
+.pal-guest { margin-top: 12px; padding-top: 8px; border-top: 1px dashed var(--line, #c9ced6); }
+.pal-guest.is-dim { opacity: .7; }
+.pal-guest-h { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 600; cursor: pointer; text-align: left; color: inherit; }
+.pal-guest-h:hover { text-decoration: underline; }
+.pal-guest .pal-list { margin-top: 6px; }
 .lab-msg:empty { display: none; }
 .lab-msg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .lab-tree { overflow-x: auto; padding-bottom: 4px; }
