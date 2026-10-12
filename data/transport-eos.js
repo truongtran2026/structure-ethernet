@@ -140,6 +140,8 @@ window.TLABS = window.TLABS || [];
   // Ethernet qua GFP-F (G.7041 §7.1): bỏ preamble + SFD (8 B) và IFG (12 B), thêm core header 4 B + payload header 4 B, không pFCS.
   // Khung 1518 B: 1538 B trên dây Ethernet → 1526 B trong GFP-F. Tỉ lệ ở khung chuẩn 1518 B (khung 64 B: 72/84).
   var GFPF = 1526 / 1538;
+  // Định dạng số thống nhất: dấu cách nghìn (như các số viết tay trong file).
+  function nf(x) { return String(Math.round(x)).replace(/\B(?=(\d{3})+(?!\d))/g, " "); }
   var GFP_NOTE = "Tốc độ mang = tốc độ Ethernet × 1526/1538 (khung 1518 B: bỏ preamble+SFD 8 B và IFG 12 B, thêm GFP core header 4 B + payload header 4 B, không pFCS) ở khung chuẩn 1518 B; khung 64 B chỉ cần 72/84 tốc độ đường dây. Khung VLAN/jumbo 9618 B cần hơn chút (9626/9638 ≈ 0,99875) nhưng mọi VCG chọn vẫn đủ (10M: 9 988 ≤ 10 880; 100M: 99 875 ≤ 100 096; 1G: 998 755 ≤ 1 016 064 kbit/s). Tỉ lệ tốc độ Ethernet mang được (G.7041 Phụ lục V Bảng V.2/V.3): VC-3-2v 97,5 % với khung 1518 B; VC-4-6v 90,6 %; VC-4-7v và VC-12-5v 100 %. Khung GFP-F xem mảng IP. C2 = 0x1B (HO) / V5 L = 101 + K4 nhãn mở rộng 0x0D (LO) cho GFP.";
 
   [["eth-10m-gfpf", "Ethernet 10 Mbit/s (GFP-F)", 10000, "10BASE-T"],
@@ -147,8 +149,21 @@ window.TLABS = window.TLABS || [];
    ["eth-1g-gfpf", "Gigabit Ethernet (GFP-F)", 1000000, "1000BASE-X/T"]].forEach(function (c, i) {
     U({ id: c[0], name: c[1], kind: "client", level: 1 + i / 10, rateKbps: c[2],
       standard: "IEEE 802.3; ITU-T G.7041 §7.1 (GFP-F khung MAC)",
-      summary: "Cổng " + c[3] + " " + c[2].toLocaleString("vi-VN") + " kbit/s chỉ chở khung MAC qua GFP-F (không mang preamble/IFG).",
-      desc: "Ethernet đưa vào SDH (EoS) bằng GFP-F: mỗi khung MAC thành một khung GFP, bỏ preamble/SFD và khoảng nghỉ IFG nên tốc độ cần mang nhỏ hơn tốc độ đường dây (khung 1518 B: × 1526/1538 ≈ " + (c[2] * GFPF).toLocaleString("vi-VN", { maximumFractionDigits: 0 }) + " kbit/s). Sau đó GFP được rải vào một nhóm ghép chuỗi ảo VC-n-Xv vừa đủ dung lượng thay vì phải dùng cả một VC-4 hay VC-4-4c." });
+      summary: "Cổng " + c[3] + " " + nf(c[2]) + " kbit/s chỉ chở khung MAC qua GFP-F (không mang preamble/IFG).",
+      desc: "Ethernet đưa vào SDH (EoS) bằng GFP-F: mỗi khung MAC thành một khung GFP, bỏ preamble/SFD và khoảng nghỉ IFG nên tốc độ cần mang nhỏ hơn tốc độ đường dây (khung 1518 B: × 1526/1538 ≈ " + nf(c[2] * GFPF) + " kbit/s). Sau đó GFP được rải vào một nhóm ghép chuỗi ảo VC-n-Xv vừa đủ dung lượng thay vì phải dùng cả một VC-4 hay VC-4-4c." +
+        (c[0] === "eth-1g-gfpf" ? " Trong OTN (G.709 §17.4, PT 0x05): GFP-F vào thẳng OPU0 (≈ 992 198 kbit/s ≤ 1 238 954) hoặc vào OPUflex của ODUflex(GFP) 1 TS." : "") });
+  });
+
+  // GD5: Ethernet 10G/40G chỉ mang khung MAC qua GFP-F – đích là OTN (OPU2/OPU3 trực tiếp hoặc ODUflex(GFP)), xem data/transport-otn.js.
+  // GFP_NOTE ở trên nói về VCG SDH nên không gắn vào đây; tỉ lệ 1526/1538 giữ nguyên.
+  [["eth-10g-gfpf", "10 Gigabit Ethernet (GFP-F)", 10000000, "10GBASE-R", 2,
+    "Đích OTN: GFP-F thẳng vào OPU2 (≈ 9 995 277 kbit/s, PT 0x05 – G.709 §17.4, G.Sup43 §6.2) hoặc vào ODUflex(GFP) 8 TS (8 × ODU2.ts, OPUflex ≈ 9 951 604 kbit/s; ±100 ppm: 9 950 609 – 9 952 599). Lưu ý khung jumbo 9618 B: cần ≈ 9 987 549 kbit/s (+100 ppm: 9 988 548) > OPUflex 8 TS nên ODUflex(GFP) 8 TS KHÔNG đủ 10GbE chạy kín line-rate khi khung lớn hơn ≈ 2,46 KB; GFP-F thẳng vào OPU2 (9 995 277) vẫn đủ (G.Sup43 §6.2). Khác client 10GbE CBR (10,3125 Gbit/s, cả luồng 64B/66B) chỉ vừa OPU2e. Qua SDH: C-4-64c chỉ 9 584 640 kbit/s, thiếu khi cổng chạy kín khung 1518 B (≈ 9 921 977) – lab SDH không dùng client này."],
+   ["eth-40g-gfpf", "40 Gigabit Ethernet (GFP-F)", 40000000, "40GBASE-R", 3,
+    "Đích OTN: GFP-F thẳng vào OPU3 (≈ 40 150 519 kbit/s, PT 0x05) hoặc vào ODUflex(GFP) 32 TS (32 × ODU3.ts, OPUflex ≈ 39 975 089 kbit/s) – không vào được OPU2. Khác client 40GbE CBR phải chuyển mã 1024B/1027B rồi GMP vào OPU3 (PT 0x07)."]].forEach(function (c) {
+    U({ id: c[0], name: c[1], kind: "client", level: c[4], rateKbps: c[2],
+      standard: "IEEE 802.3; ITU-T G.7041 §7.1 (GFP-F khung MAC); ITU-T G.709 (02/2012) §17.4",
+      summary: "Cổng " + c[3] + " " + nf(c[2]) + " kbit/s chỉ chở khung MAC qua GFP-F (không mang preamble/IFG, không trong suốt mức PCS).",
+      desc: "Ethernet gói (dịch vụ EPL/EVPL) đưa vào khung truyền dẫn bằng GFP-F: mỗi khung MAC thành một khung GFP, bỏ preamble/SFD và IFG nên tốc độ cần mang nhỏ hơn tốc độ đường dây (khung 1518 B: × 1526/1538 ≈ " + nf(c[2] * GFPF) + " kbit/s; khung 64 B chỉ cần 72/84). " + c[5] + " Khung GFP-F xem mảng IP." });
   });
 
   // Desc chung cho VCG.

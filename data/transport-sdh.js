@@ -103,7 +103,7 @@ window.TLABS = window.TLABS || [];
     R("j0", "J0", "Regenerator Section Trace", "soh", [0, 6, 1, 1],
       "Vết đoạn lặp: 1 byte (giá trị 0–255) hoặc khung 16 byte (G.831, có CRC-7) định danh điểm phát (64 byte chỉ áp dụng cho J1), để đầu thu kiểm tra đúng sợi/cổng (lỗi → RS-TIM). Ở STM-N chỉ có 1 J0, các vị trí còn lại là Z0.", { repeat: "×1 (+ Z0 ×(N−1))" }),
     R("r1-x", "X*", "Reserved – national use (unscrambled)", "reserved", [0, 7, 1, 2],
-      "Dự trữ cho sử dụng quốc gia (X). Thuộc hàng 1 của RSOH nên không bị scramble (*) – cần chú ý nội dung để không phá đồng bộ.", { repeat: "×2N" }), // CẦN KIỂM: ký hiệu chính xác ô [1,8] [1,9] trong hình G.707 bản hiện hành
+      "Dự trữ cho sử dụng quốc gia (X). Thuộc hàng 1 của RSOH nên không bị scramble (*) – cần chú ý nội dung để không phá đồng bộ.", { repeat: "×2N" }), // Hình 9-3 G.707: [1,8][1,9] = X* (đã đối chiếu hình)
     R("b1", "B1", "RS BIP-8", "soh", [1, 0, 1, 1],
       "Giám sát lỗi đoạn lặp: BIP-8 tính trên toàn bộ khung STM-N trước (sau scramble), đặt vào khung hiện tại trước khi scramble. Mỗi trạm lặp đều tính lại.", { repeat: "×1" }),
     R("r2-d1", "Δ", "Media-dependent", "reserved", [1, 1, 1, 2],
@@ -132,7 +132,7 @@ window.TLABS = window.TLABS || [];
     R("r3-res1", "—", "Reserved (international)", "reserved", [2, 5, 1, 1],
       "Dự trữ cho chuẩn hoá quốc tế.", { repeat: "×N" }),
     R("r3-res2", "—", "Reserved (international)", "reserved", [2, 7, 1, 2],
-      "Dự trữ cho chuẩn hoá quốc tế.", { repeat: "×2N" }) // CẦN KIỂM: ô [3,8] [3,9] để trống (quốc tế) hay X
+      "Dự trữ cho chuẩn hoá quốc tế.", { repeat: "×2N" }) // Hình 9-3 G.707: [3,8][3,9] để trống = dự trữ quốc tế (đã đối chiếu hình)
   ];
 
   var stm1Ptr = [
@@ -241,13 +241,13 @@ window.TLABS = window.TLABS || [];
   function stmN(N, order) {
     var p = "", nm = "STM-" + N;
     // Nhóm N ô: byte ở vị trí depth d (1-based) + dự trữ phần còn lại.
-    function byteGroup(id, abbr, name, r, k, desc, depth) {
+    function byteGroup(id, abbr, name, r, k, desc, depth, postX) {
       var c0 = (k - 1) * N, d = (depth || 1) - 1, ch = [];
       if (d > 0) ch.push(R(id + "-pre", "—", "Reserved", "reserved", [r, c0, 1, d], "Dự trữ (các vị trí chưa dùng trong nhóm cột này)."));
       ch.push(R(id, abbr, name, "soh", [r, c0 + d, 1, 1], desc));
-      if (N - 1 - d > 0) ch.push(R(id + "-post", "—", "Reserved", "reserved", [r, c0 + d + 1, 1, N - 1 - d], "Dự trữ (các vị trí chưa dùng trong nhóm cột này)."));
+      if (N - 1 - d > 0) ch.push(postX ? R(id + "-post", "X", "National use", "reserved", [r, c0 + d + 1, 1, N - 1 - d], "Dự trữ cho sử dụng quốc gia (X) – Hình 9-4…9-7 G.707 đánh X các ô sau " + abbr + " trong nhóm cột này.") : R(id + "-post", "—", "Reserved", "reserved", [r, c0 + d + 1, 1, N - 1 - d], "Dự trữ (các vị trí chưa dùng trong nhóm cột này)."));
       return R(id + "-g", abbr + " +", name + " + dự trữ", "soh", [r, c0, 1, N],
-        "Nhóm " + N + " byte ứng với cột " + k + " của STM-1: chỉ 1 byte " + abbr + " có nghĩa, còn lại dự trữ. " + desc, { children: ch });
+        "Nhóm " + N + " byte ứng với cột " + k + " của STM-1: chỉ 1 byte " + abbr + " có nghĩa, còn lại " + (postX ? "X (dành cho quốc gia)" : "dự trữ") + ". " + desc, { children: ch });
     }
     function grp(id, abbr, name, kind, r, k, nk, desc, extra) {
       return R(id, abbr, name, kind, [r, (k - 1) * N, 1, nk * N], desc, extra);
@@ -261,13 +261,13 @@ window.TLABS = window.TLABS || [];
         R("a2", "A2", "Framing A2 ×64", "fas", [0, 768, 1, 64], "Byte đồng bộ khung 0x28, chỉ 64 byte ở cột 769–832 (S(1,4,1..64)); không scramble.", { values: [{ v: "0x28", m: "00101000" }], repeat: "×64" }),
         R("r1-res-b", "—", "Reserved (scrambled)", "reserved", [0, 832, 1, 704], resDesc)
       ];
-      rowB = [R("r1-res-c", "—", "Reserved (scrambled)", "reserved", [0, 1792, 1, 512], resDesc)];
+      rowB = [R("r1-res-c", "X", "X – national use (scrambled)", "reserved", [0, 1792, 1, 512], "Dự trữ cho sử dụng quốc gia (X, không có * nên vẫn bị scramble) – Hình 9-7 G.707. " + resDesc)];
     } else {
       rowA = [
         grp("a1", "A1", "Framing A1 ×" + 3 * N, "fas", 0, 1, 3, "Byte đồng bộ khung 0xF6, lặp " + 3 * N + " lần.", { values: [{ v: "0xF6", m: "11110110" }] }),
         grp("a2", "A2", "Framing A2 ×" + 3 * N, "fas", 0, 4, 3, "Byte đồng bộ khung 0x28, lặp " + 3 * N + " lần.", { values: [{ v: "0x28", m: "00101000" }] })
       ];
-      rowB = [grp("r1-x", "X*", "National use (unscrambled)", "reserved", 0, 8, 2, "Dự trữ quốc gia; hàng 1 RSOH (9N byte) không bị scramble.")]; // CẦN KIỂM: phân bổ X ở hàng 1 STM-N
+      rowB = [grp("r1-x", "X*", "National use (unscrambled)", "reserved", 0, 8, 2, "Dự trữ quốc gia; hàng 1 RSOH (9N byte) không bị scramble.")]; // Hình 9-4…9-6 G.707: nhóm 8–9 hàng 1 = X* (đã đối chiếu hình)
     }
     var rsoh = [
       R("j0z0", "J0/Z0", "J0 + Z0 ×" + (N - 1), "soh", [0, 6 * N, 1, N],
@@ -281,7 +281,7 @@ window.TLABS = window.TLABS || [];
       byteGroup("e1", "E1", "RS Orderwire", 1, 4, "Kênh nghiệp vụ thoại 64 kbit/s đoạn lặp."),
       grp("r2-d2", "Δ", "Media-dependent", "reserved", 1, 5, 1, "Byte Δ phụ thuộc môi trường truyền dẫn."),
       grp("r2-res", "—", "Reserved", "reserved", 1, 6, 1, "Dự trữ cho chuẩn hoá quốc tế."),
-      byteGroup("f1", "F1", "RS User Channel", 1, 7, "Kênh người dùng 64 kbit/s."),
+      byteGroup("f1", "F1", "RS User Channel", 1, 7, "Kênh người dùng 64 kbit/s.", 1, true),
       grp("r2-x", "X", "National use", "reserved", 1, 8, 2, "Dự trữ cho sử dụng quốc gia."),
       byteGroup("d1", "D1", "DCC_R byte 1", 2, 1, "Byte 1/3 kênh quản lý DCC_R 192 kbit/s."),
       grp("r3-d1", "Δ", "Media-dependent", "reserved", 2, 2, 2, "Byte Δ phụ thuộc môi trường truyền dẫn."),
@@ -302,17 +302,17 @@ window.TLABS = window.TLABS || [];
     // MS-REI: STM-64/256 cấp hai byte M0 (MSB, bit 1 của M0 là bit cao nhất) + M1, đếm 0–24N (§9.2.2.14).
     var m1Group;
     if (N >= 64) {
-      var mc0 = 5 * N;
+      var mc0 = 3 * N; // Hình 9-5/9-6/9-7 G.707: M0 = S(9,4,2), M1 = S(9,4,3); nhóm cột 6 để trống
       m1Group = R("m1-g", "M0M1 +", "MS-REI M0 + M1 + dự trữ", "soh", [8, mc0, 1, N],
-        "Nhóm " + N + " byte ứng với cột 6 của STM-1: M0 (S(9,6,2)) + M1 (S(9,6,3)) cùng mang MS-REI, còn lại dự trữ. Bộ đếm 0–" + 24 * N + " khối lỗi B2; bit 1 của M0 là MSB. Chỉ phát M1 khi cần tương thích thiết bị cũ (STM-64).", {
+        "Nhóm " + N + " byte ứng với nhóm cột 4: M0 (S(9,4,2)) + M1 (S(9,4,3)) cùng mang MS-REI, còn lại dự trữ (nhóm cột 6 hàng 9 để trống/dự trữ). Bộ đếm 0–" + 24 * N + " khối lỗi B2; bit 1 của M0 là MSB. Chỉ phát M1 khi cần tương thích thiết bị cũ (STM-64).", {
           children: [
             R("m1-pre", "—", "Reserved", "reserved", [8, mc0, 1, 1], "Dự trữ (các vị trí chưa dùng trong nhóm cột này)."),
-            R("m0", "M0", "MS-REI byte M0", "soh", [8, mc0 + 1, 1, 1], "Byte cao của bộ đếm MS-REI (bit 1 = MSB); cùng M1 cho đếm tới " + 24 * N + " khối lỗi B2."), // CHƯA XÁC MINH: toạ độ M0 = S(9,6,2) theo hình G.707, cần đối chiếu bản gốc
+            R("m0", "M0", "MS-REI byte M0", "soh", [8, mc0 + 1, 1, 1], "Byte cao của bộ đếm MS-REI (bit 1 = MSB); cùng M1 cho đếm tới " + 24 * N + " khối lỗi B2."),
             R("m1", "M1", "MS-REI byte M1", "soh", [8, mc0 + 2, 1, 1], "Byte thấp của bộ đếm MS-REI (STM-64 cũ chỉ dùng M1 để tương thích ngược)."),
             R("m1-post", "—", "Reserved", "reserved", [8, mc0 + 3, 1, N - 3], "Dự trữ (các vị trí chưa dùng trong nhóm cột này).")
           ] });
     } else {
-      m1Group = byteGroup("m1", "M1", "MS-REI", 8, 6, "Số khối lỗi B2 phát hiện ở đầu thu (0–" + 24 * N + "), gửi ngược. Với STM-" + N + " M1 nằm ở vị trí thứ 3 của nhóm cột 6.", 3);
+      m1Group = byteGroup("m1", "M1", "MS-REI", 8, 4, "Số khối lỗi B2 phát hiện ở đầu thu (0–" + 24 * N + "), gửi ngược. Với STM-" + N + " M1 nằm ở vị trí thứ 3 của nhóm cột 4 (S(9,4,3)) – khác STM-1 (M1 ở cột 6): trong STM-N đây là byte Z2 của STM-1 #3, giống SONET.", 3);
     }
     var msoh = [
       grp("b2", "B2", "MS BIP-" + 24 * N, "soh", 4, 1, 3, "BIP-" + 24 * N + " (" + 3 * N + " byte) trên khung trước trừ RSOH – giám sát lỗi đoạn ghép."),
@@ -332,9 +332,10 @@ window.TLABS = window.TLABS || [];
       R("r6-b", "—", "Reserved", "reserved", [5, 3 * N + 1, 3, 3 * N - 1], "Dự trữ (hàng 6–8)."),
       R("r6-c", "—", "Reserved", "reserved", [5, 6 * N + 1, 3, 3 * N - 1], "Dự trữ (hàng 6–8)."),
       byteGroup("s1", "S1", "Synchronization Status", 8, 1, "Bản tin trạng thái đồng bộ SSM (bit 5–8: PRC/SSU-A/SSU-B/SEC/DNU)."),
-      grp("r9-a", "—", "Reserved", "reserved", 8, 2, 4, "Dự trữ cho chuẩn hoá quốc tế."),
+      grp("r9-a", "—", "Reserved", "reserved", 8, 2, 2, "Dự trữ cho chuẩn hoá quốc tế."),
       m1Group,
-      byteGroup("e2", "E2", "MS Orderwire", 8, 7, "Kênh nghiệp vụ thoại 64 kbit/s đoạn ghép."),
+      grp("r9-b", "—", "Reserved", "reserved", 8, 5, 2, "Dự trữ cho chuẩn hoá quốc tế (nhóm cột 5–6; M1 của STM-1 ở cột 6 đã chuyển sang nhóm cột 4 trong STM-N)."),
+      byteGroup("e2", "E2", "MS Orderwire", 8, 7, "Kênh nghiệp vụ thoại 64 kbit/s đoạn ghép.", 1, true),
       grp("r9-x", "X", "National use", "reserved", 8, 8, 2, "Dự trữ cho sử dụng quốc gia.")
     ].filter(Boolean);
     var payload = R("aug", "AUG-" + N, "Payload: " + N + " × VC-4 ghép xen byte", "payload", [0, 9 * N, 9, 261 * N],

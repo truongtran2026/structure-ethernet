@@ -500,8 +500,11 @@
     var parent = getNode(tree, path.slice(0, -1));
     var i = path[path.length - 1];
     if (!parent || parent.kids[i]) return parent && parent.kids[i];
-    parent.kids[i] = newNode(MUX, slotUnit(MUX, tree, path));
-    return parent.kids[i];
+    var nn = newNode(MUX, slotUnit(MUX, tree, path));
+    // hộp rỗng người dùng tự tạo = như hộp dựng sẵn: thả đơn vị cùng loại sẽ nhận (bộ đếm không tính khi còn rỗng)
+    if (!isClient(MUX, nn.u, nn) && !isVcg(MUX, nn.u)) nn.auto = true;
+    parent.kids[i] = nn;
+    return nn;
   }
   function remove(tree, path) {
     if (!path.length) return false;
@@ -629,17 +632,17 @@
         parent.kids[path[path.length - 1]] = newNode(MUX, X);
         return { ok: true, path: path.slice(), chain: [X] };
       }
-      if (!reaches(MUX, su, X)) return { ok: false, reason: explainReject(MUX, su, X, null) };
+      if (!reaches(MUX, su, X)) return { ok: false, reason: explainReject(MUX, su, X, null, tree) };
       var fresh = newNode(MUX, su, true);
       var p = placeIn(MUX, fresh, X, path, true);
-      if (!p) return { ok: false, reason: explainReject(MUX, su, X, null) };
+      if (!p) return { ok: false, reason: explainReject(MUX, su, X, null, tree) };
       parent.kids[path[path.length - 1]] = fresh;
       return { ok: true, path: p, chain: chainAlong(tree, path, p) };
     }
     if (target.vcg) return { ok: false, reason: nameOf(MUX, target.u) + ' là thành viên VCG#' + target.vcg.g + ' (SQ ' + target.vcg.sq + ') — tải của nó thuộc VCG; gỡ thành viên trước khi dùng vào việc khác.' };
     if (target.u === X) return { ok: false, reason: nameOf(MUX, X) + ' đã có ở vị trí này — thả vào ô trống hoặc nút cha.' };
     var p3 = placeIn(MUX, target, X, path, true);
-    if (!p3) return { ok: false, reason: explainReject(MUX, target.u, X, target) };
+    if (!p3) return { ok: false, reason: explainReject(MUX, target.u, X, target, tree) };
     return { ok: true, path: p3, chain: chainAlong(tree, path, p3) };
   }
 
@@ -914,6 +917,31 @@
     });
   }
 
+  /**
+   * Bước đóng gói của client đi qua VCG: client → VCG → n thành viên VC → (chuỗi bình thường) → gốc.
+   * Bước VCG/thành viên có cờ vcgStep: 'vcg' | 'members'.
+   */
+  function stepsUpVcg(MUX, rootId, X, vid) {
+    var c = vcgsFor(MUX, X).filter(function (x) { return x.v === vid; })[0];
+    if (!c) return null;
+    var V = MUX[vid], m = V.members, a = c.a;
+    var chain = stepsUp(MUX, rootId, m.of);
+    if (!chain) return null;
+    var out = [{ u: X, unit: MUX[X], kbps: unitKbps(MUX, X), bytes: unitBytes(MUX, X) }];
+    var carried = a.carriedKbps != null ? a.carriedKbps : unitKbps(MUX, X);
+    var j = unitKbps(MUX, vid) - ohKbps(a) - carried;
+    out.push({ u: vid, unit: V, kbps: unitKbps(MUX, vid), bytes: unitBytes(MUX, vid), from: X, count: 1,
+      overhead: a.overhead || { bytes: 0 }, ohKbps: ohKbps(a), mapping: a.mapping, note: a.note, slots: 0, fit: a.fit || '',
+      childKbps: carried, carriedKbps: a.carriedKbps != null ? a.carriedKbps : undefined, justKbps: j > 1e-9 ? j : 0, justification: j > 1e-9 ? j / 64 : 0,
+      vcgStep: 'vcg', members: m });
+    var mo = memberOpt(MUX, m.of, m.payloadOf) || {};
+    var first = chain[0];
+    first.from = vid; first.count = m.count; first.overhead = mo.overhead || { bytes: 0 }; first.ohKbps = ohKbps(mo);
+    first.mapping = mo.mapping; first.note = mo.note; first.slots = 0; first.fit = ''; first.childKbps = unitKbps(MUX, m.payloadOf);
+    first.justKbps = 0; first.justification = 0; first.vcgStep = 'members'; first.members = m;
+    return out.concat(chain);
+  }
+
   /** Nhãn một lựa chọn: "1×STM-64" hoặc "ghép TS (ODU0, ODU1, ODUflex)". */
   function choiceText(MUX, unitId, c) {
     if (c === 'ts') {
@@ -970,10 +998,34 @@
   }
 
   /**
+   * Phạm vi lab của cây (để câu gợi ý chỉ nhắc đơn vị có trong lab đang mở):
+   * { ids: tập đơn vị (palette + gốc + mọi thứ đi xuống được từ gốc), roots: các gốc của lab, lab }.
+   * Null nếu không tìm thấy lab chứa gốc này (khi đó không lọc).
+   */
+  function scopeOf(MUX, tree) {
+    var rid = tree && tree.u;
+    var labs = (typeof window !== 'undefined' && window.TLABS) || [];
+    var lab = labs.filter(function (l) { return l.roots && l.roots.indexOf(rid) >= 0; })[0];
+    if (!lab) return null;
+    var memo = memoOf(MUX, '__scopeMemo');
+    if (memo[lab.id]) return memo[lab.id];
+    var ids = {}, q = lab.roots.filter(function (r) { return MUX[r]; }).concat((lab.palette || []).filter(function (r) { return MUX[r]; }));
+    while (q.length) {
+      var id = q.pop();
+      if (ids[id]) continue;
+      ids[id] = true;
+      ((MUX[id] && MUX[id].accepts) || []).forEach(function (a) { if (!ids[a.of]) q.push(a.of); });
+      if (MUX[id] && MUX[id].members && MUX[id].members.of) q.push(MUX[id].members.of);
+    }
+    return (memo[lab.id] = { ids: ids, roots: lab.roots.filter(function (r) { return MUX[r]; }), lab: lab });
+  }
+  function inScope(sc, id) { return !sc || !!sc.ids[id]; }
+
+  /**
    * Gợi ý đường đi khi X không vào được `at` và X chỉ đi qua bể TS / gốc khác (OTN):
    * "10GbE không vào OPU2 (…). 10GbE → OPU2e → ODU2e — dùng OTU2e hoặc ODU2e trong OPU3/OPU4." Null nếu không áp dụng.
    */
-  function routeHint(MUX, at, X) {
+  function routeHint(MUX, at, X, sc) {
     // mô tả `at`: đi xuống chuỗi bắt buộc 1× tới đơn vị có nhiều lựa chọn (OTU2 → ODU2 → OPU2)
     var d = at, guard = 0;
     while (guard++ < 20) {
@@ -986,14 +1038,14 @@
     // đi lên từ X qua các cha duy nhất tới đơn vị nằm trong bể TS
     var cur = X, chain = [X];
     for (var g = 0; g < 20; g++) {
-      var ps = parentsOf(MUX, cur);
+      var ps = parentsOf(MUX, cur).filter(function (p) { return inScope(sc, p); });
       if (!ps.length) return null;
       var pools = ps.filter(function (p) { return !!slotOptFor(MUX, p, cur); });
       if (pools.length) {
         var roots = ps.filter(function (p) { return !pools.some(function (q) { return q === p; }) && !reachesAnyParent(MUX, p); });
         var xn = nameOf(MUX, X), cn = nameOf(MUX, cur);
         var use = roots.map(function (r) { return nameOf(MUX, r); });
-        use.push(cn + ' trong ' + pools.map(function (p) { return nameOf(MUX, p); }).join('/'));
+        use.push(cn + ' trong ' + pools.map(function (p) { return nameOf(MUX, p); }).join('/') + rootsOf(MUX, sc, pools));
         return xn + ' không vào ' + nameOf(MUX, d) + ' (' + nameOf(MUX, d) + ' nhận ' + acceptsText(MUX, d) + ').' +
           (chain.length > 1 ? ' ' + chain.map(function (id) { return nameOf(MUX, id); }).join(' → ') + ' —' : '') +
           ' dùng ' + use.join(' hoặc ') + '.';
@@ -1004,6 +1056,27 @@
     return null;
   }
 
+  /** " (OTU2/OTU3)" — gốc nhỏ nhất của lab chứa từng đơn vị trong `units`; rỗng nếu không rõ. */
+  function rootsOf(MUX, sc, units) {
+    if (!sc) return '';
+    var names = [];
+    units.forEach(function (u) {
+      var r = sc.roots.filter(function (r) { return pathDown(MUX, r, u); })[0];
+      if (r && names.indexOf(nameOf(MUX, r)) < 0) names.push(nameOf(MUX, r));
+    });
+    return names.length ? ' (' + names.join('/') + ')' : '';
+  }
+
+  /** Ghi chú phụ: X còn đi được qua VCG ở lab khác (không thuộc lab đang mở). */
+  function otherLabNote(MUX, sc, X) {
+    if (!sc) return '';
+    var out = vcgsFor(MUX, X).filter(function (c) { return !inScope(sc, c.v); });
+    if (!out.length) return '';
+    var labs = (window.TLABS || []).filter(function (l) { return l !== sc.lab && out.some(function (c) { return (l.palette || []).indexOf(c.v) >= 0; }); });
+    return ' Ghi chú: ' + (labs.length ? 'ở lab “' + labs[0].name + '” ' : 'ở lab khác ') + nameOf(MUX, X) + ' còn đi qua nhóm VCG ' +
+      out.map(function (c) { return nameOf(MUX, c.v); }).join('/') + '.';
+  }
+
   /** Có đơn vị nào chứa `id` không (gốc = không ai chứa). */
   function parentsOf(MUX, id) {
     return Object.keys(MUX).filter(function (k) { return (MUX[k].accepts || []).some(function (a) { return a.of === id; }); });
@@ -1011,7 +1084,8 @@
   function reachesAnyParent(MUX, id) { return parentsOf(MUX, id).length > 0; }
 
   /** Giải thích vì sao không thả được X vào đơn vị `at` (node = node hiện có, có thể null). */
-  function explainReject(MUX, at, X, node) {
+  function explainReject(MUX, at, X, node, tree) {
+    var sc = scopeOf(MUX, tree);
     var U = MUX[at], XU = MUX[X];
     if (!U || !XU) return 'Không thả được.';
     var un = nameOf(MUX, at), xn = nameOf(MUX, X);
@@ -1030,8 +1104,8 @@
       return un + ' đã đầy — không còn chỗ cho ' + xn + '.';
     }
     if (!reaches(MUX, at, X)) {
-      var hint = routeHint(MUX, at, X);
-      if (hint) return hint;
+      var hint = routeHint(MUX, at, X, sc);
+      if (hint) return hint + otherLabNote(MUX, sc, X);
     }
     if (!reaches(MUX, at, X) && reachesFree(MUX, at, X)) {
       // X chỉ nằm được bên trong một luồng leafOk (ghép PDH), không có ánh xạ riêng vào `at`
@@ -1054,6 +1128,7 @@
     var best = null;
     Object.keys(MUX).forEach(function (rid) {
       if (!MUX[rid].accepts || reachesAnyParent(MUX, rid)) return; // chỉ xét đơn vị gốc
+      if (sc && sc.roots.indexOf(rid) < 0) return; // chỉ gốc của lab đang mở
       var p = pathDown(MUX, rid, X);
       if (p && (!best || p.length < best.length)) best = p;
     });
@@ -1063,9 +1138,11 @@
       var part = up.slice(1, cut).map(function (id) { return nameOf(MUX, id); });
       if (part.length) msg += ' ' + xn + ' cần ' + part.join(' → ') + '.';
     } else {
-      msg += ' ' + xn + ' không ghép được vào ' + un + '.';
+      var vc = sc ? vcgsFor(MUX, X).filter(function (c) { return inScope(sc, c.v); }) : [];
+      msg += vc.length ? ' ' + xn + ' chỉ đi qua nhóm VCG: ' + vc.map(function (c) { return nameOf(MUX, c.v); }).join(' hoặc ') + '.'
+        : ' ' + xn + ' không ghép được vào ' + un + (sc ? ' (không có đường trong lab này)' : '') + '.';
     }
-    return msg;
+    return msg + (best ? otherLabNote(MUX, sc, X) : '');
   }
 
   // =====================================================================
@@ -1390,7 +1467,7 @@
       newNode: newNode, newRoot: newRoot, getNode: getNode,
       slotUnit: slotUnit, setOption: setOption, instantiate: instantiate, remove: remove, place: place,
       fill: fill, maxCount: maxCount, capacityNow: capacityNow, counts: counts, account: account,
-      pathDown: pathDown, stepsUp: stepsUp, explainReject: explainReject, acceptsText: acceptsText, nameOf: nameOf, parentsOf: parentsOf,
+      pathDown: pathDown, stepsUp: stepsUp, stepsUpVcg: stepsUpVcg, explainReject: explainReject, acceptsText: acceptsText, nameOf: nameOf, parentsOf: parentsOf,
       // bể tributary slot (OTN)
       isTs: isTs, chosen: chosen, choices: choices, choiceText: choiceText, optObj: optObj, slotOpts: slotOpts, hasPool: hasPool,
       poolInfo: poolInfo, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,

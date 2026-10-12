@@ -252,8 +252,8 @@ Object.assign(window.HEADERS, {
         desc: "Loại PDU LLC. Hầu hết lưu lượng dùng 0x03 = Unnumbered Information (UI) – dịch vụ không kết nối, không xác nhận.",
         values: [
           { v: "0x03", m: "UI – Unnumbered Information (LLC Type 1)" },
-          { v: "0xAF / 0xBF", m: "XID" }, // CẦN KIỂM: XID/TEST có bit P/F nên có 2 giá trị; đối chiếu IEEE 802.2 §5.4
-          { v: "0xE3 / 0xF3", m: "TEST" }
+          { v: "0xAF / 0xBF", m: "XID (P/F = 0 / 1)" }, // khuôn U: 101P1111; P/F là bit giá trị 0x10
+          { v: "0xE3 / 0xF3", m: "TEST (P/F = 0 / 1)" }
         ],
         example: "0x03"
       }

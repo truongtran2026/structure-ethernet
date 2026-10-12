@@ -12,7 +12,40 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD2 | PDH: E1 (khung, đa khung CRC-4), E2/E3/E4 (chèn bit), lab PDH → SDH | xong 2026-10-11 (review G.704/742/751/707: bit đúng, sửa 3 mô tả) |
 | GD3 | OTN: OTU1/2/2e/3/4, ODUk/OPUk OH, FEC, ODU0/flex, TS 1,25G, lab OTN | xong 2026-10-11 (review G.709 02/2012 + Amd.4: 2 vòng, vá 3 trích dẫn; QA ĐẠT) |
 | GD4 | Ethernet qua SDH: GFP-F (mảng IP), VCAT/LCAS (VC-n-Xv), lab SDH nhận Ethernet; tồn đọng GD3 | xong 2026-10-12 (review G.707 01/2007, G.7042 03/2006, G.7041 08/2016: 2 vòng ĐẠT; QA ĐẠT) |
-| Sau | OTUCn/FlexO; ODUflex(GFP), FlexE; máy tính tốc độ; quiz | chờ |
+| GD5 | ODUflex(GFP) + Ethernet GFP-F vào OTN; tồn đọng GD4 (đóng gói từng bước EoS, CẦN KIỂM cũ); sửa M1/M0 STM-N | xong 2026-10-12 (review G.709 02/2012, G.707 01/2007 ảnh Hình 9-3…9-7: 2 vòng; QA ĐẠT) |
+| Sau | OTUCn/FlexO (cần G.709 ≥ 2016 — chưa tải được); FlexE; máy tính tốc độ; quiz | chờ |
+
+## GD5 — ODUflex(GFP) + Ethernet GFP-F vào OTN (thêm vào `data/transport-otn.js`) — G.709 (02/2012) §7, §12.2.5, §17.4, §19; Bảng 7-8, 7-9
+
+ODUflex(GFP) = n × ODUk.ts (Bảng 7-8): ODU2.ts = 1 249 177,230; ODU3.ts = 1 254 470,354; ODU4.ts = 1 301 467,133 kbit/s
+(n 1–8 dùng ODU2.ts, 9–32 ODU3.ts, 33–80 ODU4.ts). OPUflex = ODUflex × 238/239, chở GFP-F (PT 0x05).
+Số TS: Bảng 7-9 dòng ODUflex(GFP) = n / n / n ở OPU2/3/4 (công thức Ceiling ở NOTE 1–3 chỉ cho ODUflex(CBR)); Phụ lục XI.1: ODUflex co giãn phải chiếm cùng số TS trên mọi tuyến HO.
+
+### Unit (TMUX), family `otn` trừ khi ghi khác
+
+| id | kind | rateKbps | accepts | Vào OPU (slots) |
+| --- | --- | --- | --- | --- |
+| `eth-10g-gfpf` | client (family sdh như eth-1g-gfpf, đặt trong transport-eos.js) | 10000000 | — | — |
+| `eth-40g-gfpf` | client (như trên) | 40000000 | — | — |
+| `oduflex-gfp-1` | odu, leafOk | 1 × ODU2.ts | 1×eth-1g-gfpf GFP-F `fit`, carriedKbps ×1526/1538, overhead kbps = ODU OH | OPU2 1, OPU3 1, OPU4 1 |
+| `oduflex-gfp-8` | odu, leafOk | 8 × ODU2.ts | 1×eth-10g-gfpf | OPU2 8, OPU3 8, OPU4 8 |
+| `oduflex-gfp-32` | odu, leafOk | 32 × ODU3.ts | 1×eth-40g-gfpf | OPU3 32, OPU4 32 (không vào OPU2) |
+
+Thêm phương án ánh xạ trực tiếp GFP-F (PT 0x05, §17.4): `opu2` ← 1×eth-10g-gfpf `fit` (so sánh: 10GBASE-R CBR
+không vừa OPU2, khung MAC qua GFP-F thì vừa); `opu3` ← 1×eth-40g-gfpf `fit`.
+Kiểm trước (orchestrator): tỉ lệ TS danh định g1/g8/g32 trong OPU2 = 1,00/8,00/32,13; OPU3 = 1,00/7,96/31,99; OPU4 = 0,96/7,68/30,84
+→ theo tốc độ chỉ cần 1/8/31 ở OPU4, nhưng chuẩn giữ n TS (Bảng 7-9) — điểm học. (Sửa 2026-10-12: bản đầu catalog ghi nhầm 31, transport-expert phản bác đúng.) Desc nêu HAO (G.7044) thay đổi n không gián đoạn — chỉ mô tả.
+
+### Lab
+`otn`: palette thêm `eth-1g-gfpf`, `eth-10g-gfpf`, `eth-40g-gfpf`, `oduflex-gfp-1`, `oduflex-gfp-8`, `oduflex-gfp-32`.
+Điểm học: 10GbE CBR (10gbe) → chỉ OTU2e/ODU2e; 10GbE khung MAC (GFP-F) → OPU2 trực tiếp hoặc ODUflex(GFP) 8 TS;
+ODUflex(GFP) 32 TS vẫn chiếm 32 TS ở OPU4 dù theo tốc độ chỉ cần ~30,84 (khác ODU3 chiếm 31 TS).
+
+### Tồn đọng
+- UI: "Đóng gói từng bước" có chuỗi Ethernet → GFP-F → VCG (SDH) và → ODUflex(GFP)/OPUk (OTN); hộp rỗng do người dùng tạo
+  cũng nhận được khi thả đơn vị thường.
+- Dữ liệu cũ còn `// CẦN KIỂM`: transport-sdh.js (ô X/Δ hàng 1 và hàng 3 RSOH, phân bổ X hàng 1 STM-N — đối chiếu G.707 01/2007
+  Hình 9-6/9-7, bản text có ở scratchpad g707/g707.txt); headers-l2.js XID 0xAF/0xBF (IEEE 802.2 §5.4 — reviewer).
 
 ## GD4 — Ethernet qua SDH: VCAT/LCAS (file mới `data/transport-eos.js`) — G.707 §11.2–11.4, G.7042, G.7041
 
