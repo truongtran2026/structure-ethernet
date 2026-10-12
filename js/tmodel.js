@@ -317,8 +317,12 @@
     var total = unitKbps(MUX, uid);
     var each = t.kbps || total / t.n;
     var out = total - t.n * each;
-    return { n: t.n, kbps: each, size: t.size || '', note: t.note || '', capKbps: t.n * each, outsideKbps: out > 1e-6 ? out : 0 };
+    var fx = u.kind === 'flexe';
+    return { n: t.n, kbps: each, size: t.size || '', note: t.note || '', capKbps: t.n * each, outsideKbps: out > 1e-6 ? out : 0,
+      word: fx ? 'khe lịch' : 'TS', outsideName: t.outside || (fx ? 'khối OH FlexE' : 'ngoài TS (fixed stuff)') };
   }
+  /** Từ gọi một phần tử của bể: "khe lịch" (FlexE) hay "TS" (OTN). */
+  function slotWord(MUX, uid) { return MUX[uid] && MUX[uid].kind === 'flexe' ? 'khe lịch' : 'TS'; }
   /** Phương án có slots ứng với loại con `of` trong bể TS của uid. */
   function slotOptFor(MUX, uid, of) {
     var s = slotOpts(MUX, uid).filter(function (x) { return x.a.of === of; })[0];
@@ -822,7 +826,7 @@
     }
     var vcgPay = {}; // g → tổng dung lượng tải (payloadOf) của các thành viên đang có
     // pa = phương án của cha dùng để chứa n (để biết carriedKbps); null ở gốc
-    (function walk(n, slotU, isRoot, pa) {
+    (function walk(n, slotU, isRoot, pa, par) {
       if (!n) { addEmpty(slotU, pa ? childRate(MUX, pa, null) : unitKbps(MUX, slotU)); return; }
       var u = MUX[n.u];
       if (!u) return;
@@ -844,7 +848,8 @@
         acc.clientLineKbps += line;
         acc.clients[n.u] = (acc.clients[n.u] || 0) + 1;
         if (Math.abs(carried - line) > 1e-9) {
-          var tc = acc.transcoded[n.u] || (acc.transcoded[n.u] = { u: n.u, count: 0, lineKbps: line, carriedKbps: carried });
+          var tc = acc.transcoded[n.u] || (acc.transcoded[n.u] = { u: n.u, count: 0, lineKbps: line, carriedKbps: carried,
+            idle: !!(par && MUX[par] && MUX[par].kind === 'flexe') });
           tc.count++;
         }
         return;
@@ -854,7 +859,7 @@
         // bể TS: dung lượng ngoài TS (vd 8 cột fixed stuff OPU4) = overhead; mỗi con chiếm k TS — phần
         // dư so với tốc độ con = chèn; TS trống = chưa dùng
         var pi = poolInfo(MUX, n.u);
-        ohEntry(n, u, pi.outsideKbps, pi.outsideKbps ? 'ngoài TS (fixed stuff)' : '', false);
+        ohEntry(n, u, pi.outsideKbps, pi.outsideKbps ? pi.outsideName : '', false);
         var usedTs = 0;
         n.kids.forEach(function (k) {
           if (!k) return;
@@ -862,11 +867,11 @@
           var share = (k.ts ? k.ts.length : (ka.slots || 0)) * pi.kbps;
           usedTs += k.ts ? k.ts.length : (ka.slots || 0);
           acc.justificationKbps += share - childRate(MUX, ka, k);
-          walk(k, k.u, false, ka);
+          walk(k, k.u, false, ka, n.u);
         });
         var freeN = pi.n - usedTs;
         if (freeN > 0) {
-          addEmpty(n.u + ' TS', freeN * pi.kbps);
+          addEmpty(n.u + ' ' + pi.word, freeN * pi.kbps);
           acc.emptyTsKbps += freeN * pi.kbps;
           acc.freeTs.push({ u: n.u, free: freeN, n: pi.n, kbps: freeN * pi.kbps });
         }
@@ -883,7 +888,7 @@
           if (k) acc.justificationKbps += slack; else addEmpty(a.of, slack);
         });
       }
-      n.kids.forEach(function (k) { walk(k, a.of, false, a); });
+      n.kids.forEach(function (k) { walk(k, a.of, false, a, n.u); });
     })(tree, tree.u, true, null);
     // VCG: client lấy min(tốc độ cần, dung lượng còn lại sau LCAS); phần dư = khoảng trống ánh xạ (GFP idle)
     (tree.vcgs || []).forEach(function (rec) {
@@ -989,7 +994,7 @@
   /** Nhãn một lựa chọn: "1×STM-64" hoặc "ghép TS (ODU0, ODU1, ODUflex)". */
   function choiceText(MUX, unitId, c) {
     if (c === 'ts') {
-      return 'ghép TS (' + slotOpts(MUX, unitId).map(function (s) { return nameOf(MUX, s.a.of); }).join(', ') + ')';
+      return 'ghép ' + slotWord(MUX, unitId) + ' (' + slotOpts(MUX, unitId).map(function (s) { return nameOf(MUX, s.a.of); }).join(', ') + ')';
     }
     var a = MUX[unitId].accepts[c];
     return a.count + '×' + nameOf(MUX, a.of);
@@ -1029,8 +1034,8 @@
         if (opts.length) {
           var a = opts[0].a, free = tsFree(MUX, n);
           if (portsFull(MUX, n) && a.slots <= free) {
-            var un0 = nameOf(MUX, n.u);
-            msg = un0 + ' tối đa ' + maxPorts(MUX, n.u) + ' cổng nhánh, đã dùng ' + n.kids.length + '; còn ' + free + ' TS trống — gỡ bớt con để nhường cổng.';
+            var un0 = nameOf(MUX, n.u), w0 = slotWord(MUX, n.u);
+            msg = un0 + ' tối đa ' + maxPorts(MUX, n.u) + ' cổng nhánh, đã dùng ' + n.kids.length + '; còn ' + free + ' ' + w0 + ' trống — gỡ bớt con để nhường cổng.';
             // gợi ý đường lồng: X nằm trong một ODU lớn hơn rồi ghép ODU đó vào bể
             var alt = null;
             slotOpts(MUX, n.u).forEach(function (so) {
@@ -1038,13 +1043,13 @@
               var m = maxCountNested(MUX, so.a.of, X);
               if (!alt || m > alt.m) alt = { id: so.a.of, m: m, slots: so.a.slots };
             });
-            if (alt && alt.m > 1) msg += ' Muốn nhiều ' + nameOf(MUX, X) + ' hơn: đặt chúng trong một ' + nameOf(MUX, alt.id) + ' (' + alt.slots + ' TS, 1 cổng) rồi ghép ODU đó vào ' + nameOf(MUX, n.u) + ' — qua ' + nameOf(MUX, alt.id) + ' chở được ' + alt.m + ' ' + nameOf(MUX, X) + '.';
+            if (alt && alt.m > 1) msg += ' Muốn nhiều ' + nameOf(MUX, X) + ' hơn: đặt chúng trong một ' + nameOf(MUX, alt.id) + ' (' + alt.slots + ' ' + w0 + ', 1 cổng) rồi ghép ODU đó vào ' + nameOf(MUX, n.u) + ' — qua ' + nameOf(MUX, alt.id) + ' chở được ' + alt.m + ' ' + nameOf(MUX, X) + '.';
             return;
           }
           if (a.slots > free) {
-            var xn = nameOf(MUX, X), un = nameOf(MUX, n.u);
-            msg = (a.of === X ? xn + ' cần ' + a.slots + ' TS' : xn + ' cần ' + nameOf(MUX, a.of) + ' (' + a.slots + ' TS)') +
-              ' trong ' + un + ', còn ' + free + ' TS trống' + (free ? '' : ' (' + un + ' đã đầy)') + ' — gỡ bớt con để trả lại TS.';
+            var xn = nameOf(MUX, X), un = nameOf(MUX, n.u), w = slotWord(MUX, n.u);
+            msg = (a.of === X ? xn + ' cần ' + a.slots + ' ' + w : xn + ' cần ' + nameOf(MUX, a.of) + ' (' + a.slots + ' ' + w + ')') +
+              ' trong ' + un + ', còn ' + free + ' ' + w + ' trống' + (free ? '' : ' (' + un + ' đã đầy)') + ' — gỡ bớt con để trả lại ' + w + '.';
             return;
           }
         }
@@ -1105,7 +1110,7 @@
         use.push(cn + ' trong ' + pools.map(function (p) { return nameOf(MUX, p); }).join('/') + rootsOf(MUX, sc, pools));
         return xn + ' không vào ' + nameOf(MUX, d) + ' (' + nameOf(MUX, d) + ' nhận ' + acceptsText(MUX, d) + ').' +
           (chain.length > 1 ? ' ' + chain.map(function (id) { return nameOf(MUX, id); }).join(' → ') + ' —' : '') +
-          ' dùng ' + use.join(' hoặc ') + '.';
+          (chain.length > 1 ? ' dùng ' : ' Dùng ') + use.join(' hoặc ') + '.';
       }
       if (ps.length !== 1) return null;
       cur = ps[0]; chain.push(cur);
@@ -1119,7 +1124,7 @@
     var names = [];
     units.forEach(function (u) {
       var r = sc.roots.filter(function (r) { return pathDown(MUX, r, u); })[0];
-      if (r && names.indexOf(nameOf(MUX, r)) < 0) names.push(nameOf(MUX, r));
+      if (r && r !== u && names.indexOf(nameOf(MUX, r)) < 0) names.push(nameOf(MUX, r));
     });
     return names.length ? ' (' + names.join('/') + ')' : '';
   }
@@ -1601,6 +1606,7 @@
   }
 
   var api = {
+    slotWord: slotWord,
     KIND_LABEL: KIND_LABEL, PAYLOAD_KINDS: PAYLOAD_KINDS,
     fmtNum: fmtNum, fmtRate: fmtRate, rectCells: rectCells, rectText: rectText,
     buildFrame: buildFrame, ancestry: ancestry, displayMap: displayMap, displayCells: displayCells,
@@ -1615,7 +1621,7 @@
       pathDown: pathDown, stepsUp: stepsUp, stepsUpVcg: stepsUpVcg, explainReject: explainReject, acceptsText: acceptsText, nameOf: nameOf, parentsOf: parentsOf,
       // bể tributary slot (OTN)
       isTs: isTs, chosen: chosen, choices: choices, choiceText: choiceText, optObj: optObj, slotOpts: slotOpts, hasPool: hasPool,
-      poolInfo: poolInfo, maxCountNested: maxCountNested, portsBinding: portsBinding, maxPorts: maxPorts, portsFull: portsFull, portsLeft: portsLeft, effCount: effCount, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,
+      slotWord: slotWord, poolInfo: poolInfo, maxCountNested: maxCountNested, portsBinding: portsBinding, maxPorts: maxPorts, portsFull: portsFull, portsLeft: portsLeft, effCount: effCount, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,
       poolShortage: poolShortage, routeHint: routeHint,
       guestLabs: guestLabs, guestHosts: guestHosts, placeGuest: placeGuest, guestPlaceable: guestPlaceable,
       // khoá ổn định trong bể TS

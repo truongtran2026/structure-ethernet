@@ -207,6 +207,7 @@
   }
   function palHint(root) {
     var M = MUX();
+    if (M[root] && M[root].family === 'flexe') return 'Đơn vị tính theo kbit/s. Một instance FlexE có <b>20 khe lịch 5G</b> (một nhóm n instance: 20n khe phẳng); chọn “Ghép khe lịch” rồi thả client 10/25/40/50/100/… G — mỗi client chiếm số khe nguyên, tốc độ được <b>thích ứng Idle</b> (thêm/bớt Idle) cho vừa khe. Hết khe thì bị từ chối kèm số khe còn trống; gỡ client (×) trả lại khe.';
     if (poolUnder(root)) return 'Đơn vị tính theo kbit/s. OPU có <b>bể tributary slot (TS)</b>: chọn “Ghép TS” để trộn nhiều loại ODU, miễn còn đủ TS trống; ' +
       'thả tín hiệu khách hàng thẳng vào khung — các bước trung gian tự dựng. ODU và tín hiệu SDH mặc định <b>nguyên khối</b>; đổi phương án ở ô chọn để mở xem bên trong.';
     return (L().isByteUnit(M, root)
@@ -215,6 +216,7 @@
       ' Luồng PDH (E1, E3…) mặc định là <b>nguyên khối</b>; đổi phương án ở ô chọn của nó để mở xem bên trong.';
   }
 
+  var UNIT_KIND = { flexe: 'FlexE (instance / nhóm)', phy: 'PHY Ethernet' };
   function countNodes(t) { var c = 0; (function w(x) { if (!x) return; c++; x.kids.forEach(w); })(t); return c; }
 
   /** Đếm client trong cây con: { e1: 3, … }. */
@@ -230,7 +232,7 @@
     if (!u || !u.accepts || !L().chosen(node)) return '';
     if (L().isTs(node)) {
       var pi = L().poolInfo(MUX(), node.u);
-      return pi && pi.outsideKbps ? '+' + TV().fmtRate(pi.outsideKbps) + ' ngoài TS' : '';
+      return pi && pi.outsideKbps ? '+' + TV().fmtRate(pi.outsideKbps) + (pi.word === 'TS' ? ' ngoài TS' : ' ' + pi.outsideName) : '';
     }
     return L().ohLabel(u.accepts[node.opt]);
   }
@@ -238,14 +240,16 @@
   function choiceLabel(uid, c) {
     if (c !== 'ts') { var a = MUX()[uid].accepts[c]; return a.count + '×' + nm(a.of); }
     var pi = L().poolInfo(MUX(), uid);
-    return 'Ghép TS (' + pi.n + ' × ' + (pi.size || TV().fmtRate(pi.kbps)) + ', trộn ODU)';
+    return pi.word === 'TS' ? 'Ghép TS (' + pi.n + ' × ' + (pi.size || TV().fmtRate(pi.kbps)) + ', trộn ODU)'
+      : 'Ghép khe lịch (' + pi.n + ' × ' + (pi.size || TV().fmtRate(pi.kbps)) + ', trộn client)';
   }
   function choiceTip(uid, c) {
     if (c !== 'ts') { var a = MUX()[uid].accepts[c]; return (ohPhrase(a) || 'không thêm overhead') + (a.mapping ? ' · ' + a.mapping : '') + (a.fit === 'le' ? ' · có chèn/khoảng trống ánh xạ' : '') + (a.note ? ' — ' + a.note : ''); }
     var pi = L().poolInfo(MUX(), uid);
-    return 'Bể ' + pi.n + ' tributary slot, mỗi TS ' + TV().fmtRate(pi.kbps) + (pi.note ? ' (' + pi.note + ')' : '') + ': ' +
-      L().slotOpts(MUX(), uid).map(function (s) { return nm(s.a.of) + ' ' + s.a.slots + ' TS' + (s.a.mapping ? ' ' + s.a.mapping : ''); }).join(', ') +
-      ' — trộn các loại, miễn tổng TS ≤ ' + pi.n + '.';
+    var w = pi.word;
+    return 'Bể ' + pi.n + (w === 'TS' ? ' tributary slot, mỗi TS ' : ' khe lịch, mỗi khe ') + TV().fmtRate(pi.kbps) + (pi.note ? ' (' + pi.note + ')' : '') + ': ' +
+      L().slotOpts(MUX(), uid).map(function (s) { return nm(s.a.of) + ' ' + s.a.slots + ' ' + w + (s.a.mapping ? ' ' + s.a.mapping : ''); }).join(', ') +
+      ' — trộn các loại, miễn tổng ' + w + ' ≤ ' + pi.n + '.';
   }
   /** "1–2" / "13–19, 29, 30" (1-based). */
   function tsList(ts) {
@@ -335,8 +339,8 @@
     var cls = 'lab-box' + (mem ? ' is-vcg' : '') + (compact ? ' is-compact' : '') + (depth === 0 ? ' is-root' : '') + (ex.ts ? ' is-tskid' : '') + (isNew && lb.lastPath && pkey(lb.lastPath) === pkey(last.path) ? ' is-new' : '');
     var tsStyle = ex.ts ? ' style="--tsh:' + ex.hue + '"' : '';
     if (mem) tsStyle = ' style="--tsh:' + vcgHue(mem.g) + '"';
-    var idxHtml = idxLabel ? '<span class="box-idx' + (ex.ts ? ' ts-tag' : '') + '"' + tsStyle + (ex.ts ? ' title="Chiếm ' + ex.ts.length + ' TS: #' + esc(tsList(ex.ts)) + '"' : '') + '>#' + idxLabel +
-      (ex.ts ? ' · TS ' + esc(tsList(ex.ts)) : '') + '</span>' : '';
+    var idxHtml = idxLabel ? '<span class="box-idx' + (ex.ts ? ' ts-tag' : '') + '"' + tsStyle + (ex.ts ? ' title="Chiếm ' + ex.ts.length + ' ' + (ex.word || 'TS') + ': #' + esc(tsList(ex.ts)) + '"' : '') + '>#' + idxLabel +
+      (ex.ts ? ' · ' + (ex.word || 'TS') + ' ' + esc(tsList(ex.ts)) : '') + '</span>' : '';
     var tools = (path.length ? '<button type="button" class="box-x" data-lremove="' + pk + '" title="Gỡ ' + esc(nm(node.u)) +
       (mem ? ' — LCAS: VCG#' + mem.g + ' bớt một thành viên' : ex.ts ? ' — trả lại ' + ex.ts.length + ' TS' : ' khỏi ô này') + '" aria-label="Gỡ">×</button>' : '');
     if (compact) {
@@ -359,16 +363,16 @@
       var pi = L().poolInfo(M, last.node.u), pn = last.node, free = L().tsFree(M, pn);
       var kc = {};
       pn.kids.forEach(function (k) { kc[k.u] = (kc[k.u] || 0) + 1; });
-      summary = '<span class="box-sum">TS ' + (pi.n - free) + '/' + pi.n + (pn.kids.length ? ' · ' + esc(clientsTxt(kc)) : '') + '</span>';
+      summary = '<span class="box-sum">' + pi.word + ' ' + (pi.n - free) + '/' + pi.n + (pn.kids.length ? ' · ' + esc(clientsTxt(kc)) : '') + '</span>';
       if (!collapsed) {
         body = tsBar(pn, pi, last.path) +
           '<div class="box-kids ts-kids">' + pn.kids.map(function (k, i) {
-            return renderBox(k, k.u, last.path.concat(i), depth + 1, String(i + 1), big, { ts: k.ts || [], hue: tsHue(i), pa: L().slotOptFor(M, pn.u, k.u) });
+            return renderBox(k, k.u, last.path.concat(i), depth + 1, String(i + 1), big, { ts: k.ts || [], word: pi.word, hue: tsHue(i), pa: L().slotOptFor(M, pn.u, k.u) });
           }).join('') +
-          (free && !L().portsFull(M, pn) ? '<div class="lab-slot ts-free" data-drop="' + pkey(last.path) + '" role="button" tabindex="0" title="Thả ODU/tín hiệu vào bể TS của ' + esc(nm(pn.u)) + '">' +
-            '<span class="slot-name">' + free + ' TS trống</span><span class="slot-hint">thả ' + esc(L().slotOpts(M, pn.u).map(function (s) { return nm(s.a.of) + ' (' + s.a.slots + ')'; }).join(', ')) + ' hoặc tín hiệu khách hàng</span>' +
-            (lb.armed && L().reaches(M, pn.u, lb.armed) ? '<button type="button" class="slot-open" data-lfillat="' + pkey(last.path) + '" title="Lấp các TS trống bằng ' + esc(nm(lb.armed)) + '">lấp đầy bằng ' + esc(nm(lb.armed)) + '</button>' : '') +
-            '</div>' : free ? '<div class="muted ts-full">' + esc(nm(pn.u)) + ' tối đa ' + L().maxPorts(M, pn.u) + ' cổng nhánh, đã dùng ' + pn.kids.length + '; còn ' + free + ' TS trống — gỡ bớt con (×) để nhường cổng.</div>' : '<div class="muted ts-full">' + esc(nm(pn.u)) + ' đã dùng hết ' + pi.n + ' TS — gỡ bớt con (×) để trả lại TS.</div>') +
+          (free && !L().portsFull(M, pn) ? '<div class="lab-slot ts-free" data-drop="' + pkey(last.path) + '" role="button" tabindex="0" title="Thả ODU/tín hiệu vào bể ' + pi.word + ' của ' + esc(nm(pn.u)) + '">' +
+            '<span class="slot-name">' + free + ' ' + pi.word + ' trống</span><span class="slot-hint">thả ' + esc(L().slotOpts(M, pn.u).map(function (s) { return nm(s.a.of) + ' (' + s.a.slots + ')'; }).join(', ')) + ' hoặc tín hiệu khách hàng</span>' +
+            (lb.armed && L().reaches(M, pn.u, lb.armed) ? '<button type="button" class="slot-open" data-lfillat="' + pkey(last.path) + '" title="Lấp các ' + pi.word + ' trống bằng ' + esc(nm(lb.armed)) + '">lấp đầy bằng ' + esc(nm(lb.armed)) + '</button>' : '') +
+            '</div>' : free ? '<div class="muted ts-full">' + esc(nm(pn.u)) + ' tối đa ' + L().maxPorts(M, pn.u) + ' cổng nhánh, đã dùng ' + pn.kids.length + '; còn ' + free + ' ' + pi.word + ' trống — gỡ bớt con (×) để nhường cổng.</div>' : '<div class="muted ts-full">' + esc(nm(pn.u)) + ' đã dùng hết ' + pi.n + ' ' + pi.word + ' — gỡ bớt con (×) để trả lại ' + pi.word + '.</div>') +
           '</div>';
       }
     } else if (lu && lu.accepts && last.node.opt >= 0) {
@@ -409,13 +413,13 @@
     for (var s = 0; s < pi.n; s++) {
       var i = owner[s];
       cells += i == null
-        ? '<span class="ts-cell is-free" title="TS #' + (s + 1) + ': trống">' + (s + 1) + '</span>'
-        : '<span class="ts-cell" style="--tsh:' + tsHue(i) + '" title="TS #' + (s + 1) + ': ' + esc(nm(pn.kids[i].u)) + ' #' + (i + 1) + '">' + (s + 1) + '</span>';
+        ? '<span class="ts-cell is-free" title="' + pi.word + ' #' + (s + 1) + ': trống">' + (s + 1) + '</span>'
+        : '<span class="ts-cell" style="--tsh:' + tsHue(i) + '" title="' + pi.word + ' #' + (s + 1) + ': ' + esc(nm(pn.kids[i].u)) + ' #' + (i + 1) + '">' + (s + 1) + '</span>';
     }
     var free = L().tsFree(MUX(), pn);
-    return '<div class="ts-wrap"><div class="ts-legend muted">Bể ' + pi.n + ' tributary slot × ' + esc(TV().fmtRate(pi.kbps)) + (pi.note ? ' · ' + esc(pi.note) : '') +
-      ' · đã dùng ' + (pi.n - free) + ', trống ' + free + (L().maxPorts(MUX(), pn.u) < Infinity ? ' · cổng nhánh ' + pn.kids.length + '/' + L().maxPorts(MUX(), pn.u) : '') + ' · cấp TS trống thấp nhất, không cần liền kề</div>' +
-      '<div class="ts-bar" data-drop="' + pkey(path) + '" role="img" aria-label="' + esc('Tributary slot: ' + (pi.n - free) + '/' + pi.n + ' đã dùng') + '">' + cells + '</div></div>';
+    return '<div class="ts-wrap"><div class="ts-legend muted">Bể ' + pi.n + (pi.word === 'TS' ? ' tributary slot × ' : ' khe lịch × ') + esc(TV().fmtRate(pi.kbps)) + (pi.note ? ' · ' + esc(pi.note) : '') +
+      ' · đã dùng ' + (pi.n - free) + ', trống ' + free + (L().maxPorts(MUX(), pn.u) < Infinity ? ' · cổng nhánh ' + pn.kids.length + '/' + L().maxPorts(MUX(), pn.u) : '') + ' · cấp ' + pi.word + ' trống thấp nhất, không cần liền kề</div>' +
+      '<div class="ts-bar" data-drop="' + pkey(path) + '" role="img" aria-label="' + esc((pi.word === 'TS' ? 'Tributary slot: ' : 'Khe lịch: ') + (pi.n - free) + '/' + pi.n + ' đã dùng') + '">' + cells + '</div></div>';
   }
 
   // ---------- VCG (ghép chuỗi ảo) ----------
@@ -497,13 +501,15 @@
     }).join('');
     var tcTxt = Object.keys(acc.transcoded).map(function (k) {
       var x = acc.transcoded[k];
-      return x.count + ' ' + nm(k) + ': đường dây ' + TV().fmtRate(x.lineKbps) + ' → mang ' + TV().fmtRate(x.carriedKbps);
+      return x.count + ' ' + nm(k) + ': đường dây ' + TV().fmtRate(x.lineKbps) + ' → mang ' + TV().fmtRate(x.carriedKbps) +
+        (x.idle ? ' (thích ứng Idle, ' + n((x.carriedKbps / x.lineKbps - 1) * 100, 3) + ' %)' : '');
     }).join('; ');
-    var freeTsTxt = acc.freeTs.map(function (f) { return nm(f.u) + ' ' + f.free + '/' + f.n + ' TS'; }).join(', ');
+    var idleOnly = Object.keys(acc.transcoded).length > 0 && Object.keys(acc.transcoded).every(function (k) { return acc.transcoded[k].idle; });
+    var freeTsTxt = acc.freeTs.map(function (f) { return nm(f.u) + ' ' + f.free + '/' + f.n + ' ' + L().slotWord(M, f.u); }).join(', ');
     var extra = [
       ['Chèn bù tốc độ / khoảng trống ánh xạ (justification)', acc.justificationKbps, 'Dung lượng bước ghép lớn hơn overhead + tổng nhánh (vd C-12 2176 kbit/s mang E1 2048 kbit/s; STM-64 AMP trong OPU2; phần TS dư so với ODU).'],
-      ['Chưa dùng (ô trống' + (acc.freeTs.length ? ', TS trống' : '') + ')', acc.emptyKbps, 'Dung lượng chưa lấp.' + (freeTsTxt ? ' TS trống: ' + freeTsTxt + ' = ' + TV().fmtRate(acc.emptyTsKbps) + '.' : '')],
-      ['Tải khách hàng', acc.clientKbps, (clientsTxt(acc.clients) || 'chưa có') + (tcTxt ? ' · tính theo tốc độ thực mang sau transcode/GFP-F (' + tcTxt + ')' : '')]
+      ['Chưa dùng (ô trống' + (acc.freeTs.length ? ', ' + (acc.freeTs.every(function (f) { return L().slotWord(M, f.u) !== 'TS'; }) ? 'khe lịch' : 'TS') + ' trống' : '') + ')', acc.emptyKbps, 'Dung lượng chưa lấp.' + (freeTsTxt ? ' Chỗ trống: ' + freeTsTxt + ' = ' + TV().fmtRate(acc.emptyTsKbps) + '.' : '')],
+      ['Tải khách hàng', acc.clientKbps, (clientsTxt(acc.clients) || 'chưa có') + (tcTxt ? ' · tính theo tốc độ thực mang sau ' + (idleOnly ? 'thích ứng Idle' : 'chuyển mã/GFP-F') + ' (' + tcTxt + ')' : '')]
     ].map(function (r) {
       return '<tr class="tr-sum"><td colspan="3">' + esc(r[0]) + ' <span class="muted">' + esc(r[2]) + '</span></td>' + byteCols(r[1]) +
         '<td class="num">' + esc(n(r[1])) + '</td><td class="num">' + esc(n(r[1] / total * 100)) + '%</td></tr>';
@@ -602,14 +608,14 @@
       else {
         var from = s.vcgStep === 'members'
           ? 'VCG chia thành <b>' + s.count + '×' + esc(nm(s.u)) + '</b> <span class="muted">(SQ 0…' + (s.count - 1) + ', mỗi thành viên có POH và con trỏ riêng)</span>'
-          : s.slots ? esc(nm(s.from)) + ' <span class="pill-ts">' + s.slots + ' TS / ' + s.pool.n + ' (tối đa ' + s.count + ')</span>' : s.count + '×' + esc(nm(s.from));
+          : s.slots ? esc(nm(s.from)) + ' <span class="pill-ts">' + s.slots + ' ' + (s.pool.word || 'TS') + ' / ' + s.pool.n + ' (tối đa ' + s.count + ')</span>' : s.count + '×' + esc(nm(s.from));
         var ratio = s.carriedKbps != null && s.vcgStep === 'vcg' ? ratioFrac(s.carriedKbps / L().unitKbps(M, cl)) : '';
         var stk = s.mapping && MAPPING_STACK[s.mapping];
         desc = '<div class="step-desc">= ' + from +
-          (s.carriedKbps != null ? ' <span class="pill-ts">' + (/GFP/.test(s.mapping || '') ? 'GFP-F (bỏ preamble/IFG): mang ' : 'transcode: mang ') + esc(TV().fmtRate(s.carriedKbps)) + (ratio ? ' (×' + ratio + ')' : '') + '</span>' : '') +
+          (s.carriedKbps != null ? ' <span class="pill-ts">' + (/GFP/.test(s.mapping || '') ? 'GFP-F (bỏ preamble/IFG): mang ' : s.pool && s.pool.word === 'khe lịch' ? 'thích ứng Idle: mang ' : 'transcode: mang ') + esc(TV().fmtRate(s.carriedKbps)) + (ratio ? ' (×' + ratio + ')' : '') + '</span>' : '') +
           (ohl ? ' <span class="pill-oh">' + esc(ohl) + (s.vcgStep === 'members' ? ' mỗi thành viên' : '') + ' ' + esc(oh.name || 'overhead') + '</span>' : ' <span class="muted">(không thêm overhead)</span>') +
           (s.vcgStep === 'members' && ohl ? ' <span class="pill-oh">tổng +' + esc(n(s.ohKbps * s.count / 64, 2)) + ' B/125 µs</span>' : '') +
-          (s.justKbps > 0 ? ' <span class="pill-stuff">+' + esc(TV().fmtRate(s.justKbps)) + (L().isByteUnit(M, s.u) ? ' (' + n(s.justification) + ' B)' : '') + (s.fit === 'le' ? ' khoảng trống ánh xạ' : s.slots ? ' ngoài phần TS dùng / chèn' : ' chèn bù tốc độ') + '</span>' : '') +
+          (s.justKbps > 0 ? ' <span class="pill-stuff">+' + esc(TV().fmtRate(s.justKbps)) + (L().isByteUnit(M, s.u) ? ' (' + n(s.justification) + ' B)' : '') + (s.fit === 'le' ? ' khoảng trống ánh xạ' : s.slots ? ' ngoài phần ' + ((s.pool && s.pool.word) || 'TS') + ' dùng / chèn' : ' chèn bù tốc độ') + '</span>' : '') +
           (s.mapping ? ' <span class="muted">· ánh xạ ' + esc(s.mapping) + '</span>' : '') +
           (stk && stackExists(stk) ? ' <a class="btn-ghost btn-sm" href="#' + esc(stk) + '">xem khung ' + esc(s.mapping) + '</a>' : '') + '</div>';
       }
@@ -647,6 +653,7 @@
       '<li><b>Kéo</b> một đơn vị (E1, E3, TU-12…) vào ô trống hoặc vào một hộp. Trên điện thoại: bấm đơn vị rồi bấm ô.</li>' +
       '<li>Thả bậc thấp vào bậc cao: các bước trung gian tự dựng, thông báo nêu overhead từng bước.</li>' +
       '<li>Hộp có nhiều phương án (VC-4, TUG-3) có ô chọn — đổi phương án sẽ xoá nội dung bên trong hộp đó.</li>' +
+      '<li>FlexE: instance 100G có 20 khe lịch 5G (nhóm n instance: 20n khe); client chiếm số khe nguyên và được thích ứng Idle cho vừa khe; phần ngoài bể là khối overhead FlexE (1/20 461).</li>' +
       '<li>OTN: OPU có lựa chọn <b>“Ghép TS”</b> — bể tributary slot cho trộn ODU0/ODU1/ODU2/ODUflex…; mỗi con được cấp các TS trống thấp nhất (thanh ô màu). Thiếu TS thì bị từ chối kèm số TS còn trống; gỡ con (×) trả lại TS.</li>' +
       '<li>Ethernet qua SDH: thả <b>VCG</b> (VC-4-7v, VC-12-46v…) hoặc thả thẳng Ethernet — lab chọn VCG vừa với khung và rải thành viên vào VC trống bất kỳ (nhãn VCG#·SQ). Gỡ một thành viên (×) để thấy <b>LCAS</b>: dung lượng giảm, báo còn đủ/không đủ cho client.</li>' +
       '<li>Luồng PDH (E1, E2, E3, E4) mặc định là <b>nguyên khối</b> (client). Ô chọn của nó có “Nguyên khối (client)” và các phương án (vd 4×E2) — chọn để mở xem bên trong.</li>' +
@@ -661,9 +668,9 @@
     var acc = (u.accepts || []).map(function (a) {
       var oh = a.overhead || {};
       return '<li><b>' + a.count + '×<a href="#" data-lunit="' + esc(a.of) + '">' + esc(nm(a.of)) + '</a></b>' +
-        (a.slots ? ' <span class="pill-ts">' + a.slots + ' TS mỗi cái</span>' + (L().effCount(M, id, a) < a.count ? ' <span class="muted">(tối đa ' + L().effCount(M, id, a) + ' do giới hạn cổng nhánh)</span>' : '') : '') +
+        (a.slots ? ' <span class="pill-ts">' + a.slots + ' ' + L().slotWord(M, id) + ' mỗi cái</span>' + (L().effCount(M, id, a) < a.count ? ' <span class="muted">(tối đa ' + L().effCount(M, id, a) + ' do giới hạn cổng nhánh)</span>' : '') : '') +
         (a.fit === 'le' ? ' <span class="muted">(≤, có chèn/khoảng trống)</span>' : '') +
-        (a.carriedKbps != null ? ' <span class="pill-ts">mang ' + esc(TV().fmtRate(a.carriedKbps)) + (/GFP/.test(a.mapping || '') ? ' sau GFP-F' : ' sau transcode') + '</span>' : '') +
+        (a.carriedKbps != null ? ' <span class="pill-ts">mang ' + esc(TV().fmtRate(a.carriedKbps)) + (/GFP/.test(a.mapping || '') ? ' sau GFP-F' : M[id].kind === 'flexe' ? ' sau thích ứng Idle' : ' sau transcode') + '</span>' : '') +
         (ohPhrase(a) ? ' ' + esc(ohPhrase(a)) : ' <span class="muted">(không thêm overhead)</span>') +
         (a.mapping ? ' <span class="chip">' + esc(a.mapping) + '</span>' : '') +
         (oh.desc && oh.desc !== oh.name ? '<br><span class="muted">' + esc(oh.desc) + '</span>' : '') +
@@ -671,13 +678,13 @@
     }).join('');
     var parents = Object.keys(M).filter(function (k) { return (M[k].accepts || []).some(function (a) { return a.of === id; }); });
     if (u.members) parents = [u.members.of].concat(parents); // VCG: rải vào các VC thành viên
-    document.getElementById('detail').innerHTML = '<div class="detail-card"><span class="eyebrow">Đơn vị ghép · ' + esc(u.kind) + '</span>' +
+    document.getElementById('detail').innerHTML = '<div class="detail-card"><span class="eyebrow">Đơn vị ghép · ' + esc(UNIT_KIND[u.kind] || u.kind) + '</span>' +
       '<h2>' + esc(u.name) + '</h2>' + (u.summary ? '<p class="lead">' + esc(u.summary) + '</p>' : '') +
       '<dl class="kv">' +
         '<dt>Kích thước</dt><dd>' + (u.bytesPer125us == null ? esc(TV().fmtRate(u.rateKbps)) + ' <span class="muted">(≈ ' + esc(n(u.rateKbps / 64)) + ' B/125 µs)</span>'
           : esc(n(u.bytesPer125us, 0)) + ' byte/125 µs = ' + esc(TV().fmtRate(u.bytesPer125us * 64))) + '</dd>' +
-        (u.tribSlots ? '<dt>Tributary slot</dt><dd>' + esc(u.tribSlots.n + ' × ' + TV().fmtRate(L().poolInfo(M, id).kbps) + (u.tribSlots.note ? ' · ' + u.tribSlots.note : '')) +
-          ' <span class="muted">— các phương án có “TS mỗi cái” trộn được trong cùng ' + esc(nm(id)) + '</span></dd>' : '') +
+        (u.tribSlots ? '<dt>' + (u.kind === 'flexe' ? 'Khe lịch' : 'Tributary slot') + '</dt><dd>' + esc(u.tribSlots.n + ' × ' + TV().fmtRate(L().poolInfo(M, id).kbps) + (u.tribSlots.note ? ' · ' + u.tribSlots.note : '')) +
+          ' <span class="muted">— các phương án có “' + L().slotWord(M, id) + ' mỗi cái” trộn được trong cùng ' + esc(nm(id)) + '</span></dd>' : '') +
         (u.members ? '<dt>Thành viên</dt><dd>' + u.members.count + ' × <a href="#" data-lunit="' + esc(u.members.of) + '">' + esc(nm(u.members.of)) + '</a>, tải mỗi cái ' +
           esc(nm(u.members.payloadOf)) + ' ' + esc(TV().fmtRate(L().unitKbps(M, u.members.payloadOf))) + ' <span class="muted">— ghép chuỗi ảo: thành viên đi độc lập, đặt vào VC trống bất kỳ</span></dd>' : '') +
         (u.leafOk ? '<dt>Dùng như</dt><dd>client nguyên khối (mặc định) hoặc mở theo một phương án bên dưới</dd>' : '') +
@@ -709,7 +716,7 @@
           // bước vào bể TS: con chiếm k TS
           var kid = nd.kids[res.path[i]], pi = L().poolInfo(M, nd.u), sa = L().slotOptFor(M, nd.u, kid.u) || {};
           var spare = kid.ts.length * pi.kbps - L().childRate(M, sa, null);
-          steps.push('<b>' + esc(nm(nd.u)) + '</b> <span class="pill-ts">' + kid.ts.length + ' TS (#' + esc(tsList(kid.ts)) + '), còn ' + L().tsFree(M, nd) + '/' + pi.n + ' trống</span>' +
+          steps.push('<b>' + esc(nm(nd.u)) + '</b> <span class="pill-ts">' + kid.ts.length + ' ' + pi.word + ' (#' + esc(tsList(kid.ts)) + '), còn ' + L().tsFree(M, nd) + '/' + pi.n + ' trống</span>' +
             (spare > 1e-6 ? ' <span class="pill-stuff">+' + esc(TV().fmtRate(spare)) + ' chèn</span>' : ''));
           continue;
         }
@@ -756,7 +763,7 @@
     if ((b = t.closest('[data-lremove]'))) {
       e.stopPropagation();
       var p = parsePath(b.getAttribute('data-lremove'));
-      var nd = L().getNode(tree(), p);
+      var nd = L().getNode(tree(), p), pnd = L().getNode(tree(), p.slice(0, -1));
       var before = L().vcgInfo(MUX(), tree());
       L().remove(tree(), p);
       L().vcgSync(tree());
@@ -767,7 +774,7 @@
         if (!a2) lcas.push('VCG#' + bv.g + ' (' + nm(bv.u) + ') hết thành viên — đã bỏ' + (bv.client ? ', ' + nm(bv.client) + ' mất dịch vụ' : ''));
         else if (a2.k < bv.k) lcas.push('LCAS: VCG#' + a2.g + ' còn ' + vcgLine(a2) + ' · SQ đánh lại 0…' + (a2.k - 1));
       });
-      lb.msg = { ok: true, html: 'Đã gỡ ' + esc(nd ? nm(nd.u) : '') + (nd && nd.ts ? ' — trả lại ' + nd.ts.length + ' TS (#' + esc(tsList(nd.ts)) + ')' : '') + '.' +
+      lb.msg = { ok: true, html: 'Đã gỡ ' + esc(nd ? nm(nd.u) : '') + (nd && nd.ts ? ' — trả lại ' + nd.ts.length + ' ' + (pnd ? L().slotWord(MUX(), pnd.u) : 'TS') + ' (#' + esc(tsList(nd.ts)) + ')' : '') + '.' +
         (lcas.length ? '<br>' + lcas.map(esc).join('<br>') : '') }; lb.lastPath = null;
       save(); render(); return;
     }
@@ -787,7 +794,7 @@
       var X2 = lb.armed, fp = parsePath(b.getAttribute('data-lfillat'));
       var c2 = X2 ? L().fill(MUX(), tree(), fp, X2) : 0;
       var pn = L().getNode(tree(), fp);
-      lb.msg = c2 ? { ok: true, html: 'Đã lấp thêm <b>' + c2 + ' ' + esc(nm(X2)) + '</b> vào bể TS ' + esc(nm(pn.u)) + '.' }
+      lb.msg = c2 ? { ok: true, html: 'Đã lấp thêm <b>' + c2 + ' ' + esc(nm(X2)) + '</b> vào bể ' + L().slotWord(MUX(), pn.u) + ' ' + esc(nm(pn.u)) + '.' }
         : { ok: false, html: 'Không còn chỗ cho ' + esc(nm(X2)) + ' — ' + esc(L().explainReject(MUX(), pn.u, X2, pn, tree())) };
       lb.lastPath = null; save(); render(); return;
     }

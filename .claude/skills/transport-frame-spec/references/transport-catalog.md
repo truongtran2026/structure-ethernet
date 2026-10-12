@@ -16,7 +16,43 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD6 | Ôn tập (quiz tự sinh từ dữ liệu, 12 dạng) + Máy tính tốc độ (js/quiz.js, js/calc.js); định dạng số thống nhất; ghi chú P1/Q1 | xong 2026-10-12 (QA ĐẠT; lọc câu lộ đáp án) |
 | GD7 | OTUCn (OTUC/ODUC/OPUC, n = 1, 2, 4; TS 5G, maxPorts 10n) + FlexO (G.709.1 03/2024) | xong 2026-10-12 (review G.709 06/2020 + G.709.1 03/2024: 3 SAI mô tả đã sửa; QA test ĐẠT) |
 | GD8 | Khung OTUk/ODUk theo G.709 06/2020: TCM ACT, FTFL → EXP (4 byte); cập nhật số mục/bảng/hình theo bản 2020 | xong 2026-10-12 (review G.709 06/2020 + đối chiếu 02/2012: 0 SAI ở otn.js, 1 SAI số mục ở b100g.js đã sửa; test ĐẠT) |
-| Sau | FlexE (OIF); Ethernet 200/400GbE vào ODUflex | chờ |
+| GD9 | FlexE (OIF IA 2.2): khung overhead 66B, lịch 5G, nhóm/instance/client, lab FlexE; FlexE-aware vào ODUflex | xong 2026-10-12 (review IA 2.2 + G.709 06/2020: ĐẠT vòng 1, 0 SAI, 6 NHỎ đã sửa; QA ĐẠT) |
+| GD10 | Phản hồi người dùng 2026-10-12: (a) mô phỏng trực quan các cách ánh xạ AMP/BMP/GMP/GFP-F (+ IMP) – thấy từng byte client, byte chèn, Cm/JC, idle; (b) máy tính: giới hạn L theo chuẩn (64–1518/1522, jumbo tuỳ thiết bị ghi rõ), payload kẹp theo MTU đường đi, gợi ý MTU/MSS; kịch bản cổng 1G khai báo 150M (VCAT/ODUflex + policer/shaper, buffer) | chờ |
+| GD11 | ODUflex(IMP): Ethernet 25/200/400GbE và FlexE client vào OTN (G.709 §17.11, §17.13) | chờ |
+
+## GD9 — FlexE (file mới `data/transport-flexe.js`, family `flexe`) — OIF FlexE IA 2.2 (OIF-FLEXE-02.2, 10/2021), G.709 (06/2020) §17.11–17.12
+
+Nguồn text (scratchpad flexe/): `OIF-FLEXE-02.2.txt` (bản chính, 61 trang), `OIF-FLEXE-02.0.txt` (đối chiếu); PDF cùng tên để render hình
+(Hình 24/25 khung overhead: vị trí bit chỉ đọc chắc được bằng ảnh). G.709 2020: scratchpad g709new/g709_2020.txt (§17.11, §17.12, Bảng 7-2/7-3/7-9).
+Mục nào không đọc chắc → CHƯA XÁC MINH, đừng đoán.
+
+Số liệu orchestrator đã tính (kiểm lại):
+- Dòng 66B trên 100GBASE-R (trừ AM 1/16K): 103 125 000 × 16383/16384 ≈ 103 118 705,750 kbit/s = tốc độ FlexE instance 100G.
+- Khung overhead FlexE (một instance 100G): 8 khối OH, mỗi khối OH cách nhau 20 × 1023 khối dữ liệu → 8 × (1 + 20 460) khối 66 bit;
+  chu kỳ ≈ 104,767 µs (IA §6.9: "104.77 µs"). Đa khung: 32 khung OH (OMF) – kiểm lại theo Hình 25.
+- Khe lịch (calendar slot) 5G ≈ 103 118 705,750 × 20460/20461 / 20 ≈ 5 155 683,299 kbit/s.
+
+### Frame (TFRAMES), family `flexe`, category "FlexE"
+| id | Lưới | Ghi chú |
+| --- | --- | --- |
+| `flexe-inst100` | 8 hàng × 20 461 cột, cellBits 66 (ô = một khối 64B/66B) | mỗi hàng = 1 khối OH (cột 1) + 1023 lần lặp lịch 20 khe (cột 2–20 461, dùng rect.step/children lặp theo khe 0–19 nếu schema cho phép, không thì một vùng payload + desc). Cột 1 hàng 1–8: khối OH #1–#8 với bitFields đủ 66 bit (SH 2 bit + 0x4B + C/OMF/RPF/Res/Group number/0x5/0x000_0000 ở khối 1; FlexE Map, instance number, Client calendar A/B, CR/CA, CRC-16 ở khối 2–3; management channel section/shim-to-shim, SMC ở khối 4–8). Thứ tự bit theo Hình 25 (render ảnh). periodUs/rateKbps theo số trên. multiframe 32 (OMF) – note: FlexE Map, Client calendar A/B trải theo đa khung |
+| `flexe-pad` (tuỳ chọn, nếu đủ nguồn) | 1 × 66 bit | khối P1/P2 (Hình 15) và khối OH instance không trang bị (Hình 16) – có thể gộp làm vùng mô tả trong khung trên thay vì khung riêng |
+
+### Unit (TMUX), family `flexe`
+| id | kind | rateKbps | accepts |
+| --- | --- | --- | --- |
+| `flexe-client-10g`, `-25g`, `-40g`, `-50g`, `-100g`, `-150g`, `-200g`, `-300g`, `-400g` | client | MAC × 66/64 (vd 10G → 10 312 500) | — (điểm đầu); IA §5.2.1: tốc độ client 10, 40, m × 25 Gb/s |
+| `flexe-inst100` | flexe | 103 118 705,750 | TS pool: `tribSlots` n = 20, kbps = khe 5G; slots = 2/5/8/10/20 cho client 10/25/40/50/100G (fit "le" vì client đã thích ứng tốc độ bằng xoá idle ~0,011 %) |
+| `flexe-grp-2x100`, `flexe-grp-4x100` (hoặc theo PHY: `flexe-grp-200g` = 1 × 200GBASE-R, `flexe-grp-400g` = 1 × 400GBASE-R) | flexe | n × instance | lịch logic 20n khe: `tribSlots` n = 20n; client > 100G (150/200/300/400G) chỉ vào được nhóm đủ lớn. Nếu mô hình "nhóm chứa instance" cần UI mới thì dùng lịch phẳng 20n và mô tả phân bổ sub-calendar trong desc |
+| `100gbase-r-flexe`, `200gbase-r-flexe`, `400gbase-r-flexe` (PHY) | phy | tốc độ PHY | tuỳ chọn: PHY mang 1/2/4 instance (pad P1/P2 trên 200/400G) – chỉ thêm nếu lab hiển thị được, không thì đưa vào desc nhóm |
+
+FlexE qua OTN (G.709 §17.11, §17.12, IA §8): mô tả 3 kiểu – unaware (cả PHY như Ethernet thường → ODU4/ODUflex), termination (từng client → ODUflex IMP, §17.11; client = s × 5G ...), aware (instance bỏ khe "unavailable" → ODUflex, tốc độ 103 125 000 × 240/238 × n/20 kbit/s, §17.12). GD9 thêm unit `oduflex-flexe-aware` (vài n tiêu biểu, vd n = 10, 15, 20) nếu khớp Bảng 7-2/7-9 và vào được lab OTN; phần ODUflex(IMP) cho client Ethernet/FlexE để GD10.
+
+### Lab
+`flexe` (mới): roots = các nhóm; palette = client. Điểm học: client chiếm số khe 5G, khe trống, client lớn hơn 100G trải qua nhiều instance, giới hạn 25G granularity (gom 5 khe). Lab OTN: palette thêm `oduflex-flexe-aware` nếu có.
+
+### Schema / validator (orchestrator đã thêm)
+FAMILIES += `flexe`; UNIT_KINDS += `flexe`, `phy`. cellBits 66 hợp lệ (số nguyên > 0).
 
 ## GD7 — OTUCn + FlexO (file mới `data/transport-b100g.js`) — G.709 (06/2020), G.709.1 (03/2024)
 

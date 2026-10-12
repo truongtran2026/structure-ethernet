@@ -38,7 +38,9 @@
   /** Khung tính theo bit (cellBits ≠ 8, vd E2/E3/E4) → luôn ghi bit. */
   function bitMode() { return !!(tv.fm && tv.fm.cellBits !== 8); }
   function bytesTxt(b) { return !bitMode() && Number.isInteger(b) ? n(b, 0) + ' byte' : n(b * 8, 0) + ' bit'; }
-  function unitWord() { return bitMode() ? 'bit' : 'byte'; }
+  /** Ô lớn hơn một byte (FlexE: khối 66B) → đếm theo khối, vẫn tính tổng theo bit. */
+  function blockMode() { return !!(tv.fm && tv.fm.cellBits > 8); }
+  function unitWord() { return blockMode() ? 'khối ' + tv.fm.cellBits + 'B' : bitMode() ? 'bit' : 'byte'; }
   /** Chu kỳ khung: thập phân gọn (100,38 µs; 125 µs). */
   function periodTxt(us) { return n(us, Number.isInteger(us) ? 0 : 2) + ' µs'; }
   /** Nhãn/tên/mô tả hiệu lực của region theo khung đang chọn trong đa khung. */
@@ -157,7 +159,7 @@
     };
     var comp = compressOn(), forced = tv.fm.cols > MAX_PLAIN_COLS;
     var perSec = 1e6 / f.periodUs;
-    return '<div class="head-top"><span class="eyebrow">Truyền dẫn · ' + esc(fam) + ' · ' + esc(f.category || '') + '</span>' +
+    return '<div class="head-top"><span class="eyebrow">Truyền dẫn · ' + esc(fam) + (f.category && f.category.toUpperCase() !== fam ? ' · ' + esc(f.category) : '') + '</span>' +
         '<h1 class="stack-title">' + esc(f.name || f.id) + '</h1>' +
         (f.summary ? '<p class="stack-summary">' + esc(f.summary) + '</p>' : '') + '</div>' +
       '<div class="stats">' +
@@ -281,7 +283,8 @@
 
     // thước cột
     var every = dim.cw < 6 ? 30 : dim.cw < 12 ? 10 : dim.cw < 20 ? 5 : 1;
-    var ruler = bitMode() ? '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ bit (cột = vị trí bit trong hàng)">bit</span>'
+    var ruler = blockMode() ? '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ cột (mỗi ô là một khối ' + fm.cellBits + 'B)">h\\c</span>'
+      : bitMode() ? '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ bit (cột = vị trí bit trong hàng)">bit</span>'
       : '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ cột">h\\c</span>';
     dcols.forEach(function (d, i) {
       var col = i + 2;
@@ -330,7 +333,7 @@
     if (hint) {
       var bands = dcols.filter(function (d) { return d.band; }).length;
       var hasPtr = fm.list.some(function (x) { return x.kind === 'pointer'; });
-      hint.textContent = fm.rows + ' hàng × ' + fm.cols + (bitMode() ? ' bit' : ' cột') + (bands ? ' · ' + bands + ' dải cột đang nén (bấm số cột ở thước để bung)' : '') +
+      hint.textContent = fm.rows + ' hàng × ' + fm.cols + (blockMode() ? ' khối ' + fm.cellBits + 'B' : bitMode() ? ' bit' : ' cột') + (bands ? ' · ' + bands + ' dải cột đang nén (bấm số cột ở thước để bung)' : '') +
         ' · bấm khối ⊞ để bung' + (hasPtr ? ' · VC trong lưới vẽ ở vị trí cố định để dễ học (thực tế trôi theo con trỏ)' : '');
     }
     applyHl();
@@ -429,7 +432,7 @@
         [bitMode() ? 'Số bit' : 'Số byte', esc(bytesTxt(x.bytes) + ' mỗi khung (' + x.cells + ' ô)')],
         ['Tốc độ riêng', esc(T().fmtRate(x.kbps)) + ' <span class="muted">= ' + esc(x.cells + ' × ' + fm.cellBits + ' bit × ' + n(1e6 / tv.frame.periodUs, 2) + '/s') + '</span>'],
         rg.repeat ? ['Lặp ở STM-N', esc(rg.repeat)] : null,
-        rg.rect.step > 1 ? ['Ghép xen', esc('mỗi ' + rg.rect.step + ' cột lấy 1 cột (' + (bitMode() ? 'bit' : 'byte') + '-interleave)')] : null
+        rg.rect.step > 1 ? ['Ghép xen', esc('mỗi ' + rg.rect.step + ' cột lấy 1 cột (' + (blockMode() ? 'khối' : bitMode() ? 'bit' : 'byte') + '-interleave)')] : null
       ]) +
       (e.desc ? '<p>' + esc(e.desc) + '</p>' : '') +
       (e.pf && rg.desc && rg.desc !== e.desc ? '<p class="muted">Chung: ' + esc(rg.desc) + '</p>' : '');
@@ -467,7 +470,7 @@
         return '<tr><td><code>' + (a === z ? a : a + '–' + z) + '</code></td><td><b>' + esc(b.abbr || b.name) + '</b>' +
           (b.abbr && b.abbr !== b.name ? '<br><span class="muted">' + esc(b.name) + '</span>' : '') + '</td><td>' + esc(b.desc) + '</td></tr>';
       }).join('') + '</tbody></table></div><p class="muted var-hint">' +
-      (total === 8 ? 'Bit đánh số 1–8 từ bit có trọng số lớn nhất (quy ước ITU-T).' : 'Bit đánh số từ 1 theo thứ tự truyền.') + '</p>';
+      (total === 8 ? 'Bit đánh số 1–8 từ bit có trọng số lớn nhất (quy ước ITU-T).' : total === 66 ? 'Khối 66B: bit 1–2 là đầu đồng bộ SH, bit 3–66 là 64 bit nội dung (bit 0–63 trong hình của chuẩn).' : 'Bit đánh số từ 1 theo thứ tự truyền.') + '</p>';
   }
 
   /** Dải bit nhỏ minh hoạ bitFields (mỗi hàng 8 bit). */

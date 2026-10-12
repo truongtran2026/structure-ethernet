@@ -533,6 +533,11 @@ window.TLABS = window.TLABS || [];
     desc: "n = 9–32 dùng ODU3.ts: 32 × ODU3.ts ≈ 40,143 Gbit/s – lấp đủ 32 TS OPU3, KHÔNG vào được OPU2 (chỉ 8 TS). Ở OPU4 vẫn chiếm 32 TS dù theo tốc độ chỉ cần ≈ 30,84 TS (ODU4.ts lớn hơn ODU3.ts): Bảng 7-9 ghi n cho mọi HO OPU và phương trình 19-1b (§19.6) cho M = n = 32 (ODTU4.M, Hình 19-37) – khác ODU3 (31 TS) và ODUflex(CBR) (tính theo công thức Ceiling). Đổi lại, số TS như nhau trên mọi chặng/tuyến khôi phục – điều kiện để HAO thêm/bớt TS (Phụ lục XI.1)." });
 
   // Ghi chú TS cho ODUflex(GFP) n vào HO OPUk có 1 TS = tsk kbit/s.
+  // GD9: ODUflex(FlexE-aware) = 103 125 000 × 240/238 × n/20 (Bảng 7-2); Bảng 7-9 ghi "Note" → M theo 19-1a (100 ppm, TS 20 ppm).
+  function faTsNote(n, tsk, m) {
+    var r = 103125000 * 240 / 238 * n / 20;
+    return "ODUflex(FlexE-aware) n = " + n + ": " + vn(r, 0) + " kbit/s; M = ⌈" + vn(r * 1.00016 / (tsk * 0.99998), 3) + "⌉ = " + m + " TS (G.709 06/2020 phương trình 19-1a; Bảng 7-9 dòng ODUflex(FlexE): Note; §17.12, PT 0x1E).";
+  }
   function gfpTsNote(n, tsk) {
     var r = flexGfp(n).rate;
     return "ODUflex(GFP) " + vn(r, 0) + " kbit/s = " + vn(r / tsk, 2) + " TS danh định → chiếm " + n + " TS (Bảng 7-9 hàng ODUflex(GFP): n ở OPU2/3/4; GMP ODTUk." + n + ").";
@@ -584,7 +589,8 @@ window.TLABS = window.TLABS || [];
         note: "Khung MAC 40GbE qua GFP-F ≈ " + vn(40000000 * GFPF, 0) + " kbit/s ≤ OPU3 ≈ " + vn(RATE.opu3, 0) + " kbit/s. So sánh: 40GBASE-R trong suốt phải chuyển mã 1024B/1027B rồi GMP (PT 0x07)." },
       { of: "oduflex-gfp-1", count: 32, slots: 1, mapping: "GMP (ODTU3.1)", note: gfpTsNote(1, ts3) },
       { of: "oduflex-gfp-8", count: 4, slots: 8, mapping: "GMP (ODTU3.8)", note: gfpTsNote(8, ts3) },
-      { of: "oduflex-gfp-32", count: 1, slots: 32, mapping: "GMP (ODTU3.32)", note: gfpTsNote(32, ts3) + " Lấp kín OPU3." }
+      { of: "oduflex-gfp-32", count: 1, slots: 32, mapping: "GMP (ODTU3.32)", note: gfpTsNote(32, ts3) + " Lấp kín OPU3." },
+      { of: "oduflex-flexe-aware-5", count: 1, slots: 21, mapping: "GMP (ODTU3.21)", note: faTsNote(5, ts3, 21) + " n ≥ 10 không vừa OPU3." }
     ] });
   oduUnit("3", 41, "Vào OPU4 chiếm 31 TS (GMP, 30,97 TS).");
   otuUnit("3", 42, "Giao diện 43,018 Gbit/s.");
@@ -605,7 +611,11 @@ window.TLABS = window.TLABS || [];
       { of: "oduflex-fc800", count: 11, slots: 7, mapping: "GMP (ODTU4.ts)", note: "≈ 6,56 TS → 7 TS." },
       { of: "oduflex-gfp-1", count: 80, slots: 1, mapping: "GMP (ODTU4.1)", note: gfpTsNote(1, ts4) },
       { of: "oduflex-gfp-8", count: 10, slots: 8, mapping: "GMP (ODTU4.8)", note: gfpTsNote(8, ts4) },
-      { of: "oduflex-gfp-32", count: 2, slots: 32, mapping: "GMP (ODTU4.32)", note: gfpTsNote(32, ts4) + " Theo tốc độ chỉ cần 31 TS nhưng chuẩn cấp đủ 32 (Bảng 7-9: n; phương trình 19-1b M = n = 32) – khác ODU3 vào OPU4 chỉ 31 TS." }
+      { of: "oduflex-gfp-32", count: 2, slots: 32, mapping: "GMP (ODTU4.32)", note: gfpTsNote(32, ts4) + " Theo tốc độ chỉ cần 31 TS nhưng chuẩn cấp đủ 32 (Bảng 7-9: n; phương trình 19-1b M = n = 32) – khác ODU3 vào OPU4 chỉ 31 TS." },
+      { of: "oduflex-flexe-aware-5", count: 4, slots: 20, mapping: "GMP (ODTU4.20)", note: faTsNote(5, ts4, 20) },
+      { of: "oduflex-flexe-aware-10", count: 2, slots: 40, mapping: "GMP (ODTU4.40)", note: faTsNote(10, ts4, 40) },
+      { of: "oduflex-flexe-aware-15", count: 1, slots: 60, mapping: "GMP (ODTU4.60)", note: faTsNote(15, ts4, 60) },
+      { of: "oduflex-flexe-aware-20", count: 1, slots: 80, mapping: "GMP (ODTU4.80)", note: faTsNote(20, ts4, 80) + " Lấp kín OPU4." }
     ] });
   oduUnit("4", 51, "Đơn vị 100G: mang 100GbE hoặc tổ hợp ODU thấp hơn trong 80 TS.");
   otuUnit("4", 52, "Giao diện 111,81 Gbit/s.");
@@ -617,7 +627,7 @@ window.TLABS = window.TLABS || [];
     id: "otn", name: "Ghép kênh OTN", family: "otn",
     // GD7: roots otuc*/flexo-* và các unit OPUCn/ODUCn định nghĩa trong data/transport-b100g.js (trang phải nạp file đó).
     roots: ["otu1", "otu2", "otu2e", "otu3", "otu4", "otuc1", "otuc2", "otuc4", "flexo-1", "flexo-2", "flexo-4"],
-    palette: ["1gbe", "eth-1g-gfpf", "stm-16", "fc-800", "10gbe", "eth-10g-gfpf", "stm-64", "40gbe", "eth-40g-gfpf", "stm-256", "100gbe", "odu0", "oduflex-gfp-1", "odu1", "oduflex-fc800", "oduflex-gfp-8", "odu2", "odu2e", "oduflex-gfp-32", "odu3", "odu4"],
-    intro: "Chọn OTUk đích rồi lắp từ dưới lên: client → OPUk (ánh xạ AMP/BMP/GMP) → ODUk (+ ODU OH) → OTUk (+ FEC). Chọn 'ghép TS' để trộn ODU0 / ODU1 / ODU2 / ODUflex trong cùng một OPU theo tributary slot 1,25G – miễn tổng TS không vượt (2, 8, 32 hoặc 80). Thử thả 10GbE vào OPU2 hay 40GbE chưa chuyển mã để thấy vì sao cần ODU2e và 1024B/1027B. So sánh với Ethernet chỉ mang khung MAC (GFP-F): 10G GFP-F vừa thẳng OPU2 hoặc ODUflex(GFP) 8 TS; ODUflex(GFP) 32 TS vào OPU3 nhưng không vào OPU2, và ở OPU4 vẫn chiếm 32 TS (ODU3 chỉ 31). Beyond 100G: OTUC1/2/4 chỉ chở ODUk qua TS 5G (20 TS mỗi lát 100G) – ODU0/ODU1 tốn trọn 1 TS 5G, ODU2 2 TS, ODU3 8 TS, ODU4 20 TS; OTUC4 chở 4 ODU4 hoặc 40 ODU2. FlexO-n bọc OTUCn thêm AM/EOH/BOH (FEC thêm ở giao diện)."
+    palette: ["1gbe", "eth-1g-gfpf", "stm-16", "fc-800", "10gbe", "eth-10g-gfpf", "stm-64", "40gbe", "eth-40g-gfpf", "stm-256", "100gbe", "odu0", "oduflex-gfp-1", "odu1", "oduflex-fc800", "oduflex-gfp-8", "odu2", "odu2e", "oduflex-gfp-32", "odu3", "odu4", "oduflex-flexe-aware-5", "oduflex-flexe-aware-10", "oduflex-flexe-aware-15", "oduflex-flexe-aware-20"],
+    intro: "Chọn OTUk đích rồi lắp từ dưới lên: client → OPUk (ánh xạ AMP/BMP/GMP) → ODUk (+ ODU OH) → OTUk (+ FEC). Chọn 'ghép TS' để trộn ODU0 / ODU1 / ODU2 / ODUflex trong cùng một OPU theo tributary slot 1,25G – miễn tổng TS không vượt (2, 8, 32 hoặc 80). Thử thả 10GbE vào OPU2 hay 40GbE chưa chuyển mã để thấy vì sao cần ODU2e và 1024B/1027B. So sánh với Ethernet chỉ mang khung MAC (GFP-F): 10G GFP-F vừa thẳng OPU2 hoặc ODUflex(GFP) 8 TS; ODUflex(GFP) 32 TS vào OPU3 nhưng không vào OPU2, và ở OPU4 vẫn chiếm 32 TS (ODU3 chỉ 31). Beyond 100G: OTUC1/2/4 chỉ chở ODUk qua TS 5G (20 TS mỗi lát 100G) – ODU0/ODU1 tốn trọn 1 TS 5G, ODU2 2 TS, ODU3 8 TS, ODU4 20 TS; OTUC4 chở 4 ODU4 hoặc 40 ODU2. FlexO-n bọc OTUCn thêm AM/EOH/BOH (FEC thêm ở giao diện). ODUflex(FlexE-aware) n = 5 chiếm 21 TS OPU3 hoặc 20 TS OPU4; n = 20 lấp kín OPU4 (80 TS) hoặc 20 TS 5G của OPUCn."
   });
 })();

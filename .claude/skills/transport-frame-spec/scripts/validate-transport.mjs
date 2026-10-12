@@ -8,8 +8,8 @@ import vm from "node:vm";
 const root = path.resolve(process.argv[2] || ".");
 const dataDir = path.join(root, "data");
 const KINDS = ["fas", "soh", "pointer", "poh", "opu-oh", "payload", "stuff", "fec", "reserved", "tributary"];
-const UNIT_KINDS = ["client", "container", "vc", "tu", "tug", "au", "aug", "stm", "odu", "opu", "otu", "pdh", "vcg"];
-const FAMILIES = ["pdh", "sdh", "otn"];
+const UNIT_KINDS = ["client", "container", "vc", "tu", "tug", "au", "aug", "stm", "odu", "opu", "otu", "pdh", "vcg", "flexe", "phy"];
+const FAMILIES = ["pdh", "sdh", "otn", "flexe"];
 const errors = [], warns = [];
 const err = (m) => errors.push(m), warn = (m) => warns.push(m);
 

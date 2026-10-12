@@ -17,6 +17,7 @@
     { id: 'pdh', name: 'PDH', hint: 'E1…E4: khung, tốc độ, ghép kênh' },
     { id: 'sdh', name: 'SDH', hint: 'STM-N, VC, TU, TUG: khung, con trỏ, overhead' },
     { id: 'otn', name: 'OTN', hint: 'OTUk/ODUk/OPUk, tributary slot' },
+    { id: 'flexe', name: 'FlexE', hint: 'Instance 100G, khe lịch 5G, nhóm, PHY mang FlexE' },
     { id: 'eos', name: 'Ethernet qua truyền dẫn', hint: 'GFP-F, VCAT, ODUflex(GFP)' }
   ];
   var TYPE_NAME = {
@@ -409,7 +410,7 @@
     if (!TV) return;
     var seenCell = {}, seenBf = {};
     var frames = Object.keys(D.F).map(function (k) { return D.F[k]; }).filter(function (f) { return f && f.id && f.grid; });
-    var famOrder = { pdh: 1, sdh: 2, otn: 3 };
+    var famOrder = { pdh: 1, sdh: 2, otn: 3, flexe: 4 };
     frames.sort(function (a, b) { return (famOrder[a.family] || 9) - (famOrder[b.family] || 9) || (a.order || 0) - (b.order || 0); });
     frames.forEach(function (f) {
       var topic = frameTopic(D, f), fm;
@@ -417,7 +418,7 @@
       if (fm.errors && fm.errors.length) return;
       var leaves = fm.list.filter(function (x) { return !x.children.length; });
       var leafLabels = uniq(leaves.map(function (x) { return regionLabel(x.region); }));
-      var unitWord = f.grid.cellBits === 1 ? 'bit' : 'ô (byte)';
+      var unitWord = f.grid.cellBits === 1 ? 'bit' : f.grid.cellBits === 8 ? 'ô (byte)' : 'ô (khối ' + f.grid.cellBits + 'B)';
       // (7) ô [hàng, cột] thuộc vùng nào — chỉ vùng lá, không perFrame, khung có ≥ 4 nhãn lá
       if (leafLabels.length >= 4) {
         leaves.forEach(function (x) {
@@ -608,11 +609,11 @@
     tsl = tsl.filter(function (x) { return !(L.effCount && L.effCount(M, x.B, x.a) < x.a.count); }); // bỏ ODU0/ODU1... trong OPUCn (maxPorts ràng buộc)
     tsl.forEach(function (x) {
       out.push({ key: 'u-ts|' + x.B + '|' + x.a.of, topic: x.topic, type: 'u-ts', make: function (rng) {
-        var t = M[x.B].tribSlots, fmtT = function (v) { return fmtNum(v, 0) + ' TS'; };
+        var t = M[x.B].tribSlots, fx = M[x.B].kind === 'flexe', fmtT = function (v) { return fmtNum(v, 0) + (fx ? ' khe' : ' TS'); };
         var d = numDistractors(x.a.slots, slotPool, fmtT, rng);
         var oname = objectName(x.a.of, fmtT(x.a.slots));
         if (!oname) return null;
-        var q = { prompt: 'Trong ' + nm(x.B) + ' (' + t.n + ' tributary slot' + (t.size ? ' × ' + t.size : '') + '), một ' + oname + ' chiếm bao nhiêu tributary slot?',
+        var q = { prompt: 'Trong ' + nm(x.B) + ' (' + t.n + (fx ? ' khe lịch' : ' tributary slot') + (t.size ? ' × ' + t.size : '') + '), một ' + oname + ' chiếm bao nhiêu ' + (fx ? 'khe lịch' : 'tributary slot') + '?',
           objNames: [oname],
           explain: (x.a.note || M[x.a.of].summary || '') + (x.a.mapping ? ' Ánh xạ: ' + x.a.mapping + '.' : '') + ' Tối đa ' + (L.effCount ? L.effCount(M, x.B, x.a) : x.a.count) + ' ' + nm(x.a.of) + ' khi chỉ dùng loại này.',
           open: openUnit(D, x.a.of, x.B), check: { B: x.B, of: x.a.of } };

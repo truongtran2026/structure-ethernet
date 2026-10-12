@@ -135,6 +135,26 @@ hàng `r … r+h-1`. Dùng cho TUG-3 trong VC-4, TU-12 trong TUG-2…
 VCG không phải con của unit nào: lab rải thành viên vào vị trí trống kiểu `members.of` trong khung đích.
 Validator: `members.of` có `accepts` chứa `payloadOf`; `rateKbps = count × tốc độ payloadOf`.
 
+### Mở rộng FlexE (GD9)
+
+```js
+// Khung: ô = MỘT khối 64B/66B (cellBits 66); hàng = 1 khối OH + 1023 vòng lịch 20 khe
+F["flexe-inst100"] = { family: "flexe", grid: { rows: 8, cols: 20461, cellBits: 66 }, multiframe: { frames: 32 }, … }
+// khe lịch s (0–19) là region step 20 phủ cả 8 hàng: rect { r: 0, c: 1 + s, h: 8, w: 1023, step: 20 }
+{ id: "flexe-inst100", kind: "flexe", family: "flexe", rateKbps: 103125000 * 16383 / 16384,
+  tribSlots: { n: 20, kbps: rate * 20460 / 20461 / 20, size: "5G" },            // bể khe lịch 5G — dùng lại luật bể TS
+  accepts: [{ of: "flexe-client-25g", count: 4, slots: 5, carriedKbps: 25e6 * 66 / 64 * 16383 / 16384 * 20460 / 20461 }] }
+{ id: "flexe-grp-4x100", kind: "flexe", tribSlots: { n: 80, … } }               // nhóm = lịch PHẲNG 20n khe
+{ id: "400gbase-r-flexe", kind: "phy", accepts: [{ of: "flexe-grp-4x100", count: 1, overhead: { kbps: AM + pad } }] }
+```
+- `family: "flexe"` (category "FlexE"); unit kind `flexe` (instance, nhóm) và `phy` (PHY Ethernet mang nhóm).
+- Client FlexE: `rateKbps` = 66/64 × MAC; phương án `slots` ghi `carriedKbps` = tốc độ sau thích ứng Idle
+  (× 16383/16384 × 20460/20461) — đúng bằng `slots × tribSlots.kbps`, nên luật bể TS hiện có kiểm được.
+- Nhóm n instance vẽ một bể phẳng 20n khe (client > 100G trải nhiều instance, IA §6.8); không có phương án
+  "n × instance" vì nó sẽ cấm client vượt 100G (sai với chuẩn).
+- `oduflex-flexe-aware-*` (family `otn`, kind `odu`): tốc độ 103 125 000 × 240/238 × n/20 (G.709 Bảng 7-2);
+  chỉ n = 20 có `accepts` (1 × flexe-inst100, `fit: "le"`, `leafOk`).
+
 Một unit không có `accepts` là điểm đầu (client). Các con của cùng một phương án là độc lập:
 VC-4 nhận 3×TUG-3, mỗi TUG-3 tự chọn phương án riêng (7×TUG-2 hoặc 1×TU-3).
 

@@ -574,6 +574,8 @@ button { font: inherit; color: inherit; }
 .k-aug, .k-opu { --kb: var(--trailer-bg); --kd: var(--trailer-bd); --kf: var(--trailer-fg); }
 .k-vcg       { --kb: var(--l2-bg);      --kd: var(--l2-bd);      --kf: var(--l2-fg); border-style: dashed; } /* VCG = nhóm VC ghép ảo: màu VC, viền đứt */
 .k-stm, .k-otu, .k-pdh { --kb: var(--phy-bg); --kd: var(--phy-bd); --kf: var(--phy-fg); }
+.k-phy { --kb: var(--phy-bg); --kd: var(--phy-bd); --kf: var(--phy-fg); border-style: double; } /* PHY Ethernet mang nhóm FlexE */
+.k-flexe { --kb: var(--l2_5-bg); --kd: var(--l2_5-bd); --kf: var(--l2_5-fg); border-style: dashed; } /* instance / nhóm FlexE: bể khe lịch */
 .swatch[class*="k-"], .lg-sw[class*="k-"] { background: var(--kb); border-color: var(--kd); }
 .k-reserved.lg-sw, .swatch.k-reserved { border-style: dotted; }
 .lg-band { background: repeating-linear-gradient(90deg, var(--surface-2) 0 3px, var(--border-strong) 3px 4px); border: 1px solid var(--border-strong); }

@@ -233,7 +233,7 @@
 
   var STORE_KEY = 'fs.calc.v1';
   var cv = { active: false, built: false, st: null };
-  var FAM = { pdh: 'PDH', sdh: 'SDH', otn: 'OTN' };
+  var FAM = { pdh: 'PDH', sdh: 'SDH', otn: 'OTN', flexe: 'FlexE' };
 
   function $(s, el) { return (el || document).querySelector(s); }
   function esc(s) {
@@ -366,7 +366,8 @@
         stat('Kích thước khung', esc(info.frame.cellBits === 8 ? n(fb, 0) + ' byte' : n(info.frame.bits, 0) + ' bit'), esc(info.frame.rows + ' × ' + info.frame.cols) + (info.frame.cellBits === 1 ? ' bit' : ' ô'));
     }
     if (info.members) cards += stat('Thành viên', esc(info.members.count + ' × ' + nm(M, info.members.of)), 'tải: ' + esc(nm(M, info.members.payloadOf)));
-    if (info.pool) cards += stat('Tributary slot', esc(info.pool.n + ' TS'), esc(rate(info.pool.kbps)) + ' mỗi TS');
+    if (info.pool) cards += info.kind === 'flexe' ? stat('Khe lịch', esc(info.pool.n + ' khe'), esc(rate(info.pool.kbps)) + ' mỗi khe')
+      : stat('Tributary slot', esc(info.pool.n + ' TS'), esc(rate(info.pool.kbps)) + ' mỗi TS');
     var html = '<div class="stats">' + cards + '</div>' +
       (info.summary ? '<p class="note calc-note">' + esc(info.summary) + '</p>' : '');
     var ch = chains(M, root.TLABS || [], cv.st.unit);

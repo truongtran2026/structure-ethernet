@@ -411,7 +411,11 @@ window.TLABS = window.TLABS || [];
     { of: "oduflex-gfp-1", slots: 1, note: "Công thức 20-1b: M = ⌈1/4⌉ = 1 TS (Bảng 7-9: ODUflex(GFP,n,k) – Note → 20-1b)." },
     { of: "oduflex-gfp-8", slots: 2, note: "Công thức 20-1b: M = ⌈8/4⌉ = 2 TS (" + ratio("oduflex-gfp-8") + " TS danh định)." },
     { of: "oduflex-gfp-32", slots: 8, note: "Công thức 20-1b: M = ⌈32/4⌉ = 8 TS (" + ratio("oduflex-gfp-32") + " TS danh định)." }
-  ];
+  ].concat([5, 10, 15, 20].map(function (n) {
+    // GD9: ODUflex(FlexE-aware) = 103 125 000 × 240/238 × n/20 (Bảng 7-2); Bảng 7-9 ghi "Note" → M theo 20-1a (100 ppm, TS 20 ppm).
+    var r = 103125000 * 240 / 238 * n / 20;
+    return { of: "oduflex-flexe-aware-" + n, slots: n, note: "ODUflex(FlexE-aware) n = " + n + ": " + vn(r, 0) + " kbit/s; M = ⌈" + vn(r * 1.00016 / (TS5G * 0.99998), 3) + "⌉ = " + n + " TS 5G (G.709 06/2020 phương trình 20-1a; Bảng 7-9 dòng ODUflex(FlexE): Note; §17.12, PT 0x1E) – mỗi khe lịch FlexE 5G cần đúng 1 TS 5G." };
+  }));
   var LIMIT = function (n) { return " OPUC" + n + " có " + 20 * n + " TS nhưng chỉ " + 10 * n + " cổng nhánh (MSI đánh số 1…" + 10 * n + ", §20.4.1.1; §20: 'up to 10n different ODUk'; §7.4 NOTE 3: không bắt buộc hỗ trợ 20n ODU0/ODU1/ODUflex) – lab chặn ở " + 10 * n + " con mỗi OPUC" + n + "."; };
 
   [1, 2, 4].forEach(function (n, i) {

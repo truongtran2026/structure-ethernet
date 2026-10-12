@@ -16,7 +16,8 @@
   var FAMILY = {
     pdh: { name: 'PDH', hint: 'Phân cấp cận đồng bộ (E1…E4)', order: 1 },
     sdh: { name: 'SDH', hint: 'Phân cấp số đồng bộ (STM-N)', order: 2 },
-    otn: { name: 'OTN', hint: 'Mạng truyền tải quang (OTUk/ODUk)', order: 3 }
+    otn: { name: 'OTN', hint: 'Mạng truyền tải quang (OTUk/ODUk)', order: 3 },
+    flexe: { name: 'FlexE', hint: 'Flexible Ethernet (OIF FlexE IA): instance 100G, khe lịch 5G', order: 4 }
   };
   var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc' };
   var APP_NAME = 'Frame Structure';
