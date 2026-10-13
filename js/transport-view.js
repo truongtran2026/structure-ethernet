@@ -123,6 +123,7 @@
     document.getElementById('alerts').innerHTML = alerts;
     view.innerHTML =
       '<section class="stack-head">' + renderHead() + '</section>' +
+      opuNoteHtml(tv.frame) +
       '<section class="card tg-card" aria-label="Lưới ' + unitWord() + '">' +
         '<div class="section-title"><h2>Lưới ' + unitWord() + (tv.state.mf != null ? ' · khung ' + tv.state.mf : '') + '</h2><span class="muted" id="tg-hint"></span></div>' +
         '<div class="tg-scroll" id="tg-scroll"></div>' + renderLegend() +
@@ -134,6 +135,19 @@
     renderGrid();
     renderTree();
     renderDetail();
+  }
+
+  /** Chú thích OPU OH (trường `opuNote` của khung) + liên kết tới mô phỏng ánh xạ liên quan (TMAPS có frames chứa khung này, hoặc server = khung). Không có trường → không hiện gì. */
+  function opuNoteHtml(f) {
+    if (!f || !f.opuNote) return '';
+    var maps = Array.isArray(window.TMAPS) ? window.TMAPS : [];
+    // `opuSim` (id TMAPS) chỉ định rõ kịch bản cùng kiểu ánh xạ với OPU OH vẽ ở khung này; '' = không liên kết.
+    // Không có opuSim thì chỉ nhận kịch bản liệt kê khung này trong frames (không đoán theo server – OPU2 có cả AMP lẫn GMP).
+    var sc = f.opuSim != null
+      ? maps.filter(function (m) { return m && m.id === f.opuSim; })[0]
+      : maps.filter(function (m) { return m && m.id && (m.frames || []).indexOf(f.id) >= 0; })[0];
+    return '<div class="opu-note" role="note"><b>Cột 15–16 (OPU OH).</b> ' + esc(f.opuNote) +
+      (sc ? ' <a href="#sim/' + esc(sc.id) + '">Xem mô phỏng ' + esc(sc.method || '') + ': ' + esc(sc.name || sc.id) + '</a>' : '') + '</div>';
   }
 
   function stat(label, value, sub, tip) {

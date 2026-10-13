@@ -29,6 +29,8 @@ window.TLABS   = window.TLABS   || [];   // các phòng thí nghiệm ghép kên
   rateKbps: 155520,                    // validator: rows*cols*cellBits*1000/periodUs
   multiframe: { frames: 4, note: "…" },       // (tuỳ chọn) đa khung
   unit: "stm-1",                       // (tuỳ chọn) id trong TMUX tương ứng, để lab mở được khung
+  opuNote: "…",                        // (tuỳ chọn, chuỗi VN 1–2 câu) khung OTN có vùng OPU OH: nói rõ cột 15–16 vẽ theo ánh xạ nào và các ánh xạ khác bố trí khác (AMP/BMP, GMP, GFP-F, ghép ODU)
+  opuSim: "amp-stm16-opu1",               // (tuỳ chọn) id TMAPS cùng kiểu ánh xạ với OPU OH vẽ ở khung; "" = không liên kết (đừng để UI đoán theo server: OPU2 có cả AMP lẫn GMP)
   regions: [ /* Region[] — PHẢI phủ kín lưới, không chồng nhau */ ]
 }
 ```

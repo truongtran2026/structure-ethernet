@@ -931,6 +931,10 @@ button { font: inherit; color: inherit; }
 .sim-oh { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; width: 92px; }
 .sim-ohbox { border-radius: 7px; padding: 3px 6px; font-size: .72rem; line-height: 1.25; border: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
 .sim-ohbox span { font-weight: 700; }
+.sim-ohcols tr.sim-ohcur td { background: var(--accent-soft); }
+.sim-ohcols tr.sim-ohcur td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
+.opu-note { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 8px; font-size: .88rem; line-height: 1.45; margin: 0 0 10px; }
+.opu-note a { font-weight: 600; margin-left: 6px; }
 .sim-ohbox b { font-variant-numeric: tabular-nums; }
 .sim-ohbox small { color: var(--muted); word-break: break-all; }
 .sim-t-jc { border-left: 5px solid var(--sim-jc); }

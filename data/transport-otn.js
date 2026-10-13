@@ -313,12 +313,22 @@ window.TLABS = window.TLABS || [];
       summary: "Khung OTU4 111,81 Gbit/s: 4 × 4080 byte, chu kỳ ≈ 1,168 µs; mang 100GbE hoặc 80 TS 1,25G.",
       extra: "OTU4 ≈ 111,809974 Gbit/s; FEC bắt buộc (§11.1). Ở OPU4 hàng 4 cột 16 là OMFI (bộ đếm đa khung 0–79) khi ghép ODU." }
   ];
+  var OPU_ALT = "AMP/BMP = RES + 3 byte JC (chỉ bit 7–8 là mã bù, chép 3 lần để biểu quyết 2/3; §17.2 gọi chung là JC, không đánh số) + NJO (PJO ở cột 17 hàng 4); GMP = JC1–JC6 (Cm, CRC-8, ΣCnD, CRC-5), không NJO/PJO; GFP-F = PSI + RES; ghép ODU (PT 20/21) = TSOH luân phiên theo TS (JC theo TS) + MSI trong PSI.";
+  var OPU_MAP = { "1": "AMP/BMP: STM-16 trong OPU1 (G.709 06/2020 §17.2, Hình 17-1/17-2)",
+    "2": "AMP/BMP: STM-64 trong OPU2 (§17.2, Hình 17-1/17-2)",
+    "2e": "BMP: 10GBASE-R trong OPU2e (§17.2.4, Hình 17-1/17-2; JC = 00)",
+    "3": "AMP/BMP: STM-256 trong OPU3 (§17.2, Hình 17-1/17-2)",
+    "4": "GMP: 100GBASE-R trong OPU4 (§17.7.5, Hình 17-15, Annex D)" };
   otuSpecs.forEach(function (o) {
+    o.opuMap = OPU_MAP[o.key];
     var id = "otu" + o.key, rate = RATE[id];
     o.rate = rate;
     F[id] = {
       id: id, name: "OTU" + o.key + " (" + vn(rate / 1e6, 3) + " Gbit/s)", family: "otn", category: "Khung OTUk", order: o.order,
       standard: o.std, summary: o.summary,
+      opuNote: "Cột 15–16 (OPU OH) ở khung này vẽ theo ánh xạ " + o.opuMap + "; ánh xạ khác thì khác: " + OPU_ALT,
+      // kịch bản #sim cùng kiểu ánh xạ với OPU OH vẽ ở đây (AMP cho OTU1–3: cơ chế giống STM-16 → OPU1)
+      opuSim: { "1": "amp-stm16-opu1", "2": "amp-stm16-opu1", "3": "amp-stm16-opu1", "2e": "bmp-10gbase-r-opu2e", "4": "gmp-100gbase-r-opu4" }[o.key] || "",
       detail: "Mọi OTUk dùng cùng một khung 4 hàng × 4080 cột byte, truyền theo hàng; chỉ tốc độ (và chu kỳ khung) khác nhau. Cột 1–14: hàng 1 là FA OH (FAS + MFAS, cột 1–7) và OTU OH (SM, GCC0, OSMC, RES, cột 8–14), hàng 2–4 là ODU OH; cột 15–16 là OPU OH; cột 17–3824 là payload OPU; cột 3825–4080 là FEC. Tỉ lệ OPU payload : ODU : OTU = 3808 : 3824 : 4080 = 238 : 239 : 255. Với k = 1…3, OTUk = 255/(239 − k) × tốc độ STM tương ứng; OTU4 = 255/227 × 99 532 800 kbit/s (= 40 × STM-16) và OTU2e = 255/237 × 10 312 500 kbit/s không theo công thức này (G.709 Bảng 7-1, §12.2.1). Đa khung 256 theo MFAS: TTI 64 byte, PSI 256 byte, APS/PCC theo MFAS mod 8. Bản G.709 06/2020 không còn kênh FTFL (256 byte) và TCM ACT của bản 02/2012: hai byte đó (hàng 2 cột 4 và 14) nay là EXP. " + o.extra,
       grid: { rows: 4, cols: 4080, cellBits: 8 }, periodUs: 4 * 4080 * 8 * 1000 / rate, rateKbps: rate, unit: id,
       multiframe: { frames: 256, note: "Đa khung 256 khung đánh số bằng MFAS (0–255). TTI của SM/PM/TCM lặp mỗi 64 khung (4 lần trong đa khung); PSI là bản tin 256 byte; APS/PCC đổi lớp theo MFAS bit 6–8. Bấm TTI, PSI, APS/PCC để xem nghĩa theo khung." },
@@ -341,6 +351,8 @@ window.TLABS = window.TLABS || [];
       summary: "Vùng OPU1 (cột 15–3824) chở một STM-16 bằng ánh xạ không đồng bộ AMP: 3 JC, NJO, PJO và PSI.",
       detail: "Lưới là phần OPU1 của khung OTU1 (cột 15–3824). STM-16 2 488 320 kbit/s đúng bằng tốc độ danh định OPU1 payload, nên không cần cột fixed stuff; lệch tần số của client so với đồng hồ OPU (AMP chịu client ±45 ppm, tổng ±65 ppm cùng ±20 ppm của OPU; BMP chỉ cho client ±20 ppm) được bù bằng 1 cơ hội chèn âm (NJO, hàng 4 cột 16) và 1 cơ hội chèn dương (PJO, hàng 4 cột 17) mỗi khung, điều khiển bởi 3 byte JC (biểu quyết 2/3). Với BMP (PT 0x03) đồng hồ OPU lấy từ client nên JC luôn 00. PSI[0] = 0x02 (AMP). Lưới vẽ client đi cố định – thực tế byte STM-16 không căn với khung OTU.",
       grid: { rows: 4, cols: 3810, cellBits: 8 }, periodUs: per, rateKbps: 4 * 3810 * 8 * 1000 / per,
+      opuNote: "Cột 15–16 (OPU OH) ở khung này vẽ theo ánh xạ AMP: STM-16 trong OPU1 (G.709 06/2020 §17.2, Hình 17-1/17-2); ánh xạ khác thì khác: " + OPU_ALT,
+      opuSim: "amp-stm16-opu1",
       multiframe: { frames: 256, note: "PSI là bản tin 256 byte theo MFAS của khung OTU1." },
       regions: [
         R("oh", "OPU1 OH", "OPU1 Overhead (AMP)", "opu-oh", [0, 0, 4, 2], "Cột 15–16 của khung OTU1.", {
@@ -383,6 +395,8 @@ window.TLABS = window.TLABS || [];
       summary: "Vùng OPU2 (cột 15–3824) chia 8 tributary slot 1,25G ghép xen theo cột; TSOH luân phiên theo MFAS mod 8.",
       detail: "PT = 0x21: OPU2 chia payload 3808 cột thành 8 TS ghép xen từng cột (TS1 = cột 17, 25, 33…; TS8 = cột 24, 32…), mỗi TS 476 cột. ODU cấp thấp được ánh xạ vào ODTU rồi vào các TS: ODU1 → ODTU12 (AMP, 2 TS), ODU0 → ODTU2.1 (GMP, 1 TS), ODUflex → ODTU2.ts (GMP, ts TS). Overhead điều khiển chèn của mỗi TS (TSOH: hàng 1–3 cột 15–16 + hàng 4 cột 16) chỉ thuộc về TS đó trong khung có MFAS bit 6–8 = số TS − 1, tức đa khung 8. PSI[0] = 0x21, PSI[2–9] = MSI (mỗi byte một TS: bit 1–2 loại ODTU, bit 3–8 cổng nhánh − 1; §19.4.1). OPU2 không dùng OMFI (chỉ OPU4 có, vì 80 TS không chia hết 256). Lưới vẽ ODU cố định trong TS – thực tế ODTU trôi theo GMP/AMP.",
       grid: { rows: 4, cols: 3810, cellBits: 8 }, periodUs: per, rateKbps: 4 * 3810 * 8 * 1000 / per,
+      opuNote: "Cột 15–16 (OPU OH) ở khung này vẽ theo ghép ODU PT 21 vào OPU2 (G.709 06/2020 §19.4, TSOH theo MFAS mod 8, MSI trong PSI); ánh xạ khác thì khác: " + OPU_ALT,
+      opuSim: "gmp-odu0-odtu21",
       multiframe: { frames: 8, note: "Đa khung TSOH 8 khung = MFAS bit 6–8 (MFAS mod 8). PSI vẫn chạy theo đa khung 256 của MFAS: PSI[0] = PT 0x21, PSI[1] RES, PSI[2–9] = MSI của TS1–TS8 (xem khung otu2)." },
       regions: [
         R("oh", "OPU2 OH", "OPU2 Overhead (PT 21)", "opu-oh", [0, 0, 4, 2], "Cột 15–16 của khung OTU2: TSOH luân phiên theo TS + PSI.", {
@@ -412,6 +426,8 @@ window.TLABS = window.TLABS || [];
       summary: "Vùng OPU4 (cột 15–3824) chở 100GBASE-R bằng GMP: JC1–JC6, PSI, 3800 cột tải + 8 cột fixed stuff.",
       detail: "Luồng 100GBASE-R 64B/66B (103,125 Gbit/s, sau khi gom/sắp lại 20 PCS lane) được ánh xạ GMP vào 4 × 3800 byte tải; 8 cột 3817–3824 là fixed stuff. GMP chia tải thành các từ m bit và dùng thuật toán sigma-delta rải đều Cm từ dữ liệu + (tổng − Cm) từ chèn trong khung; Cm (14 bit, JC1–JC2) báo trước cho khung kế tiếp, ΣCnD (JC4–JC5) báo phần lẻ để khôi phục đồng hồ client mịn. Với 100GBASE-R, m = 640 bit (80 byte), Cm ≈ 188,154 từ/khung; 8 cột fixed stuff 3817–3824 (§17.7.5). PSI[0] = 0x07. Bố cục 80 TS của OPU4 khi PT 21 (không vẽ ở đây): 3800 cột tải của 4 hàng xếp nối tiếp thành 15 200 byte và chia vòng 80 TS theo từng byte – hàng 1 cột 17–96 là TS1–TS80, lặp lại; vì 3800 = 47,5 × 80 nên hàng 2 và 4 bắt đầu bằng TS41; mỗi TS có 190 byte/khung; TSOH và OMFI (hàng 4 cột 16, đếm 0–79) quay vòng theo đa khung 80.",
       grid: { rows: 4, cols: 3810, cellBits: 8 }, periodUs: per, rateKbps: 4 * 3810 * 8 * 1000 / per,
+      opuNote: "Cột 15–16 (OPU OH) ở khung này vẽ theo ánh xạ GMP: 100GBASE-R trong OPU4 (G.709 06/2020 §17.7.5, Hình 17-15, Annex D); ánh xạ khác thì khác: " + OPU_ALT,
+      opuSim: "gmp-100gbase-r-opu4",
       multiframe: { frames: 256, note: "PSI là bản tin 256 byte theo MFAS của khung OTU4. JC1–JC6 cập nhật mỗi khung (GMP không cần đa khung khi OPU chở một client)." },
       regions: [
         R("oh", "OPU4 OH", "OPU4 Overhead (GMP)", "opu-oh", [0, 0, 4, 2], "Cột 15–16 của khung OTU4: JC1–JC6, PSI, RES.", {
