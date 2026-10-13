@@ -17,8 +17,62 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD7 | OTUCn (OTUC/ODUC/OPUC, n = 1, 2, 4; TS 5G, maxPorts 10n) + FlexO (G.709.1 03/2024) | xong 2026-10-12 (review G.709 06/2020 + G.709.1 03/2024: 3 SAI mô tả đã sửa; QA test ĐẠT) |
 | GD8 | Khung OTUk/ODUk theo G.709 06/2020: TCM ACT, FTFL → EXP (4 byte); cập nhật số mục/bảng/hình theo bản 2020 | xong 2026-10-12 (review G.709 06/2020 + đối chiếu 02/2012: 0 SAI ở otn.js, 1 SAI số mục ở b100g.js đã sửa; test ĐẠT) |
 | GD9 | FlexE (OIF IA 2.2): khung overhead 66B, lịch 5G, nhóm/instance/client, lab FlexE; FlexE-aware vào ODUflex | xong 2026-10-12 (review IA 2.2 + G.709 06/2020: ĐẠT vòng 1, 0 SAI, 6 NHỎ đã sửa; QA ĐẠT) |
-| GD10 | Phản hồi người dùng 2026-10-12: (a) mô phỏng trực quan các cách ánh xạ AMP/BMP/GMP/GFP-F (+ IMP) – thấy từng byte client, byte chèn, Cm/JC, idle; (b) máy tính: giới hạn L theo chuẩn (64–1518/1522, jumbo tuỳ thiết bị ghi rõ), payload kẹp theo MTU đường đi, gợi ý MTU/MSS; kịch bản cổng 1G khai báo 150M (VCAT/ODUflex + policer/shaper, buffer) | chờ |
-| GD11 | ODUflex(IMP): Ethernet 25/200/400GbE và FlexE client vào OTN (G.709 §17.11, §17.13) | chờ |
+| GD10 | Phản hồi người dùng 2026-10-12: (a) mô phỏng trực quan các cách ánh xạ AMP/BMP/GMP/GFP-F (+ IMP) – thấy từng byte client, byte chèn, Cm/JC, idle; (b) máy tính: giới hạn L theo chuẩn (64–1518/1522, jumbo tuỳ thiết bị ghi rõ), payload kẹp theo MTU đường đi, gợi ý MTU/MSS; kịch bản cổng 1G khai báo 150M (VCAT/ODUflex + policer/shaper, buffer) | xong 2026-10-13 (review G.709/G.742/RFC/MEF: ĐẠT cả 2 file dữ liệu, mục NHỎ đã sửa; QA ĐẠT) |
+| GD11 | OTN 200G–800G: OTUC5/OTUC8 (n tuỳ ý trong máy tính); ODUflex(BMP) 200GbE/400GbE (§17.13, PT 0x31/0x32, 40/80 TS 5G); ODUflex(IMP) 25GbE/FlexE client (§17.11); lab "OTUC8 = 2×400GbE", "400GbE + 4×100GbE" | chờ |
+| GD12 | Giao diện đường truyền: FlexO 200/400/800G (G.709.x), OIF 400ZR/800ZR, 800GbE vào OTN (G.709 bản mới – cần tải nguồn), trang khung → FEC → DSP coherent → bước sóng | chờ |
+
+## GD10 — Mô phỏng ánh xạ + Máy tính thực tế (phản hồi người dùng 2026-10-12)
+
+Người dùng: "chỗ nào thể hiện rõ BMP, GFP, GMP mô phỏng để nhìn là hiểu ngay"; máy tính: L không có giới hạn chuẩn, payload > 9000 vẫn
+"hiệu suất ok" là sai; muốn chọn MTU/MSS phù hợp; cổng 1G khai báo 150M thì thiết bị truyền dẫn ghép thế nào, MTU min/max để không rớt gói.
+
+### A. Dữ liệu ánh xạ `data/transport-mapping.js` (transport-expert) → `window.TMAPS = []`
+Mỗi phần tử là một kịch bản ánh xạ có thể mô phỏng theo từng khung (con số lấy từ chuẩn, có `standard`):
+```js
+{
+  id: "amp-stm16-opu1", method: "AMP" | "BMP" | "GMP" | "GFP-F" | "IMP" | "PDH-bit",   // PDH-bit: chèn bit E1→E2 (G.742) – tuỳ chọn
+  name: "STM-16 → OPU1 (AMP)", client: "stm-16", server: "opu1",   // id có trong TMUX (để nối với lab/khung)
+  standard: "ITU-T G.709 (06/2020) §17.2.1, Hình 17-2",
+  summary: "…", steps: ["…", "…"],          // 3–6 câu giải thích từng bước cho người học (tiếng Việt)
+  clientKbps: 2488320, serverPayloadKbps: …, // tốc độ danh định client và vùng tải
+  ppm: { client: 20, server: 20 },          // dung sai cho phép (±ppm) → biên thanh trượt
+  frame: { rows: 4, cols: 3808, periodUs: … },   // vùng tải một khung server (byte); IMP: khối 66B
+  fixedStuff: [ { rows:[…], cols:[…], note } ], // cột/byte chèn cố định (FS) nếu có
+  just: {                                   // AMP/BMP: vị trí NJO/PJO, JC (byte, bit, luật đa số), giá trị bình thường
+    njo: { row: 4, col: 16 }, pjo: { row: 4, col: 17 }, jc: { rows: [1,2,3], col: 16, bits: [7,8] },
+    table: [ { jc: "00", njo: "dữ liệu"/"chèn", pjo: … , meaning } ]
+  },
+  gmp: { cnBits: 14, m: 1, Pserver: 15232, jcBytes: [...], formula: "Cm = …", sigmaDelta: "byte j là dữ liệu nếu (j × Cm) mod P < Cm" }, // GMP
+  gfp: { coreHdr: 4, payloadHdr: 4, fcs: 0|4, idleBytes: 4, minEth: 64, maxEth: … },   // GFP-F
+  imp: { block: 66, idle: "chèn/xoá khối Idle (Clause 82)", … },                         // IMP
+  note: "…"
+}
+```
+Tối thiểu 5 kịch bản: AMP (STM-16→OPU1), BMP (10GBASE-R→OPU2e hoặc STM-16→OPU1 BMP), GMP (1000BASE-X/ODU0 qua TTT hoặc 100GBASE-R→OPU4; GMP ODU0→ODTU2.1 nếu muốn
+cấp ghép), GFP-F (Ethernet→VC-4/VCAT hoặc →OPU2), IMP (FlexE client / 25GbE→ODUflex(IMP)). Số liệu phải tính lại được từ chuẩn (Cm danh định, min/max theo ppm).
+
+### B. Dữ liệu giới hạn `data/eth-limits.js` (protocol-expert) → `window.ETH_LIMITS = {…}`
+Giá trị có nguồn: khung Ethernet min 64, max 1518 (không tag), 1522 (802.1Q), 1526 (QinQ? – kiểm IEEE 802.3 §3.2.7 / 802.1Q), envelope 2000 (802.3as);
+jumbo: không chuẩn IEEE, giá trị phổ biến (MTU 9000, khung ~9216; tối đa tuỳ hãng) – ghi rõ "phi chuẩn"; preamble/SFD 8, IFG 12;
+IPv4: tổng chiều dài ≤ 65 535, MTU tối thiểu 68, mọi host nhận ≥ 576 (RFC 791); IPv6: MTU tối thiểu 1280 (RFC 8200), payload ≤ 65 535 (jumbogram RFC 2675 bỏ qua);
+TCP MSS = MTU − IP − TCP (RFC 879/9293; IPv6 RFC 8200 §8.3); PMTUD (RFC 1191, 8201), PLPMTUD (RFC 8899); MSS clamping.
+Mỗi mục { value, unit, standard, note }. Không lặp header đã có trong headers-*.js (tunnel overhead lấy từ STACKS).
+
+### C. Giao diện (frontend-dev)
+1. Trang mới `#sim` (Mô phỏng ánh xạ), mục riêng trong điều hướng (cạnh Lab/Ôn tập/Máy tính): chọn kịch bản TMAPS; khung tải thu nhỏ (lưới
+   rút gọn có tỉ lệ, ô màu: dữ liệu client / chèn cố định / NJO-PJO / JC-Cm / GFP header / GFP Idle / khối Idle 66B); nút Chạy/Dừng/Từng khung;
+   thanh trượt lệch ppm client (trong ±ppm) – AMP thấy JC đổi và PJO/NJO mang dữ liệu/chèn; BMP thấy client bám theo server, không có
+   bù; GMP thấy Cm thay đổi theo khung và byte dữ liệu rải đều (sigma-delta); GFP-F: thanh trượt tải (%) và cỡ khung → khung Ethernet đến
+   ngẫu nhiên, đóng gói, chỗ trống là GFP Idle; IMP: khối 66B, chèn/xoá Idle. Bộ đếm: byte client/khung, tích luỹ so với danh định, bộ đệm.
+   Nút "Xem khung" mở khung thật (TFRAMES) liên quan. Mỗi kịch bản hiện `steps`.
+2. Máy tính `#calc`:
+   - L: kẹp và tô vùng theo ETH_LIMITS (chuẩn / envelope / jumbo phi chuẩn) – hiện cảnh báo rõ.
+   - Hiệu suất stack: nhập MTU đường đi (mặc định 1500); payload vượt MTU → tính phân mảnh IPv4 (mỗi mảnh có header, offset bội 8) hoặc
+     "rớt – ICMP Packet Too Big" với IPv6/DF; hiện MTU tối đa và MSS gợi ý cho stack đang chọn (MTU − overhead tunnel, MSS = MTU − IP − TCP).
+   - Kịch bản "Cổng khai báo tốc độ" (vd cổng 1G khai báo 150M): chọn công nghệ (EoS SDH VCAT / OTN / gói-policer) → container gợi ý (dùng
+     TMUX: VC-4-1v, VC-3-3v, VC-12-Xv, ODU0/ODUflex(GFP)…: chọn nhỏ nhất ≥ tốc độ khai báo), thông lượng TCP thực theo MTU/MSS, cỡ
+     buffer/CBS gợi ý ≈ CIR × RTT (nhập RTT), cảnh báo: OTN không cắt dưới ODU0/1,25G ở lớp ODU; policer/shaper là giới hạn mềm.
+   Phần giải thích mục đích máy tính rõ ràng ở đầu trang (3 câu).
 
 ## GD9 — FlexE (file mới `data/transport-flexe.js`, family `flexe`) — OIF FlexE IA 2.2 (OIF-FLEXE-02.2, 10/2021), G.709 (06/2020) §17.11–17.12
 

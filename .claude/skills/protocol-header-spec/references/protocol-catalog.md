@@ -68,3 +68,15 @@ dạng `varBytes` (min 0, max 40). GRE optional: group `checksum-group` (Checksu
 
 Mọi stack có `compareTo: "eth2-ipv4"` (trừ chính nó và hai stack GRE over IPsec so với `gre-ipv4`) để UI tô đậm header được thêm.
 Inner Ethernet trong L2VPN/VXLAN/GRETAP **không có FCS riêng** — ghi rõ trong `note`.
+
+## Giới hạn kích thước (data/eth-limits.js → `window.ETH_LIMITS`, GD10)
+
+Không phải header/stack — dữ liệu cho Máy tính (#calc). Mọi mục dạng `{ value, unit, standard, note }`.
+- `frame`: minFrame 64, minClientData 46, maxBasic 1518, maxQTagged 1522, maxQinQ 1526, maxEnvelope 2000 (802.3as),
+  envelopeEncapMax 482, preambleSfd 8, ifg 12, jumboMtu 9000 / jumboFrame 9216 (phi chuẩn, tuỳ hãng).
+- `zones[]` `{ id, from, to, label, standard, note }`: runt / standard / envelope / jumbo — để tô vùng thanh L.
+- `ipv4` (totalLengthMax, minMtu 68, minReassembly 576, fragOffsetUnit 8, fragOffsetMax, dfBit), `ipv6` (minMtu 1280,
+  minReassembly 1500, payloadLengthMax, fragmentation), `tcp` (MSS mặc định 536/1220, overhead 40/60, clamping), `pmtud`.
+- `mtuHints[]` `{ id, stack, value, unit, standard, note }`: chỉ ràng buộc chuẩn không suy được từ overhead STACKS (PPPoE 1492 RFC 2516, 1500 RFC 4638).
+- `scenarios.rateLimit` `{ title, summary, items{…} }`: srTCM/trTCM, MEF bandwidth profile, policer vs shaper, CBS ≈ CIR × RTT (thực hành), C-4.
+Validator header/stack không kiểm file này; chỉ cần `node --check`.

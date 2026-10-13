@@ -892,3 +892,79 @@ button { font: inherit; color: inherit; }
   .quiz-dot { width: 24px; height: 24px; font-size: .68rem; }
   .quiz-seed input { width: 7em; }
 }
+
+/* ===================== GD10: Mô phỏng ánh xạ (#sim) ===================== */
+#view-sim {
+  --sim-empty: #e9ecf1; --sim-data: #7fc28f; --sim-data2: #4f9e63; --sim-fs: #9aa3b2; --sim-jdata: #1e7bd6; --sim-jstuff: #e8590c;
+  --sim-gstuff: #d6336c; --sim-gfph: #7048e8; --sim-gidle: #d9dde4; --sim-bdata: #4f9e63; --sim-bidle: #c9ced8; --sim-bins: #f08c00;
+  --sim-oh: #5c6b80; --sim-jc: #fab005; --sim-other: #eef0f4; --sim-gridline: rgba(16, 24, 40, .25);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #view-sim {
+    --sim-empty: #232833; --sim-data: #3f8f55; --sim-data2: #2b6b3c; --sim-fs: #5b6474; --sim-jdata: #4dabf7; --sim-jstuff: #ff8a3d;
+    --sim-gstuff: #f06595; --sim-gfph: #9775fa; --sim-gidle: #343a46; --sim-bdata: #3f8f55; --sim-bidle: #3a404c; --sim-bins: #ffa94d;
+    --sim-oh: #8492a6; --sim-jc: #ffd43b; --sim-other: #1d2129; --sim-gridline: rgba(255, 255, 255, .22);
+  }
+}
+:root[data-theme="dark"] #view-sim {
+  --sim-empty: #232833; --sim-data: #3f8f55; --sim-data2: #2b6b3c; --sim-fs: #5b6474; --sim-jdata: #4dabf7; --sim-jstuff: #ff8a3d;
+  --sim-gstuff: #f06595; --sim-gfph: #9775fa; --sim-gidle: #343a46; --sim-bdata: #3f8f55; --sim-bidle: #3a404c; --sim-bins: #ffa94d;
+  --sim-oh: #8492a6; --sim-jc: #ffd43b; --sim-other: #1d2129; --sim-gridline: rgba(255, 255, 255, .22);
+}
+.sim-card { display: flex; flex-direction: column; gap: 10px; }
+.sim-card .section-title { margin-bottom: 0; }
+.sim-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.sim-links .btn-ghost { text-decoration: none; }
+.sim-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.sim-tab { font-size: .8rem; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none; }
+.sim-tab b { color: var(--accent); margin-right: 2px; }
+.sim-tab.is-on { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.sim-controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; }
+.sim-field { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); font-weight: 600; }
+.sim-field b { color: var(--text); font-variant-numeric: tabular-nums; }
+.sim-slider input { width: 170px; }
+.sim-field select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.sim-gridwrap { display: flex; gap: 8px; align-items: flex-start; }
+.sim-oh { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; width: 92px; }
+.sim-ohbox { border-radius: 7px; padding: 3px 6px; font-size: .72rem; line-height: 1.25; border: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
+.sim-ohbox span { font-weight: 700; }
+.sim-ohbox b { font-variant-numeric: tabular-nums; }
+.sim-ohbox small { color: var(--muted); word-break: break-all; }
+.sim-t-jc { border-left: 5px solid var(--sim-jc); }
+.sim-t-jdata { border-left: 5px solid var(--sim-jdata); }
+.sim-t-jstuff { border-left: 5px solid var(--sim-jstuff); }
+.sim-t-oh { border-left: 5px solid var(--sim-oh); }
+.sim-t-gfph { border-left: 5px solid var(--sim-gfph); }
+.sim-t-bins { border-left: 5px solid var(--sim-bins); }
+.sim-canvas-wrap { flex: 1 1 auto; min-width: 0; }
+.sim-canvas, .sim-zoom, .sim-hist { display: block; width: 100%; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
+.sim-canvas { cursor: crosshair; }
+.sim-axis { font-size: .74rem; margin-top: 4px; }
+.sim-zoomhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-size: .82rem; }
+.sim-zoomhead input { flex: 1 1 200px; max-width: 420px; }
+.sim-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .78rem; }
+.sim-sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; border: 1px solid var(--border); }
+.sim-timeline { display: flex; flex-direction: column; gap: 4px; }
+.sim-steps { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
+@media (max-width: 640px) { .sim-gridwrap { flex-direction: column; } .sim-oh { width: auto; flex-direction: row; flex-wrap: wrap; } }
+
+/* ===================== GD10: Máy tính — vùng khung, MTU, cổng khai báo ===================== */
+.calc-purpose { max-width: 70em; }
+.zonebar { position: relative; display: flex; height: 38px; border-radius: 7px; overflow: visible; border: 1px solid var(--border); margin: 18px 0 4px; }
+.zb-seg { display: flex; flex-direction: column; justify-content: center; padding: 0 6px; font-size: .7rem; line-height: 1.15; overflow: hidden; white-space: nowrap; border-right: 1px solid var(--surface); }
+.zb-seg:last-child { border-right: 0; }
+.zb-lab { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+.zb-rng { opacity: .8; }
+.zb-runt { background: var(--err-bg); color: var(--err); }
+.zb-standard { background: var(--add-bg); color: var(--add); }
+.zb-envelope { background: var(--accent-soft); color: var(--accent); }
+.zb-jumbo { background: var(--warn-bg); color: var(--warn); }
+.zb-mark { position: absolute; top: -16px; bottom: -3px; width: 2px; background: var(--text); transform: translateX(-1px); pointer-events: none; }
+.zb-mark span { position: absolute; top: -2px; left: 4px; font-size: .7rem; font-weight: 700; white-space: nowrap; background: var(--surface); padding: 0 3px; border-radius: 3px; }
+.calc-zone { border-radius: 8px; padding: 7px 11px; font-size: .84rem; border: 1px solid var(--border); }
+.calc-zone--ok { background: var(--add-bg); color: var(--add); }
+.calc-zone--info { background: var(--accent-soft); }
+.calc-zone--warn { background: var(--warn-bg); color: var(--warn); }
+.calc-zone--error { background: var(--err-bg); color: var(--err); }
+.calc-notes { margin: 0; padding-left: 1.2em; font-size: .8rem; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.calc-table tr.is-pick td { background: var(--add-bg); }

@@ -190,3 +190,61 @@ VC-4 nhận 3×TUG-3, mỗi TUG-3 tự chọn phương án riêng (7×TUG-2 ho�
 7. `perFrame`: chỉ số khung hợp lệ, bitFields đủ bit.
 
 Chạy: `node .claude/skills/transport-frame-spec/scripts/validate-transport.mjs .`
+
+## 5. Mô phỏng ánh xạ (GD10) — `data/transport-mapping.js` → `window.TMAPS = []`
+
+Mỗi phần tử là một kịch bản cho trang `#sim`. File KHÔNG đọc TMUX/TFRAMES lúc nạp (validator nạp theo tên file);
+mọi tốc độ ghi bằng biểu thức từ chuẩn. Validator transport không kiểm TMAPS — dùng
+`_workspace/I1_transport-expert_tmaps-check.cjs`.
+
+```js
+{
+  id: "amp-stm16-opu1", order: 10,
+  method: "AMP" | "BMP" | "GMP" | "GFP-F" | "IMP" | "PDH-bit",
+  name, standard, summary, note,                      // note ghi CÔNG THỨC để tính lại mọi con số
+  steps: ["…"],                                       // 3–6 câu cho người mới
+  client: "stm-16", server: "opu1",                   // id có trong TMUX
+  frames: ["opu1-amp", "otu1"],                       // id TFRAMES cho nút "Xem khung" (có thể rỗng)
+  clientKbps, serverPayloadKbps,                      // danh định (GMP 1GbE: sau TTT 15/16; ODTU2.1: OPU2/8; IMP: dung lượng các khe)
+  ppm: { client: 45, server: 20, locked?: true, note },   // locked = BMP: server bám client, không bù
+  frame: {
+    rows, cols, cellBits,                             // lưới VÙNG TẢI (ô = byte 8 / bit 1 / khối 66B 66)
+    firstCol,                                         // số cột chuẩn của cột lưới đầu tiên (OTN 17)
+    ohCols?: [15, 16],                                // cột OH (ngoài lưới) nên vẽ bên trái để thấy JC/NJO/PSI
+    colStep?: 8,                                      // lưới là 1 TS ghép xen: cột chuẩn = firstCol + (c − 1) × colStep
+    multiframe?: 8,                                   // GMP theo đa khung: perFrame/P/periodUs tính cho cả đa khung
+    interleave?: 7,                                   // VCAT: cột c thuộc thành viên ((c − 1) mod X) + 1
+    periodUs, note?
+  },
+  oh: [ { row | rows: [đầu, cuối], col | cols: [đầu, cuối], abbr, note } ],   // ô OH đáng chú ý (PSI, RES, FAS…)
+  fixedStuff: [ { rows: [đầu, cuối], cols: [đầu, cuối], note } ],          // DẢI bao gồm hai đầu, số chuẩn
+  just: {                                             // AMP / BMP / PDH-bit
+    njo?: { row, col, note }, pjo: { row, col, note, tributary? },
+    jc: { rows: [1, 2, 3], col, bits: [7, 8], vote: "2/3", note },         // rows là DANH SÁCH hàng
+    fixedJc?: "00",                                   // BMP
+    table: [ { jc, njo?, pjo, meaning } ]
+  },
+  gmp: { m, M, n, cnBits: 14, P, word, jc: { cm: {rows, col}, cnd: {rows, col} }, cndUsed, cndRange?,
+         cmNom, cmMin, cmMax, CmMin, CmMax,           // cm thực (float) và Cm nguyên = floor/ceil
+         c8Nom?, appliesTo: "khung kế tiếp", iiDi: [ { change, ii, di, invert: "IUIU…", meaning } ],
+         formula, sigmaDelta },
+  gfp: { coreHdr: 4, payloadHdr: 4, extHdr: 0, fcs: 0, fcsOpt: 4, idleBytes: 4, minEth: 64, maxEth: 1518, maxEthTagged: 1522,
+         preambleSfd: 8, ifg: 12, type, idleHex, rule, capacityBytesPerFrame,
+         fullLoad: { L1518, L64 },                    // tỉ lệ tải GFP / dung lượng ở 100% tải Ethernet
+         bytesPerFrameFullLoad: { L1518, L64 } },
+  imp: { block: 66, idle, unit, where, nominalDeletePerFrame, nominalPpm, otn?: { … ODUflex(IMP) } },
+  budget: [ { kind: "data"|"pjo"|"fs"|"gmp"|"gfp"|"block"|"oh"|"jc", cells, note } ],   // Σ cells = rows × cols
+  sim: {
+    entity: "byte" | "bit" | "từ 80 byte" | "khối 66B", entityBits,
+    perFrame: { nom, min, max },                      // số đơn vị client ĐẾN trong một khung (đa khung) ở danh định / biên ppm
+    carry: { fixed, min, max },                       // khung mang được: fixed luôn mang; min…max nhờ chèn/GMP
+    locked: false, packet?: true,                     // packet: GFP-F – client là gói, perFrame = tải 100% khung 1518
+    idleAdjust?: true, perTributary?: true            // IMP: phần lệch xoá/chèn bằng Idle; PDH: số liệu cho MỘT nhánh
+  }
+}
+```
+
+Bất biến (script tự kiểm): client/server/frames tồn tại; `clientKbps` khớp TMUX (trừ TTT); Σ budget = rows × cols, ô fs = Σ fixedStuff;
+`perFrame.min ≤ nom ≤ max`; `perFrame.nom = clientKbps × periodUs / 1000 / entityBits` (trừ BMP, GFP, PDH); biên ppm nằm trong
+`carry.min…max` (IMP: lệch < 2 khối); GMP: `CmMin ≤ cmNom ≤ CmMax`, `CmMin = floor(cmMin)`, `CmMax = ceil(cmMax)`, `m = 8M`,
+ô GMP × đa khung = P × M, sigma-delta (j × Cm) mod P < Cm cho đúng Cm vị trí dữ liệu.

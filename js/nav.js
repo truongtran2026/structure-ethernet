@@ -3,9 +3,9 @@
  *  - thanh bên trái dạng cây: IP / Ethernet · Truyền dẫn (PDH/SDH/OTN) · Phòng thí nghiệm ghép kênh;
  *    thu gọn/bung từng mảng/nhóm, LƯU trạng thái + mục đang xem (localStorage) để mở lại đúng như cũ;
  *  - ô tìm kiếm lọc toàn cây (tự bung nhóm có kết quả, không ghi đè trạng thái đã lưu);
- *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>, #quiz/<chủ đề>, #calc;
+ *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>, #quiz/<chủ đề>, #calc, #sim/<kịch bản>;
  *  - giao diện sáng/tối, nút menu trên di động.
- * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab, window.QuizView, window.CalcView — mỗi view có init/show/hide.
+ * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab, window.QuizView, window.CalcView, window.MapSimView — mỗi view có init/show/hide.
  */
 (function () {
   'use strict';
@@ -19,7 +19,7 @@
     otn: { name: 'OTN', hint: 'Mạng truyền tải quang (OTUk/ODUk)', order: 3 },
     flexe: { name: 'FlexE', hint: 'Flexible Ethernet (OIF FlexE IA): instance 100G, khe lịch 5G', order: 4 }
   };
-  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc' };
+  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc', sim: 'view-sim' };
   var APP_NAME = 'Frame Structure';
 
   var nav = { domains: [], items: {}, route: null, query: '', store: { open: {}, last: null, scroll: 0 }, theme: 'auto' };
@@ -42,7 +42,7 @@
     var s = decodeURIComponent(String(h || '').replace(/^#/, ''));
     if (!s) return null;
     if (s === 'calc') return { view: 'calc', id: 'calc' };
-    var m = /^(t|lab|quiz)\/(.+)$/.exec(s);
+    var m = /^(t|lab|quiz|sim)\/(.+)$/.exec(s);
     return m ? { view: m[1], id: m[2] } : { view: 'ip', id: s };
   }
   function hashOf(r) { if (r.view === 'calc') return '#calc'; return '#' + (r.view === 'ip' ? '' : r.view + '/') + encodeURIComponent(r.id).replace(/%2F/g, '/'); }
@@ -94,7 +94,7 @@
     if (!prev || keyOf(prev) !== keyOf(r)) window.scrollTo(0, 0);
   }
 
-  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab, quiz: window.QuizView, calc: window.CalcView }[name]; }
+  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab, quiz: window.QuizView, calc: window.CalcView, sim: window.MapSimView }[name]; }
   function showContainer(view) {
     Object.keys(CONTAINER).forEach(function (k) {
       var el = document.getElementById(CONTAINER[k]);
@@ -173,6 +173,15 @@
             [l.id, l.name, l.intro, l.family].concat(l.roots || [], l.palette || []).join(' '), l.intro);
         }) });
     }
+    // Mô phỏng ánh xạ (TMAPS)
+    var sims = [];
+    if (window.MapSimView) { try { sims = window.MapSimView.items() || []; } catch (e) { sims = []; } }
+    if (sims.length) {
+      nav.domains.push({ key: 'd:sim', name: 'Mô phỏng ánh xạ', icon: '▶', count: sims.length,
+        items: sims.map(function (x) {
+          return addItem({ view: 'sim', id: x.id }, x.name, x.method, 'mô phỏng ánh xạ mapping ' + x.method + ' ' + x.id + ' ' + x.name + ' ' + (x.hint || ''), x.hint || '');
+        }) });
+    }
     // Ôn tập (chủ đề có câu hỏi) + Máy tính tốc độ
     var topics = [];
     if (window.QuizView) { try { topics = window.QuizView.items() || []; } catch (e) { topics = []; } }
@@ -184,7 +193,7 @@
     }
     if (window.CalcView) {
       nav.domains.push({ key: 'd:calc', name: 'Công cụ', icon: '∑', count: 1,
-        items: [addItem({ view: 'calc', id: 'calc' }, 'Máy tính tốc độ', '', 'máy tính tốc độ calc hiệu suất overhead gfp ethernet tối đa',
+        items: [addItem({ view: 'calc', id: 'calc' }, 'Máy tính tốc độ', '', 'máy tính tốc độ calc hiệu suất overhead gfp ethernet tối đa mtu mss phân mảnh policer cir khai báo',
           'Tốc độ, chuỗi ghép, số nhánh tối đa, GFP-F, hiệu suất stack')] });
     }
   }
@@ -314,7 +323,7 @@
       nav.store.scroll = +saved.scroll || 0;
     }
     if (!window.IPView) { showFatal('Không nạp được <code>js/app.js</code>.'); return; }
-    ['IPView', 'TransView', 'MuxLab', 'QuizView', 'CalcView'].forEach(function (name) {
+    ['IPView', 'TransView', 'MuxLab', 'QuizView', 'CalcView', 'MapSimView'].forEach(function (name) {
       var v = window[name];
       if (!v || !v.init) return;
       try { v.init(); } catch (e) {
