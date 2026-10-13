@@ -816,7 +816,7 @@
   function controlsHtml(P, toy) {
     var sc = sv.sc, m = P.method, p = params();
     var pc = (sc.ppm && +sc.ppm.client) || 0, ps = (sc.ppm && +sc.ppm.server) || 0;
-    return '<section class="card sim-card" aria-labelledby="sim-ctl-t"><div class="section-title"><h2 id="sim-ctl-t">Điều khiển</h2><span class="muted" data-sim="frameno"></span></div>' +
+    return '<section class="card sim-card" data-zoomctl aria-labelledby="sim-ctl-t"><div class="section-title"><h2 id="sim-ctl-t">Điều khiển</h2><span class="muted" data-sim="frameno"></span>' + zoomBtn() + '</div>' +
       '<div class="sim-controls">' + runButtons() +
         (toy ? durSelect() : '<label class="sim-field"><span>Tốc độ</span><select data-sin="fps">' + [[1, '1 khung/s'], [3, '3 khung/s'], [8, '8 khung/s'], [20, '20 khung/s']].map(function (o) {
           return '<option value="' + o[0] + '"' + (sv.st.fps === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>') +
@@ -826,6 +826,8 @@
           '<label class="sim-field"><span>Cỡ khung Ethernet</span><select data-sin="size">' + sizeOptions(p.size, toy) + '</select></label>' : '') +
       '</div>' + (toy && P.ppmScale > 1 && m !== 'GFP-F' && !(P.locked && isJust(m)) ? '<p class="muted calc-small" data-sim="ppmfx"></p>' : '') + '</section>';
   }
+
+  function zoomBtn() { return '<button type="button" class="btn-ghost sim-zoombtn" data-sact="zoom" title="Mở khối mô phỏng to toàn cửa sổ (Esc để thu nhỏ)">⛶ Phóng to</button>'; }
 
   function build() {
     var sc = sv.sc, P = sv.P, m = P.method, toy = sv.mode === 'toy';
@@ -840,7 +842,7 @@
         '<div class="sim-logbox"><h3>Nhật ký sự kiện</h3><ol class="sim-log" data-sim="log"></ol></div></div>' +
         '<ul class="sim-legend" data-sim="legend"></ul></section>';
     } else {
-      html += '<section class="card sim-card" aria-labelledby="sim-grid-t"><div class="section-title"><h2 id="sim-grid-t">Vùng tải một khung server</h2><span class="muted" data-sim="gridcap"></span></div>' +
+      html += '<section class="card sim-card sim-gridcard" aria-labelledby="sim-grid-t"><div class="section-title"><h2 id="sim-grid-t">Vùng tải một khung server</h2><span class="muted" data-sim="gridcap"></span></div>' +
         '<div class="sim-gridwrap"><div class="sim-oh" data-sim="oh" aria-label="Overhead điều khiển ánh xạ"></div>' +
         '<div class="sim-canvas-wrap"><canvas class="sim-canvas" data-sim="grid" role="img" aria-label="Lưới vùng tải thu nhỏ"></canvas>' +
         '<div class="sim-axis muted" data-sim="axis"></div></div></div>' +
@@ -871,7 +873,7 @@
       pickerHtml() +
       '<div class="sim-guide"><b>Nhìn vào đâu.</b> Kéo thanh ppm rồi so ba thanh bộ đệm: <b>AMP</b> để bộ đệm trôi tới ngưỡng rồi bù đúng 1 byte qua NJO/PJO (JC đổi); ' +
         '<b>BMP</b> lấy đồng hồ server từ client nên bộ đệm đứng yên, JC luôn 00; <b>GMP</b> mỗi khung báo Cm và rải ô chèn đều — bù mịn từng khung, bộ đệm gần như không đổi.</div>' +
-      '<section class="card sim-card"><div class="section-title"><h2>Điều khiển chung</h2><span class="muted" data-sim="frameno"></span></div>' +
+      '<section class="card sim-card" data-zoomctl><div class="section-title"><h2>Điều khiển chung</h2><span class="muted" data-sim="frameno"></span>' + zoomBtn() + '</div>' +
         '<div class="sim-controls">' + runButtons() + durSelect() + slider('cmpPpm', 'Lệch clock client (ppm, cả ba)', -45, 45, 1, sv.st.cmpPpm) + '</div>' +
         '<p class="muted calc-small">Đồng hồ server giữ danh định. Mỗi làn phóng đại ppm theo kích thước khung thật của nó (ghi ở đầu làn) nên số lần bù mỗi khung giống thực tế. ' +
         'G.709 không ánh xạ STM-16 vào OPU1 bằng GMP, nên làn GMP dùng kịch bản GMP từ 1 byte còn đủ chỗ trống cho lệch ppm' + (set[2] ? ' (' + esc(set[2].name) + ')' : '') + '.</p></section>' +
@@ -1062,9 +1064,9 @@
   }
 
   // ---------- vẽ làn ----------
-  function layoutLane(L, W, compact) {
+  function layoutLane(L, W, compact, Z) {
     var P = L.P, rows = P.dRows, cols = P.cols, nx = L.ohCols.length + cols, pad = 6, lbl = 22, o = { W: W };
-    if (!compact && W >= 900) {
+    if (!compact && !(Z > 1) && W >= 900) {
       o.horiz = true;
       o.convX = pad; o.convW = Math.round(W * 0.2); o.fifoX = o.convX + o.convW + 6; o.fifoW = Math.round(W * 0.16);
       o.gridX = o.fifoX + o.fifoW + 30 + lbl; o.gridY = 56;
@@ -1075,7 +1077,7 @@
       o.convX = pad; o.convW = Math.round((W - 2 * pad) * 0.52); o.fifoX = o.convX + o.convW + 10; o.fifoW = W - pad - o.fifoX;
       o.tubeY = 20; o.tubeH = compact ? 20 : 24;
       o.gridX = pad + lbl; o.gridY = o.tubeY + o.tubeH + 66;
-      o.cs = Math.max(6, Math.min(compact ? 30 : 42, Math.floor((W - o.gridX - pad) / nx)));
+      o.cs = Math.max(6, Math.min(Z > 1 ? Math.floor((compact ? 60 : 84) / Z) : compact ? 30 : 42, Math.floor((W - o.gridX - pad) / nx)));
       o.H = o.gridY + rows * o.cs + 8;
     }
     o.slotW = o.fifoW / Math.max(1, P.fifoCap);
@@ -1300,13 +1302,16 @@
   function drawLane(cv, L, p, t, compact) {
     if (!cv || !L.cur) return 0;
     var W = Math.max(260, Math.floor(cv.parentNode.clientWidth || 600)), dpr = root.devicePixelRatio || 1;
-    var o = layoutLane(L, W, compact);
-    if (cv._w !== W || cv._h !== o.H || cv._dpr !== dpr) {
-      cv.style.height = o.H + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(o.H * dpr);
-      cv._w = W; cv._h = o.H; cv._dpr = dpr;
+    // Phóng to: bố cục tính ở bề rộng logic W/Z rồi vẽ với scale Z -> ô, chữ, nét đều to Z lần mà vẫn sắc nét.
+    var Z = sv.zoomed ? Math.max(1.4, Math.min(compact ? 1.9 : 2.6, W / (compact ? 560 : 640))) : 1;
+    var Wl = W / Z, o = layoutLane(L, Wl, compact, Z), Hp = Math.round(o.H * Z);
+    if (cv._w !== W || cv._h !== Hp || cv._dpr !== dpr) {
+      cv.style.height = Hp + 'px'; cv.width = Math.round(W * dpr); cv.height = Math.round(Hp * dpr);
+      cv._w = W; cv._h = Hp; cv._dpr = dpr;
     }
+    cv._cs = o.cs * Z; // cỡ ô thực (px), để kiểm thử
     var ctx = cv.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, o.H);
+    ctx.setTransform(dpr * Z, 0, 0, dpr * Z, 0, 0); ctx.clearRect(0, 0, Wl, o.H);
     ctx.textBaseline = 'alphabetic';
     var n0 = L.seq.items.length, head = p >= 1 ? n0 : Math.max(0, Math.min(n0, Math.floor(p * n0)));
     drawConveyor(ctx, L, o, p, head, t);
@@ -1422,6 +1427,7 @@
     var visCols = Math.max(1, Math.min(d.cols, Math.floor(cssW / 4)));
     var bw = Math.ceil(d.cols / visCols); visCols = Math.ceil(d.cols / bw);
     var rh = d.rows <= 2 ? 34 : d.rows <= 4 ? 26 : d.rows <= 9 ? 16 : Math.max(4, Math.floor(200 / d.rows));
+    if (sv.zoomed) rh = Math.min(rh * 2, 64);
     var cssH = rh * d.rows;
     cv.style.height = cssH + 'px';
     cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
@@ -1480,7 +1486,7 @@
     var cv = $('#view-sim [data-sim="zoom"]');
     if (!cv) return;
     var d = gridDims(), z = zoomRange(d), cssW = Math.max(240, cv.parentNode.clientWidth || 600), dpr = root.devicePixelRatio || 1;
-    var cw = cssW / z.len, h = 30;
+    var cw = cssW / z.len, h = sv.zoomed ? 64 : 30;
     cv.style.height = h + 'px'; cv.width = Math.round(cssW * dpr); cv.height = Math.round(h * dpr);
     var ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var C = sv.colors;
@@ -1652,6 +1658,8 @@
       var a = b.getAttribute('data-sact');
       if (a === 'run') setRunning(!sv.running);
       else if (a === 'step') stepOnce();
+      else if (a === 'zoom') openZoom();
+      else if (a === 'unzoom') closeZoom();
       else if (a === 'reset') { var was = sv.running; setRunning(false); if (isReal()) resetReal(); else resetToy(); if (was) setRunning(true); }
       else if (a === 'mode') { var md = b.getAttribute('data-mode'); if (md !== sv.mode) { sv.st.mode = md; sSet(); show(sv.id); } }
       return;
@@ -1693,6 +1701,55 @@
     return 0;
   }
 
+  // ---------- phóng to (lớp phủ trong trang) ----------
+  // Chuyển CHÍNH các nút DOM (canvas, điều khiển, nhật ký) sang lớp phủ rồi trả về chỗ cũ (đánh dấu bằng comment),
+  // nên trạng thái mô phỏng, listener và rAF không đổi; chỉ vẽ lại theo kích thước mới.
+  function zoomTargets() {
+    var q = function (s) { return $('#view-sim ' + s); };
+    var ctl = q('[data-zoomctl]');
+    if (sv.page === 'compare') return { main: [q('.sim-cmpwrap')], side: [ctl] };
+    return { main: [q(isReal() ? '.sim-gridcard' : '.sim-stagecard')], side: [ctl, q('.sim-logbox')] };
+  }
+  function moveInto(el, host, moved) {
+    if (!el) return;
+    var ph = document.createComment('sim-zoom'); el.parentNode.replaceChild(ph, el);
+    host.appendChild(el); moved.push({ el: el, ph: ph });
+  }
+  function openZoom() {
+    if (sv.zoomed || !sv.active) return;
+    var tg = zoomTargets(), v = $('#view-sim');
+    var ov = document.createElement('div');
+    ov.className = 'sim-zoomov' + (sv.page === 'compare' ? ' sim-zoomov--cmp' : '');
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Mô phỏng phóng to');
+    ov.innerHTML = '<div class="sim-zoombar"><b>' + esc(sv.sc ? sv.sc.name || sv.sc.id : 'So sánh AMP · BMP · GMP') + '</b><span class="muted">Esc để thu nhỏ</span>' +
+      '<button type="button" class="btn-ghost sim-zoomclose" data-sact="unzoom">✕ Thu nhỏ</button></div>' +
+      '<div class="sim-zoombody"><div class="sim-zoommain"></div><div class="sim-zoomside"></div></div>';
+    v.appendChild(ov);
+    sv.ov = ov; sv.moved = [];
+    tg.main.forEach(function (e) { moveInto(e, $('.sim-zoommain', ov), sv.moved); });
+    tg.side.forEach(function (e) { moveInto(e, $('.sim-zoomside', ov), sv.moved); });
+    sv.zoomed = true;
+    document.documentElement.classList.add('sim-zoom-lock');
+    try { var rf = ov.requestFullscreen && ov.requestFullscreen(); if (rf && rf.catch) rf.catch(function () { /* bỏ qua */ }); } catch (e) { /* bỏ qua */ }
+    $('.sim-zoomclose', ov).focus();
+    redraw();
+  }
+  function closeZoom(silent) {
+    if (!sv.zoomed) return;
+    sv.zoomed = false;
+    var hadFs = document.fullscreenElement && document.fullscreenElement === sv.ov;
+    sv.moved.reverse().forEach(function (m) { if (m.ph.parentNode) m.ph.parentNode.replaceChild(m.el, m.ph); });
+    sv.moved = [];
+    if (sv.ov && sv.ov.parentNode) sv.ov.parentNode.removeChild(sv.ov);
+    sv.ov = null;
+    document.documentElement.classList.remove('sim-zoom-lock');
+    if (hadFs && document.exitFullscreen) { try { var r = document.exitFullscreen(); if (r && r.catch) r.catch(function () { /* bỏ qua */ }); } catch (e) { /* bỏ qua */ } }
+    if (silent !== true) {
+      var zb = $('#view-sim [data-sact="zoom"]'); if (zb) zb.focus();
+      redraw();
+    }
+  }
+
   // ---------- vòng đời view ----------
   function redraw() {
     if (!sv.active) return;
@@ -1705,6 +1762,13 @@
     v.addEventListener('click', onClick);
     v.addEventListener('input', onInput);
     v.addEventListener('change', onInput);
+    document.addEventListener('keydown', function (e) { if (sv.zoomed && (e.key === 'Escape' || e.key === 'Esc')) { e.preventDefault(); closeZoom(); } });
+    // thoát toàn màn hình bằng Esc của trình duyệt -> thu nhỏ luôn
+    document.addEventListener('fullscreenchange', function () {
+      if (sv.zoomed && sv.ov) { if (document.fullscreenElement === sv.ov) sv.inFs = true; else if (sv.inFs) { sv.inFs = false; closeZoom(); } }
+      else sv.inFs = false;
+      if (sv.zoomed) setTimeout(redraw, 60);
+    });
     var rt = null;
     root.addEventListener('resize', function () { if (!sv.active) return; clearTimeout(rt); rt = setTimeout(redraw, 120); });
     if (root.matchMedia) {
@@ -1718,6 +1782,7 @@
     document.addEventListener('visibilitychange', function () { if (sv.active && !document.hidden && !isReal()) { if (sv.anim.playing) sv.anim.t0 = now() - sv.anim.p * sv.st.dur; requestDraw(); } });
   }
   function show(id) {
+    closeZoom(true);
     stopAll();
     sv.active = true;
     sv.st = sv.st || loadSt();
@@ -1746,7 +1811,7 @@
       if (!reducedMotion()) setRunning(true);
     }
   }
-  function hide() { sv.active = false; stopAll(); }
+  function hide() { closeZoom(true); sv.active = false; stopAll(); }
   function items() {
     var list = sortedMaps().map(function (x) { return { id: x.id, name: x.name || x.id, method: methodOf(x) === 'PDH-BIT' ? 'PDH' : methodOf(x), hint: x.summary || '' }; });
     if (compareSet()) list.unshift({ id: 'compare', name: 'So sánh AMP · BMP · GMP', method: 'SO SÁNH', hint: 'Ba bộ ghép chạy song song cùng độ lệch clock' });
