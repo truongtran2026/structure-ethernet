@@ -1,4 +1,7 @@
 // Mảng Truyền dẫn – GD7: OTUCn (B100G: OTUC/ODUC/OPUC, n = 1, 2, 4; tributary slot 5G) + FlexO (G.709.1).
+// GD11: thêm OTUCn n = 3, 5, 6, 8 (300G/500G/600G/800G) – chỉ OPUCn/ODUCn/OTUCn, không thêm FlexO-3/5/6/8;
+//   TSTAB thêm ODUflex(BMP) 25/50/200/400GBASE-R (§17.13, Bảng 7-9 cột OPUCn: 5/10/40/80) và ODUflex(IMP,s)
+//   s = 2, 5, 8, 10, 20, 40, 80 (§17.11, §12.2.6; Bảng 7-9: "Note" → tính theo phương trình 20-1a).
 // Schema: .claude/skills/transport-frame-spec/references/transport-schema.md (mục "Mở rộng OTN (GD3)")
 // Nguồn (đọc nguyên văn, kèm ảnh hình chuẩn):
 //   ITU-T G.709/Y.1331 (06/2020): tốc độ Bảng 7-1…7-4, 7-6, 7-7; số TS Bảng 7-9 (cột "# 5G TS – OPUCn");
@@ -45,6 +48,14 @@ window.TLABS = window.TLABS || [];
     odu3: 239 / 236 * 39813120, odu4: 239 / 227 * B, "oduflex-fc800": 239 / 238 * 8500000,
     "oduflex-gfp-1": 1 * 1249177.230, "oduflex-gfp-8": 8 * 1249177.230, "oduflex-gfp-32": 32 * 1254470.354
   };
+  // GD11: ODUflex(CBR) cho xGBASE-R (BMP, §17.13; client theo Bảng 17-16) và ODUflex(IMP,s) (§12.2.6) – cùng công thức với data/transport-otn.js.
+  var BMPX = [{ g: 25, c: 25781250, tab: 5 }, { g: 50, c: 51562500, tab: 10 }, { g: 200, c: 206250000, tab: 40 }, { g: 400, c: 412500000, tab: 80 }];
+  var IMPS = [2, 5, 8, 10, 20, 30, 40, 60, 80];
+  BMPX.forEach(function (b) { ODU["oduflex-bmp-" + b.g + "g"] = 239 / 238 * b.c; });
+  IMPS.forEach(function (s) { ODU["oduflex-imp-" + s] = s * 239 / 238 * 5156250; });
+  // Phương trình 20-1a: M = ⌈ODUk × (1 + tol + 0,00006) / (ODTUCn.1 × (1 − 20 ppm))⌉; ODUflex(CBR)/(IMP) tol = 100 ppm (Bảng 7-2).
+  function m201a(rate) { return Math.ceil(rate * (1 + 100e-6 + 0.00006) / (TS5G * (1 - 20e-6))); }
+  function q201a(rate) { return rate * (1 + 100e-6 + 0.00006) / (TS5G * (1 - 20e-6)); }
   var OTUC_PER = 4 * 3824 * 8 * 1000 / OTUC;          // ≈ 1,163 µs (Bảng 7-4)
   var FLEXO_PER = 128 * 5140 * 1000 / FLEXO;          // ≈ 6,228 µs (G.709.1 Bảng 8-2)
 
@@ -419,19 +430,37 @@ window.TLABS = window.TLABS || [];
     // GD9: ODUflex(FlexE-aware) = 103 125 000 × 240/238 × n/20 (Bảng 7-2); Bảng 7-9 ghi "Note" → M theo 20-1a (100 ppm, TS 20 ppm).
     var r = 103125000 * 240 / 238 * n / 20;
     return { of: "oduflex-flexe-aware-" + n, slots: n, note: "ODUflex(FlexE-aware) n = " + n + ": " + vn(r, 0) + " kbit/s; M = ⌈" + vn(r * 1.00016 / (TS5G * 0.99998), 3) + "⌉ = " + n + " TS 5G (G.709 06/2020 phương trình 20-1a; Bảng 7-9 dòng ODUflex(FlexE): Note; §17.12, PT 0x1E) – mỗi khe lịch FlexE 5G cần đúng 1 TS 5G." };
+  })).concat(BMPX.map(function (b) {
+    // GD11: Bảng 7-9 cột "# 5G TS – OPUCn": ODUflex(25GBase-R) 5, (50GBase-R) 10, (200GBase-R) 40, (400GBase-R) 80 – khớp 20-1a.
+    var id = "oduflex-bmp-" + b.g + "g", m = m201a(ODU[id]);
+    if (m !== b.tab) throw new Error("GD11: 20-1a cho " + id + " = " + m + " ≠ Bảng 7-9 (" + b.tab + ")");
+    return { of: id, slots: m, note: "Bảng 7-9 dòng ODUflex(" + b.g + "GBase-R): " + b.tab + " TS 5G; phương trình 20-1a: ⌈" + vn(ODU[id], 0) + " × 1,00016 / (" + vn(TS5G, 3) + " × 0,99998)⌉ = ⌈" + vn(q201a(ODU[id]), 3) + "⌉ = " + m + " (ODUflex(CBR) ±100 ppm, Bảng 7-2)." +
+      (b.g === 400 ? " 400GbE lấp kín 80 TS = một OPUC4; OPUC8 chở được 2." : b.g === 200 ? " 200GbE = 2 lát OPUC (40 TS)." : "") };
+  })).concat(IMPS.map(function (s) {
+    var id = "oduflex-imp-" + s, m = m201a(ODU[id]);
+    return { of: id, slots: m, note: "ODUflex(IMP," + s + ") = " + s + " × 239/238 × 5 156 250 = " + vn(ODU[id], 0) + " kbit/s (Bảng 7-2, §12.2.6); Bảng 7-9 ghi 'Note' → phương trình 20-1a: M = ⌈" + vn(q201a(ODU[id]), 3) + "⌉ = " + m + " TS 5G (±100 ppm, TS ±20 ppm)." };
   }));
   var LIMIT = function (n) { return " OPUC" + n + " có " + 20 * n + " TS nhưng chỉ " + 10 * n + " cổng nhánh (MSI đánh số 1…" + 10 * n + ", §20.4.1.1; §20: 'up to 10n different ODUk'; §7.4 NOTE 3: không bắt buộc hỗ trợ 20n ODU0/ODU1/ODUflex) – lab chặn ở " + 10 * n + " con mỗi OPUC" + n + "."; };
 
-  [1, 2, 4].forEach(function (n, i) {
-    var lv = 60 + 10 * i;
+  // level chỉ để sắp xếp; giữ 60/70/80 của GD7 cho n = 1, 2, 4.
+  var LV = { 1: 60, 2: 70, 3: 75, 4: 80, 5: 85, 6: 90, 8: 95 };
+  var NOTE_N = {
+    3: " OTUC3 (300G, 60 TS 5G). Bớt TS thành OTUCn-M cũng được: vd. OTUC3-50 = 250G với 50 TS (Phụ lục XIII.2).",
+    5: " OTUC5 (500G, 100 TS 5G) – n không cần là lũy thừa 2: thiết bị coherent dải 400G–800G có thể chọn tốc độ 'lẻ' theo chất lượng tuyến (ví dụ ứng dụng, ngoài G.709); vẫn chỉ tối đa 50 ODUk trực tiếp (10n cổng). Có thể bớt TS thành OTUCn-M (Phụ lục H, XIII).",
+    6: " OTUC6 (600G, 120 TS 5G); tối đa 60 ODUk trực tiếp.",
+    8: " OTUC8 (800G, 160 TS 5G): chở 8 × ODU4, 2 × 400GbE (80 TS mỗi cái) hoặc 400GbE + 4 × 100GbE (ODU4 20 TS); tối đa 80 ODUk trực tiếp (10n cổng) – ODU0/ODU1/ODU2 nhiều hơn phải lồng qua một ODUk bậc cao (ODU4, hoặc ODU2/ODU3 cho ODU0/ODU1 – §7.4)."
+  };
+
+  [1, 2, 3, 4, 5, 6, 8].forEach(function (n) {
+    var lv = LV[n];
     var opu = "opuc" + n, odu = "oduc" + n, otu = "otuc" + n, flx = "flexo-" + n;
-    var nts = 20 * n;
+    var nts = 20 * n, hasFlexo = n === 1 || n === 2 || n === 4;
     U({ id: opu, name: "OPUC" + n, kind: "opu", level: lv, rateKbps: n * OPUC, frame: "opuc-ts",
       standard: STD + " §20 (TS 5G, ODTUCn.ts, GMP); tốc độ Bảng 7-3; số TS Bảng 7-9",
       summary: "OPUC" + n + ": payload " + gbps(n * OPUC) + " (= " + n + " × 238/226 × 99 532 800); " + nts + " TS 5G, chỉ chở ODUk (PT 0x22).",
-      desc: "OPUCn không ánh xạ client trực tiếp: mọi client (100GbE, 400GbE…) đi vào ODUk/ODUflex trước rồi ghép vào TS 5G bằng GMP (ODTUC" + n + ".ts). " + n + " lát × 20 TS = " + nts + " TS, mỗi TS ≈ " + mbps(TS5G) + ", ghép xen khối 16 byte; ODU0 và ODU1 vẫn tốn trọn 1 TS 5G." + LIMIT(n),
+      desc: "OPUCn không ánh xạ client trực tiếp: mọi client (100GbE, 400GbE…) đi vào ODUk/ODUflex trước rồi ghép vào TS 5G bằng GMP (ODTUC" + n + ".ts). " + n + " lát × 20 TS = " + nts + " TS, mỗi TS ≈ " + mbps(TS5G) + ", ghép xen khối 16 byte; ODU0 và ODU1 vẫn tốn trọn 1 TS 5G; 25GbE (ODUflex BMP) 5 TS, 50GbE 10, 200GbE 40, 400GbE 80." + LIMIT(n) + (NOTE_N[n] || ""),
       tribSlots: { n: nts, kbps: TS5G, size: "5G", maxPorts: 10 * n, note: "PT 22: 20 TS/lát OPUC ghép xen khối 16 byte; TSOH theo OMFI bit 4–8 (đa khung 20)" },
-      accepts: TSTAB.map(function (t) {
+      accepts: TSTAB.filter(function (t) { return t.slots <= nts; }).map(function (t) {
         return { of: t.of, count: Math.min(Math.floor(nts / t.slots), 10 * n), slots: t.slots, mapping: "GMP (ODTUC" + n + "." + t.slots + ")", note: t.note };
       }) });
     U({ id: odu, name: "ODUC" + n, kind: "odu", level: lv + 1, rateKbps: n * ODUC, frame: "otuc",
@@ -444,10 +473,13 @@ window.TLABS = window.TLABS || [];
     U({ id: otu, name: "OTUC" + n, kind: "otu", level: lv + 2, rateKbps: n * OTUC, frame: "otuc",
       standard: STD + " §11.3, §15.6–15.7; tốc độ Bảng 7-1 (NOTE 3: không gồm FEC)",
       summary: "OTUC" + n + " = ODUC" + n + " + FA/OTUC OH: " + gbps(n * OTUC) + " – không có FEC.",
-      desc: "Khác OTUk: FA OH và OTUC OH (SM, GCC0) nằm sẵn ở hàng 1 cột 1–14 của mỗi lát ODUC nên OTUC" + n + " = ODUC" + n + " (cùng tốc độ); không có 256 cột FEC – FEC do giao diện thêm (vd. FlexO-" + n + " qua G.709.1). Cách ghép xen " + n + " lát trên đường truyền là riêng từng giao diện (§11.3).",
+      desc: "Khác OTUk: FA OH và OTUC OH (SM, GCC0) nằm sẵn ở hàng 1 cột 1–14 của mỗi lát ODUC nên OTUC" + n + " = ODUC" + n + " (cùng tốc độ); không có 256 cột FEC – FEC do giao diện thêm (vd. FlexO-" + n + " qua G.709.1" +
+        (hasFlexo ? "" : "; lab chỉ dựng FlexO-1/2/4 – G.709.1 §6.2 dẫn G.709.6 cho FlexO-x x = 4 và 8 ở 400G–800G, giao diện cụ thể cho OTUC" + n + " không vẽ ở đây") +
+        "). Cách ghép xen " + n + " lát trên đường truyền là riêng từng giao diện (§11.3)." + (NOTE_N[n] || ""),
       accepts: [{ of: odu, count: 1, overhead: { kbps: 0, name: "FA OH + OTUC OH (hàng 1, cột 1–14 mỗi lát) – không tăng tốc độ",
         desc: "Đặt vào chỗ dành sẵn ở hàng 1 cột 1–14 của mỗi khung ODUC; không có vùng FEC nên tỉ lệ OTUC/ODUC = 1." },
         note: "OTUC" + n + " = ODUC" + n + " = " + n + " × 239/226 × 99 532 800 ≈ " + mbps(n * OTUC) + "." }] });
+    if (!hasFlexo) return;
     U({ id: flx, name: "FlexO-" + n, kind: "otu", level: lv + 3, rateKbps: n * FLEXO, frame: "flexo",
       standard: STD1 + " §8.3 Bảng 8-1, §10.1 (BMP OTUCn → FlexO-n), §8.4 (FlexO-x)",
       summary: "FlexO-" + n + " = " + n + " FlexO instance ≈ " + gbps(n * FLEXO) + " (= 4112/4097 × OTUC" + n + ", chưa gồm FEC giao diện).",

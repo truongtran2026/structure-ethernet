@@ -1003,7 +1003,25 @@
     return choices(MUX, unitId).map(function (c) { return choiceText(MUX, unitId, c); }).join(' hoặc ');
   }
   /** Tên ngắn: bỏ phần chú thích trong ngoặc ("E1 (2,048 Mbit/s)" → "E1"). */
-  function nameOf(MUX, id) { return MUX[id] ? String(MUX[id].name).replace(/\s*\(.*\)\s*$/, '') : id; }
+  function nameOf(MUX, id) {
+    var u = MUX[id];
+    if (!u) return id;
+    var full = String(u.name), short = stripNote(full);
+    // nhiều đơn vị cùng tên ngắn ("ODUflex (25GBASE-R)", "ODUflex(IMP,5)" → "ODUflex") thì giữ tên đầy đủ để phân biệt
+    return short !== full && shortCount(MUX, short) > 1 ? full : short;
+  }
+  function stripNote(s) { return String(s).replace(/\s*\(.*\)\s*$/, ''); }
+  var shortCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  /** Số đơn vị trong MUX có cùng tên ngắn (bỏ chú thích trong ngoặc); nhớ theo đối tượng MUX (MUX không đổi sau khi nạp dữ liệu). */
+  function shortCount(MUX, short) {
+    var c = shortCache && shortCache.get(MUX);
+    if (!c) {
+      c = { by: {} };
+      Object.keys(MUX).forEach(function (k) { var s = stripNote(MUX[k].name); c.by[s] = (c.by[s] || 0) + 1; });
+      if (shortCache) shortCache.set(MUX, c);
+    }
+    return c.by[short] || 0;
+  }
 
   /** Node đầu tiên trong cây con mà phương án đang chọn chặn X (phương án khác thì nhận được). */
   function blockingOption(MUX, node, X) {

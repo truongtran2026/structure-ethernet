@@ -19,8 +19,29 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD9 | FlexE (OIF IA 2.2): khung overhead 66B, lịch 5G, nhóm/instance/client, lab FlexE; FlexE-aware vào ODUflex | xong 2026-10-12 (review IA 2.2 + G.709 06/2020: ĐẠT vòng 1, 0 SAI, 6 NHỎ đã sửa; QA ĐẠT) |
 | GD10 | Phản hồi người dùng 2026-10-12: (a) mô phỏng trực quan các cách ánh xạ AMP/BMP/GMP/GFP-F (+ IMP) – thấy từng byte client, byte chèn, Cm/JC, idle; (b) máy tính: giới hạn L theo chuẩn (64–1518/1522, jumbo tuỳ thiết bị ghi rõ), payload kẹp theo MTU đường đi, gợi ý MTU/MSS; kịch bản cổng 1G khai báo 150M (VCAT/ODUflex + policer/shaper, buffer) | xong 2026-10-13 (review G.709/G.742/RFC/MEF: ĐẠT cả 2 file dữ liệu, mục NHỎ đã sửa; QA ĐẠT) |
 | GD10b | Mô phỏng 'nhìn là thấy' (phản hồi 2026-10-13: lưới thật 15 232 byte đổi 1 byte/khung nên trông đứng yên): chế độ Minh hoạ (khung đồ chơi vài chục byte, ppm phóng đại, ghi rõ không đúng tỉ lệ) + chế độ Thực tế; băng chuyền byte client → FIFO (thanh mức đệm) → lấp khung theo thứ tự truyền, ô chèn nhấp nháy; nhật ký sự kiện từng khung; so sánh AMP/BMP/GMP cùng client | xong 2026-10-13 (test sim 154 OK; Chrome: ảnh khung n và n+3 khác nhau ở cả 10 kịch bản) |
-| GD11 | OTN 200G–800G: OTUC5/OTUC8 (n tuỳ ý trong máy tính); ODUflex(BMP) 200GbE/400GbE (§17.13, PT 0x31/0x32, 40/80 TS 5G); ODUflex(IMP) 25GbE/FlexE client (§17.11); lab "OTUC8 = 2×400GbE", "400GbE + 4×100GbE" | chờ |
+| GD11 | OTN 200G–800G: OTUC5/OTUC8 (n tuỳ ý trong máy tính); ODUflex(BMP) 200GbE/400GbE (§17.13, PT 0x31/0x32, 40/80 TS 5G); ODUflex(IMP) 25GbE/FlexE client (§17.11); lab "OTUC8 = 2×400GbE", "400GbE + 4×100GbE" | xong 2026-10-13 (review G.709 06/2020: 1 SAI tốc độ đường dây 50/200/400GbE → lineKbps, đã sửa; test + Chrome ĐẠT) |
 | GD12 | Giao diện đường truyền: FlexO 200/400/800G (G.709.x), OIF 400ZR/800ZR, 800GbE vào OTN (G.709 bản mới – cần tải nguồn), trang khung → FEC → DSP coherent → bước sóng | chờ |
+
+## GD11 — OTN 200G–800G: OTUC5/OTUC8, ODUflex(BMP) 25/50/200/400GbE, ODUflex(IMP) — G.709 (06/2020) §17.11, §17.13, §20; Bảng 7-2/7-3/7-9, 17-16, 15-9
+
+Người dùng hỏi "ghép lên 200G 400G 500G 800G thế nào". GD7 có OTUCn n = 1, 2, 4. GD11 mở rộng trong `data/transport-b100g.js` (n) và `data/transport-otn.js` (ODUflex mới).
+
+### Unit (TMUX), family `otn`
+| id | rateKbps | accepts / ghi chú |
+| --- | --- | --- |
+| `opuc{3,5,6,8}`/`oduc…`/`otuc…` (đã làm n = 3, 5, 6, 8) | n × như GD7 | TS 5G: n_ts = 20n, maxPorts = 10n; cùng TSTAB như opuc1/2/4 (kể cả FlexE-aware, ODUflex mới bên dưới); flexo-3/5/6/8 KHÔNG thêm (G.709.1 §6.2: FlexO-x x = 1, 2, 4 theo G.709.3; x = 4, 8 theo G.709.6 – chưa có nguồn G.709.6) |
+| client `25gbe` (25GBASE-R 25 781 250), `50gbe` (51 562 500), `200gbe` (206 250 000), `400gbe` (412 500 000) | Bảng 17-16; `lineKbps` (PMA) 50G 53 125 000, 200G 212 500 000, 400G 425 000 000 | điểm đầu; desc: 200/400GBASE-R là dòng 64B/66B sau khi bỏ FEC + chuyển mã 256B/257B (§17.13.2, Bảng 17-18 X/Y/Z) |
+| `oduflex-bmp-25g`, `-50g`, `-200g`, `-400g` | ODUflex(CBR) = 239/238 × client (Bảng 7-2) | 1 × client, BMP + căn 2 bit khối 66B (§17.13), PT theo Bảng 15-9 (0x30 25GBASE-R, 0x31 200GBASE-R, 0x32 400GBASE-R, 0x33 50GBASE-R); leafOk; slots trong OPU4 (TS 1,25G, phương trình 19-1a) và OPUCn (TS 5G, 20-1a): orchestrator ước 400GbE ≈ 414,23G → 80 TS 5G (lấp kín OPUC4), 200GbE → 40 TS 5G; 25GbE/50GbE trong OPU4 – tính; không vừa thì không có phương án |
+| `oduflex-imp-<s>`, s = 2, 5, 8, 10, 20, 30, 40, 60, 80 | OPUflex(IMP,s) = s × 5 156 250 (Bảng 7-3), ODUflex = × 239/238 | IMP (§17.11): client gói 64B/66B (vd FlexE client, Ethernet MAC qua chèn/xoá Idle); accepts flexe-client-* tương ứng (s = 2 ↔ 10G, 5 ↔ 25G, 8 ↔ 40G, …) nếu khớp chuẩn; TS theo 19-1a/20-1a |
+
+### Lab
+`otn`: roots thêm `otuc5`, `otuc8`; palette thêm client 25/50/200/400GbE (và ODUflex tương ứng). Điểm học (intro):
+- OTUC8 = 2 × 400GbE (mỗi cái 80 TS 5G) hoặc 400GbE + 4 × 100GbE (ODU4 = 20 TS 5G mỗi cái) hoặc 8 × ODU4;
+- OTUC5 (500G, 100 TS) – "tốc độ lẻ" của DSP coherent; giới hạn trực tiếp 10n cổng.
+- `transport-mapping.js`: thêm kịch bản BMP 400GBASE-R → OPUflex (nếu đủ dữ liệu) – tuỳ chọn.
+
+### Tồn đọng từ GD10/b
+Không.
 
 ## GD10 — Mô phỏng ánh xạ + Máy tính thực tế (phản hồi người dùng 2026-10-12)
 

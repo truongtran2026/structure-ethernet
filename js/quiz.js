@@ -527,14 +527,37 @@
         var keep = function (v) { return v === k || !(isRoundRate(v) && Math.abs(v / k - 1) <= 0.02); };
         var near = (topicPool[t] || []).map(rateOf).filter(keep), wide = near.concat(allRates.filter(keep));
         var d = numDistractors(k, near, fmtRate, rng) || numDistractors(k, wide, fmtRate, rng);
-        var lineCoded = u.kind === 'client' && /\b\d+B\/\d+B\b/.test(String(u.summary || ''));
-        var q = { prompt: lineCoded
-            ? 'Tốc độ đường dây (sau mã hoá đường dây) của ' + oname + ' là bao nhiêu?'
-            : 'Tốc độ danh định của ' + oname + ' là bao nhiêu?',
+        var coded = u.kind === 'client' && /\b\d+B\/\d+B\b/.test(String(u.summary || ''));
+        // rateKbps của client có lineKbps là dòng 64B/66B mang qua OTN, KHÔNG phải tốc độ đường dây → hỏi đúng tên.
+        // Không có lineKbps: chỉ gọi "đường dây" khi dữ liệu nói rõ tín hiệu vật lý (Gbaud/lane/LAN PHY), còn lại hỏi "danh định".
+        var lineCoded = coded && u.lineKbps == null && /Gbaud|\blane\b|LAN PHY/.test(String(u.summary || ''));
+        var q = { prompt: coded && u.lineKbps != null
+            ? 'Tốc độ dòng mã 64B/66B (sau thích ứng, mang vào OPUflex) của ' + oname + ' là bao nhiêu?'
+            : lineCoded
+              ? 'Tốc độ đường dây (sau mã hoá đường dây) của ' + oname + ' là bao nhiêu?'
+              : 'Tốc độ danh định của ' + oname + ' là bao nhiêu?',
           explain: (u.summary || '') + (u.bytesPer125us != null ? ' (' + fmtNum(u.bytesPer125us, 3) + ' byte mỗi 125 µs × 64 kbit/s)' : ''),
           objNames: [oname],
           open: openUnit(D, id, null), check: { unit: id } };
         return assemble(q, fmtRate(k), d, rng);
+      } });
+    });
+
+    // (9b) tốc độ đường dây thật (lineKbps, khi khác rateKbps): 50/200/400GbE…
+    ids.forEach(function (id) {
+      var k = +M[id].lineKbps, t = unitTopic(D, id);
+      if (!(k > 0) || !named(id)) return;
+      out.push({ key: 'u-rate|' + id + '|line', topic: t, type: 'u-rate', make: function (rng) {
+        var u = M[id], ans = fmtRate(k), oname = objectName(id, ans);
+        if (!oname) return null;
+        var lines = ids.map(function (o) { return +M[o].lineKbps; }).filter(function (v) { return v > 0; });
+        var keep = function (v) { return v === k || !(isRoundRate(v) && Math.abs(v / k - 1) <= 0.02); };
+        var pool = lines.concat(ids.map(function (o) { return M[o].lineKbps != null ? rateOf(o) : 0; }), allRates).filter(function (v) { return v > 0 && keep(v); });
+        var d = numDistractors(k, lines.concat(ids.map(function (o) { return M[o].lineKbps != null ? rateOf(o) : 0; })).filter(function (v) { return v > 0 && keep(v); }), fmtRate, rng) || numDistractors(k, pool, fmtRate, rng);
+        var q = { prompt: 'Tốc độ đường dây của ' + oname + ' là bao nhiêu?',
+          explain: (u.summary || '') + ' Tốc độ đường dây ' + ans + '; dòng 64B/66B mang vào OPUflex là ' + fmtRate(rateOf(id)) + '.',
+          objNames: [oname], open: openUnit(D, id, null), check: { unit: id, line: true } };
+        return assemble(q, ans, d, rng);
       } });
     });
 

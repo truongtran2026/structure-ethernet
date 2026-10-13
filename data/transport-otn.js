@@ -465,6 +465,19 @@ window.TLABS = window.TLABS || [];
   U({ id: "100gbe", name: "100GbE (100GBASE-R)", kind: "client", level: 5, rateKbps: 103125000, standard: "IEEE 802.3 Clause 82; G.709 §17.7.5",
     summary: "100 Gigabit Ethernet: 103,125 Gbit/s mã 64B/66B (20 PCS lane).",
     desc: "Vừa thẳng OPU4 (3800 cột ≈ 104,13 Gbit/s) không cần chuyển mã, ánh xạ GMP – đây là lý do OPU4 có tỉ lệ 238/227 khác các OPUk khác." });
+  // GD11: client xGBASE-R cho ODUflex(BMP) – G.709 (06/2020) §17.13, Bảng 17-16 (tốc độ danh định ±100 ppm).
+  U({ id: "25gbe", name: "25GbE (25GBASE-R)", kind: "client", level: 3.5, rateKbps: 25781250, standard: "IEEE 802.3 Clause 107 (PCS), 74/108 (FEC); " + STD + " §17.13.1, Bảng 17-16",
+    summary: "25 Gigabit Ethernet: 25,78125 Gbit/s mã 64B/66B (một lane).",
+    desc: "Luồng 64B/66B 25 781 250 kbit/s. PHY có 3 chế độ: không FEC, BASE-R FEC (Clause 74, mã (2112,2080)) và RS-FEC (Clause 108, RS(528,514) với chuyển mã 257B + CWM – theo G.709 §17.13.1 chỉ chế độ này áp dụng cho PHY quang). Bộ ánh xạ sửa lỗi, bỏ FEC và khôi phục dòng 66B đúng 25,78125 Gbit/s rồi BMP vào ODUflex (§17.13.1) – trong suốt định thời. Không vừa ODU nào cố định: ODUflex(25GBASE-R) chiếm 21 TS OPU3, 20 TS OPU4 hoặc 5 TS 5G OPUCn (Bảng 7-9)." });
+  U({ id: "50gbe", name: "50GbE (50GBASE-R)", kind: "client", level: 4.5, rateKbps: 51562500, lineKbps: 53125000, standard: "IEEE 802.3cd Clause 133; " + STD + " §17.13.3, Bảng 17-16",
+    summary: "50 Gigabit Ethernet: 51,5625 Gbit/s mã 64B/66B (4 PCS lane, có AM).",
+    desc: "Bộ ánh xạ khoá khối và AM trên 4 PCS lane (mỗi lane 12 890 625 kbit/s), sắp lại rồi nối tiếp 4 lane – AM được giữ trong dòng mang đi (§17.13.3, Hình 17-26). 51 562 500 = 33/34 × 53 125 000 (lineKbps: tốc độ đường dây một lane đã mã FEC, §17.13.3), nên ODUflex = 7887/8092 × 53 125 000 kbit/s. Chiếm 40 TS OPU4 hoặc 10 TS 5G OPUCn; không vào OPU3 (Bảng 7-9)." });
+  U({ id: "200gbe", name: "200GbE (200GBASE-R)", kind: "client", level: 6, rateKbps: 206250000, lineKbps: 212500000, standard: "IEEE 802.3 Clause 119; " + STD + " §17.13.2, Bảng 17-16, 17-18, Hình 17-24, 17-25",
+    summary: "200 Gigabit Ethernet ở dạng 'OTN': dòng 64B/66B đã thích ứng X = 206 250 000 kbit/s (Bảng 17-18).",
+    desc: "Ở giao diện PMA (8 PCS lane × 26 562 500 kbit/s), 200GBASE-R mã 256B/257B + RS-FEC có tổng Y = 212 500 000 kbit/s (Bảng 17-18, §17.13.2 NOTE 1) – lineKbps. Bộ ánh xạ bóc FEC và AM, chuyển mã ngược 256B/257B → 64B/66B (tín hiệu tham chiếu OTN = 528/544 × 20479/20480 × Y), rồi chèn Z = 16 khối RC (rate compensation, RC0/RC1) sau mỗi 16 × 20479 khối để đạt X = 528/544 × Y = 206 250 000 kbit/s, xáo trộn 1 + x³⁹ + x⁵⁸ (§17.13.2). Chỉ vào được OPUCn: 40 TS 5G (Bảng 7-9) – lớn hơn OPU4." });
+  U({ id: "400gbe", name: "400GbE (400GBASE-R)", kind: "client", level: 7, rateKbps: 412500000, lineKbps: 425000000, standard: "IEEE 802.3 Clause 119; " + STD + " §17.13.2, Bảng 17-16, 17-18, Hình 17-24, 17-25",
+    summary: "400 Gigabit Ethernet ở dạng 'OTN': dòng 64B/66B đã thích ứng X = 412 500 000 kbit/s (Bảng 17-18).",
+    desc: "Ở giao diện PMA (16 PCS lane × 26 562 500 kbit/s), 400GBASE-R mã 256B/257B + RS-FEC có tổng Y = 425 000 000 kbit/s (Bảng 17-18, §17.13.2 NOTE 1) – lineKbps. Bộ ánh xạ bóc FEC + AM, chuyển mã 256B/257B → 64B/66B, chèn Z = 32 khối RC mỗi 32 × 20479 khối (bù chỗ AM 1/20480 đã bỏ) để đạt X = 528/544 × Y = 412 500 000 kbit/s, xáo trộn rồi BMP vào ODUflex (§17.13.2). Chiếm 80 TS 5G = trọn OPUC4; OTUC8 chở 2 × 400GbE (Bảng 7-9)." });
 
   // ---------- Hàm tạo ODU / OTU ----------
   function oduOH(k) { return { kbps: RATE["odu" + k] - RATE["opu" + k], name: "ODU" + k + " OH + OPU" + k + " OH (cột 1–16)",
@@ -559,6 +572,69 @@ window.TLABS = window.TLABS || [];
     return "ODUflex(GFP) " + vn(r, 0) + " kbit/s = " + vn(r / tsk, 2) + " TS danh định → chiếm " + n + " TS (Bảng 7-9 hàng ODUflex(GFP): n ở OPU2/3/4; GMP ODTUk." + n + ").";
   }
 
+  // ---------- GD11: ODUflex(BMP) cho 25/50/200/400GBASE-R (§17.13) và ODUflex(IMP,s) (§17.11, §12.2.6) ----------
+  // Số TS: phương trình 19-1a (OPU3/OPU4, TS 1,25G) và 20-1a (OPUCn, TS 5G):
+  //   M = ⌈ODUflex × (1 + 100 ppm + 0,00006) / (ODTU.1 × (1 − 20 ppm))⌉; ODTU3.1 = OPU3/32, ODTU4.1 = OPU4 × 3800/3808 / 80, ODTUCn.1 = OPUC/20.
+  //   BMP: đối chiếu Bảng 7-9 (OPU3 / OPU4 / OPUCn) – 25GBase-R 21/20/5, 50GBase-R –/40/10, 200GBase-R –/–/40, 400GBase-R –/–/80.
+  //   IMP,s: Bảng 7-9 chỉ ghi 'Note' (OPU3, OPU4, OPUCn; OPU2 '–') → số dưới đây tính theo phương trình.
+  var ODTU = { 3: RATE.opu3 / 32, 4: RATE.opu4 * 3800 / 3808 / 80, C: 238 / 226 * 99532800 / 20 };
+  function tsQ(rate, k) { return rate * (1 + 100e-6 + 0.00006) / (ODTU[k] * (1 - 20e-6)); }
+  function tsM(rate, k) { var m = Math.ceil(tsQ(rate, k)); return k === "C" ? m : (m <= (k === 3 ? 32 : 80) ? m : null); }
+  function tsWhere(rate) { var a = [], m3 = tsM(rate, 3), m4 = tsM(rate, 4);
+    if (m3) a.push(m3 + " TS OPU3"); if (m4) a.push(m4 + " TS OPU4"); a.push(tsM(rate, "C") + " TS 5G OPUCn"); return a.join(", "); }
+  function tsEqNote(id, rate, k, tabTxt) {
+    var eq = k === "C" ? "20-1a" : "19-1a", m = tsM(rate, k);
+    return M[id].name + " " + vn(rate, 0) + " kbit/s: phương trình " + eq + " M = ⌈" + vn(rate, 0) + " × 1,00016 / (" + vn(ODTU[k], 3) + " × 0,99998)⌉ = ⌈" + vn(tsQ(rate, k), 3) + "⌉ = " + m + " TS" + (tabTxt ? " (" + tabTxt + ")" : "") + ".";
+  }
+  var BMPX = [
+    { g: 25, of: "25gbe", pt: "0x30", lv: 45.1, tab: { 3: 21, 4: 20, C: 5 }, sec: "§17.13.1",
+      txt: "25GBASE-R (một lane 64B/66B; FEC BASE-R/RS của PHY được sửa lỗi và bỏ trước khi ánh xạ – trong suốt định thời)." },
+    { g: 50, of: "50gbe", pt: "0x33", lv: 47.5, tab: { 3: null, 4: 40, C: 10 }, sec: "§17.13.3",
+      txt: "50GBASE-R: 4 PCS lane nối tiếp, giữ AM (Hình 17-26); ODUflex = 7887/8092 × 53 125 000 kbit/s (tốc độ đường dây một lane có FEC)." },
+    { g: 200, of: "200gbe", pt: "0x31", lv: 55, tab: { 3: null, 4: null, C: 40 }, sec: "§17.13.2",
+      txt: "200GBASE-R đã bỏ FEC + AM, chuyển mã 256B/257B → 64B/66B và chèn 16 khối RC mỗi 16 × 20479 khối (Bảng 17-18: X = 206 250 000, Y = 212 500 000, Z = 16)." },
+    { g: 400, of: "400gbe", pt: "0x32", lv: 57, tab: { 3: null, 4: null, C: 80 }, sec: "§17.13.2",
+      txt: "400GBASE-R đã bỏ FEC + AM, chuyển mã 256B/257B → 64B/66B và chèn 32 khối RC mỗi 32 × 20479 khối (Bảng 17-18: X = 412 500 000, Y = 425 000 000, Z = 32)." }
+  ];
+  BMPX.forEach(function (b) {
+    var c = M[b.of].rateKbps, r = 239 / 238 * c, id = "oduflex-bmp-" + b.g + "g";
+    [3, 4, "C"].forEach(function (k) { if (tsM(r, k) !== b.tab[k]) throw new Error("GD11: " + id + " TS ở " + k + " = " + tsM(r, k) + " ≠ Bảng 7-9 " + b.tab[k]); });
+    U({ id: id, name: "ODUflex (" + b.g + "GBASE-R)", kind: "odu", level: b.lv, rateKbps: r, leafOk: true,
+      standard: STD + " §12.2.3, §17.13 (BMP, căn 2 bit khối 66B), " + b.sec + "; tốc độ Bảng 7-2/7-3, client Bảng 17-16; số TS Bảng 7-9 + phương trình 19-1a/20-1a; PT " + b.pt + " (Bảng 15-9)",
+      summary: "ODUflex(CBR) chở " + b.g + "GbE: " + mbps(r) + " = 239/238 × " + vn(c, 0) + " kbit/s; " + tsWhere(r) + ".",
+      desc: "Ánh xạ BMP (đồng bộ bit, không có byte bù – đồng hồ OPUflex lấy từ client) " + b.txt + " Dòng 66B được xáo trộn 1 + x³⁹ + x⁵⁸ (như IEEE 802.3 §49.2.6, chống giả khối/giả FAS) rồi đặt liền vào 4 × 3808 byte tải OPUflex, mỗi khối 66 bit bắt đầu ở bit 1, 3, 5 hoặc 7 của một byte ('căn 2 bit', Hình 17-23). OPUflex OH: PSI (PT " + b.pt + ", CSF) + 7 byte RES. Khi mất client thay bằng chuỗi LF (Bảng 17-17). Số TS theo Bảng 7-9 (khớp phương trình 19-1a/20-1a): " + tsWhere(r) + (b.g >= 200 ? " – lớn hơn OPU4 nên chỉ đi trên OTUCn." : "."),
+      accepts: [{ of: b.of, count: 1, mapping: "BMP + căn 2 bit 66B (PT " + b.pt + ")",
+        overhead: { kbps: r - c, name: "ODU OH + OPUflex OH (cột 1–16)", desc: "16 cột × 4 hàng mỗi khung (ODU OH, OPU OH với PSI/PT " + b.pt + ", chỗ FA/OTU OH): ODUflex = 239/238 × OPUflex, OPUflex = đúng tốc độ client." },
+        note: vn(c, 0) + " × 239/238 = " + vn(r, 3) + " kbit/s. Không có unit OPUflex riêng – OPUflex = client." }] });
+  });
+  var IMPS = [{ s: 2, lv: 34.5 }, { s: 5, lv: 45.2 }, { s: 8, lv: 41.5 }, { s: 10, lv: 47.6 }, { s: 20, lv: 48.9 }, { s: 30, lv: 54 }, { s: 40, lv: 55.5 }, { s: 60, lv: 56 }, { s: 80, lv: 57.5 }];
+  IMPS.forEach(function (o) {
+    var s = o.s, opf = s * 5156250, r = opf * 239 / 238, cl = "flexe-client-" + (5 * s) + "g";
+    U({ id: "oduflex-imp-" + s, name: "ODUflex(IMP," + s + ")", kind: "odu", level: o.lv, rateKbps: r, leafOk: true,
+      standard: STD + " §12.2.6, §17.11 (IMP, Hình 17-19); tốc độ Bảng 7-2/7-3; số TS Bảng 7-9 ('Note') → phương trình 19-1a/20-1a; PT 0x1D (Bảng 15-9); OIF FlexE IA",
+      summary: "ODUflex(IMP," + s + ") chở FlexE client " + (5 * s) + "G: OPUflex = " + s + " × 5 156 250 = " + mbps(opf) + ", ODUflex " + mbps(r) + "; " + tsWhere(r) + ".",
+      desc: "IMP (Idle mapping procedure, §17.11): client gói mã 64B/66B – FlexE client sau khi kết cuối nhóm FlexE (IA §8.2), hoặc khung Ethernet MAC dạng 66B – được thích ứng tốc độ bằng chèn/xoá Idle /I/ (IEEE 802.3 §82.2.3.6) và/hoặc xoá ordered set /O/ (§82.2.3.9) cho khớp đúng OPUflex, xáo trộn 1 + x³⁹ + x⁵⁸ rồi đặt khối 66 bit vào tải (bắt đầu ở bit 1, 3, 5, 7 của byte). Không có byte bù hay Cm: chênh đồng hồ được hấp thụ trong luồng Idle, nên đồng hồ ODUflex có thể lấy từ server (HO ODUk/ODUCn) hoặc từ client (§12.2.6). FlexE client chuẩn chỉ có s = 2, 8 hoặc 5n (10G, 40G, 25G·n); ODUflex(IMP) tổng quát nhận tốc độ cấu hình X bất kỳ (239/238 × X). OPUflex OH: PSI (PT 0x1D, CSF) + 7 byte RES; mất client → khối LF. Số TS tính theo phương trình (Bảng 7-9 ghi 'Note'; OPU2 không hỗ trợ): " + tsWhere(r) + ".",
+      accepts: [{ of: cl, count: 1, mapping: "IMP – chèn/xoá Idle (PT 0x1D)",
+        overhead: { kbps: r - opf, name: "ODU OH + OPUflex OH (cột 1–16)", desc: "16 cột × 4 hàng mỗi khung: ODUflex(IMP,s) = 239/238 × OPUflex(IMP,s)." },
+        note: "FlexE client " + (5 * s) + "G = " + s + " × 5 156 250 = " + vn(opf, 0) + " kbit/s = OPUflex(IMP," + s + ") (Bảng 7-3); client lệch ±100 ppm được bù bằng Idle." }] });
+  });
+
+  // Phương án vào OPU3 (32 TS) / OPU4 (80 TS) cho các ODUflex GD11 – chỉ những cái vừa.
+  function gd11Acc(k) {
+    var n = k === 3 ? 32 : 80, out = [];
+    BMPX.forEach(function (b) {
+      var id = "oduflex-bmp-" + b.g + "g", m = tsM(M[id].rateKbps, k);
+      if (m) out.push({ of: id, count: Math.floor(n / m), slots: m, mapping: "GMP (ODTU" + k + "." + m + ")",
+        note: tsEqNote(id, M[id].rateKbps, k, "Bảng 7-9: " + b.tab[k]) + (m * 2 > n ? "" : " " + Math.floor(n / m) + " cái dùng " + Math.floor(n / m) * m + "/" + n + " TS.") });
+    });
+    IMPS.forEach(function (o) {
+      var id = "oduflex-imp-" + o.s, m = tsM(M[id].rateKbps, k);
+      if (m) out.push({ of: id, count: Math.floor(n / m), slots: m, mapping: "GMP (ODTU" + k + "." + m + ")",
+        note: tsEqNote(id, M[id].rateKbps, k, "Bảng 7-9: Note") + (o.s === 8 && k === 4 ? " (ở OPU3 cần 33 TS > 32 – không vừa)." : "") });
+    });
+    return out;
+  }
+
   // ---------- k = 2 ----------
   var ts2 = RATE.opu2 / 8;
   U({ id: "opu2", name: "OPU2", kind: "opu", level: 30, rateKbps: RATE.opu2, frame: "opu2-ts", standard: STD + " §13, §17.2, §19; tốc độ Bảng 7-3",
@@ -607,7 +683,7 @@ window.TLABS = window.TLABS || [];
       { of: "oduflex-gfp-8", count: 4, slots: 8, mapping: "GMP (ODTU3.8)", note: gfpTsNote(8, ts3) },
       { of: "oduflex-gfp-32", count: 1, slots: 32, mapping: "GMP (ODTU3.32)", note: gfpTsNote(32, ts3) + " Lấp kín OPU3." },
       { of: "oduflex-flexe-aware-5", count: 1, slots: 21, mapping: "GMP (ODTU3.21)", note: faTsNote(5, ts3, 21) + " n ≥ 10 không vừa OPU3." }
-    ] });
+    ].concat(gd11Acc(3)) });
   oduUnit("3", 41, "Vào OPU4 chiếm 31 TS (GMP, 30,97 TS).");
   otuUnit("3", 42, "Giao diện 43,018 Gbit/s.");
 
@@ -632,7 +708,7 @@ window.TLABS = window.TLABS || [];
       { of: "oduflex-flexe-aware-10", count: 2, slots: 40, mapping: "GMP (ODTU4.40)", note: faTsNote(10, ts4, 40) },
       { of: "oduflex-flexe-aware-15", count: 1, slots: 60, mapping: "GMP (ODTU4.60)", note: faTsNote(15, ts4, 60) },
       { of: "oduflex-flexe-aware-20", count: 1, slots: 80, mapping: "GMP (ODTU4.80)", note: faTsNote(20, ts4, 80) + " Lấp kín OPU4." }
-    ] });
+    ].concat(gd11Acc(4)) });
   oduUnit("4", 51, "Đơn vị 100G: mang 100GbE hoặc tổ hợp ODU thấp hơn trong 80 TS.");
   otuUnit("4", 52, "Giao diện 111,81 Gbit/s.");
 
@@ -642,8 +718,9 @@ window.TLABS = window.TLABS || [];
   L.push({
     id: "otn", name: "Ghép kênh OTN", family: "otn",
     // GD7: roots otuc*/flexo-* và các unit OPUCn/ODUCn định nghĩa trong data/transport-b100g.js (trang phải nạp file đó).
-    roots: ["otu1", "otu2", "otu2e", "otu3", "otu4", "otuc1", "otuc2", "otuc4", "flexo-1", "flexo-2", "flexo-4"],
-    palette: ["1gbe", "eth-1g-gfpf", "stm-16", "fc-800", "10gbe", "eth-10g-gfpf", "stm-64", "40gbe", "eth-40g-gfpf", "stm-256", "100gbe", "odu0", "oduflex-gfp-1", "odu1", "oduflex-fc800", "oduflex-gfp-8", "odu2", "odu2e", "oduflex-gfp-32", "odu3", "odu4", "oduflex-flexe-aware-5", "oduflex-flexe-aware-10", "oduflex-flexe-aware-15", "oduflex-flexe-aware-20"],
-    intro: "Chọn OTUk đích rồi lắp từ dưới lên: client → OPUk (ánh xạ AMP/BMP/GMP) → ODUk (+ ODU OH) → OTUk (+ FEC). Chọn 'ghép TS' để trộn ODU0 / ODU1 / ODU2 / ODUflex trong cùng một OPU theo tributary slot 1,25G – miễn tổng TS không vượt (2, 8, 32 hoặc 80). Thử thả 10GbE vào OPU2 hay 40GbE chưa chuyển mã để thấy vì sao cần ODU2e và 1024B/1027B. So sánh với Ethernet chỉ mang khung MAC (GFP-F): 10G GFP-F vừa thẳng OPU2 hoặc ODUflex(GFP) 8 TS; ODUflex(GFP) 32 TS vào OPU3 nhưng không vào OPU2, và ở OPU4 vẫn chiếm 32 TS (ODU3 chỉ 31). Beyond 100G: OTUC1/2/4 chỉ chở ODUk qua TS 5G (20 TS mỗi lát 100G) – ODU0/ODU1 tốn trọn 1 TS 5G, ODU2 2 TS, ODU3 8 TS, ODU4 20 TS; OTUC4 chở 4 ODU4 hoặc 40 ODU2. FlexO-n bọc OTUCn thêm AM/EOH/BOH (FEC thêm ở giao diện). ODUflex(FlexE-aware) n = 5 chiếm 21 TS OPU3 hoặc 20 TS OPU4; n = 20 lấp kín OPU4 (80 TS) hoặc 20 TS 5G của OPUCn."
+    // GD11: thêm otuc3/5/6/8 (không có FlexO tương ứng), client 25/50/200/400GbE, ODUflex(BMP) và ODUflex(IMP,s).
+    roots: ["otu1", "otu2", "otu2e", "otu3", "otu4", "otuc1", "otuc2", "otuc3", "otuc4", "otuc5", "otuc6", "otuc8", "flexo-1", "flexo-2", "flexo-4"],
+    palette: ["1gbe", "eth-1g-gfpf", "stm-16", "fc-800", "10gbe", "eth-10g-gfpf", "stm-64", "25gbe", "40gbe", "eth-40g-gfpf", "stm-256", "50gbe", "100gbe", "200gbe", "400gbe", "odu0", "oduflex-gfp-1", "odu1", "oduflex-fc800", "oduflex-gfp-8", "odu2", "odu2e", "oduflex-imp-2", "oduflex-gfp-32", "odu3", "oduflex-imp-8", "oduflex-bmp-25g", "oduflex-imp-5", "oduflex-bmp-50g", "oduflex-imp-10", "oduflex-imp-20", "odu4", "oduflex-bmp-200g", "oduflex-bmp-400g", "oduflex-flexe-aware-5", "oduflex-flexe-aware-10", "oduflex-flexe-aware-15", "oduflex-flexe-aware-20"],
+    intro: "Chọn OTUk đích rồi lắp từ dưới lên: client → OPUk (ánh xạ AMP/BMP/GMP) → ODUk (+ ODU OH) → OTUk (+ FEC). Chọn 'ghép TS' để trộn ODU0 / ODU1 / ODU2 / ODUflex trong cùng một OPU theo tributary slot 1,25G – miễn tổng TS không vượt (2, 8, 32 hoặc 80). Thử thả 10GbE vào OPU2 hay 40GbE chưa chuyển mã để thấy vì sao cần ODU2e và 1024B/1027B. So sánh với Ethernet chỉ mang khung MAC (GFP-F): 10G GFP-F vừa thẳng OPU2 hoặc ODUflex(GFP) 8 TS; ODUflex(GFP) 32 TS vào OPU3 nhưng không vào OPU2, và ở OPU4 vẫn chiếm 32 TS (ODU3 chỉ 31). Beyond 100G: OTUC1/2/4 chỉ chở ODUk qua TS 5G (20 TS mỗi lát 100G) – ODU0/ODU1 tốn trọn 1 TS 5G, ODU2 2 TS, ODU3 8 TS, ODU4 20 TS; OTUC4 chở 4 ODU4 hoặc 40 ODU2. FlexO-n bọc OTUCn thêm AM/EOH/BOH (FEC thêm ở giao diện). ODUflex(FlexE-aware) n = 5 chiếm 21 TS OPU3 hoặc 20 TS OPU4; n = 20 lấp kín OPU4 (80 TS) hoặc 20 TS 5G của OPUCn. 200G–800G: OTUC3/5/6/8 = 60/100/120/160 TS 5G. Ethernet 25/50/200/400GBASE-R đi trong ODUflex(BMP) = 239/238 × client: 25GbE 5 TS 5G (20 TS OPU4), 50GbE 10 (40 TS OPU4), 200GbE 40, 400GbE 80 – hai cái sau chỉ vào OTUCn. Thử OTUC8 = 2 × 400GbE, hoặc 400GbE + 4 × 100GbE (mỗi ODU4 20 TS), hoặc 8 × ODU4; OTUC5 (500G) = 400GbE + 100GbE. Giới hạn 10n cổng: OTUC8 nhận tối đa 80 ODUk trực tiếp dù có 160 TS. FlexE client đã kết cuối đi trong ODUflex(IMP,s) (s × 5G, thích ứng bằng Idle)."
   });
 })();

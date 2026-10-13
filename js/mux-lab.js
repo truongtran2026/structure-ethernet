@@ -94,6 +94,11 @@
     lb.active = true;
     if (!lab) { document.getElementById('view-lab').innerHTML = '<div class="empty"><h1>Không có phòng thí nghiệm “' + esc(id) + '”</h1></div>'; return; }
     lb.lab = lab; lb.st = loadSt(lab); lb.msg = null; lb.armed = null; lb.sel = null; lb.lastPath = null;
+    // st.arm: nơi khác (vd #sim) yêu cầu mở lab với một đơn vị đang cầm sẵn + hiện chi tiết; dùng một lần
+    if (lb.st.arm) {
+      if (MUX()[lb.st.arm] && (lab.palette || []).indexOf(lb.st.arm) >= 0) { lb.armed = lb.st.arm; lb.sel = lb.st.arm; if (lb.st.palFold) lb.st.palFold[palGroupKey(lb.st.arm)] = false; }
+      delete lb.st.arm; save();
+    }
     render();
   }
   function hide() { lb.active = false; }
@@ -108,11 +113,7 @@
     v.innerHTML =
       '<section class="stack-head"><div class="head-top"><span class="eyebrow">Phòng thí nghiệm · ' + esc((lab.family || '').toUpperCase()) + '</span>' +
         '<h1 class="stack-title">' + esc(lab.name) + '</h1>' + (lab.intro ? '<p class="stack-summary">' + esc(lab.intro) + '</p>' : '') + '</div>' +
-        '<div class="toolbar" role="toolbar" aria-label="Khung đích"><span class="toolbar-label">Khung đích</span><div class="seg-group">' +
-        roots.map(function (r) {
-          var on = r === lb.st.root;
-          return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-lroot="' + esc(r) + '" aria-pressed="' + on + '">' + esc(nm(r)) + '</button>';
-        }).join('') + '</div>' +
+        '<div class="toolbar" role="toolbar" aria-label="Khung đích">' + renderRootPicker(roots) +
         '<span class="muted lab-rate">' + esc(TV().fmtRate(L().unitKbps(M, lb.st.root))) + (L().isByteUnit(M, lb.st.root) ? ' · ' + esc(n(L().unitBytes(M, lb.st.root), 0)) + ' byte/125 µs' : '') + '</span>' +
         '<button type="button" class="btn-ghost' + (lb.confirmClear ? ' is-danger' : '') + '" data-laction="clear">' + (lb.confirmClear ? 'Bấm lần nữa để xoá hết' : 'Xoá hết') + '</button>' +
         '</div></section>' +
@@ -181,15 +182,95 @@
     }).join('');
   }
 
+  // ---------- nhóm palette / nhóm gốc (suy từ kind, tên, phương án ánh xạ — không liệt kê từng id) ----------
+  var PAL_GROUP_MIN = 14; // palette ngắn hơn: giữ danh sách phẳng
+  var PAL_ORDER = ['c-eth', 'c-fc', 'c-flexe', 'c-stm', 'c-other', 'odu', 'f-gfp', 'f-bmp', 'f-imp', 'f-flexe', 'f-other'];
+  var PAL_TITLE = {
+    'c-eth': 'Client Ethernet', 'c-fc': 'Client Fibre Channel', 'c-flexe': 'Client FlexE', 'c-stm': 'Client SDH (STM-N trong OTN)', 'c-other': 'Client khác',
+    odu: 'ODUk (tốc độ cố định)', 'f-gfp': 'ODUflex ánh xạ GFP-F', 'f-bmp': 'ODUflex ánh xạ BMP', 'f-imp': 'ODUflex ánh xạ IMP (Idle)', 'f-flexe': 'ODUflex FlexE-aware (BGMP)', 'f-other': 'ODUflex khác'
+  };
+  /** Khoá nhóm của một đơn vị palette. */
+  function palGroupKey(id) {
+    var M = MUX(), u = M[id], name = String(u.name || id), tag = id + ' ' + name;
+    if (u.kind !== 'odu' && (u.kind === 'client' || !(u.accepts && u.accepts.length))) {
+      if (u.kind === 'stm' || /^stm/i.test(name)) return 'c-stm';
+      if (/FlexE/i.test(tag)) return 'c-flexe';
+      if (/GbE|Ethernet|BASE-/i.test(tag)) return 'c-eth';
+      if (/^FC|Fibre/i.test(name)) return 'c-fc';
+      return 'c-other';
+    }
+    if (u.kind === 'stm') return 'c-stm';
+    if (u.kind === 'odu' && /^ODUflex/i.test(name)) {
+      var map = ((u.accepts || [])[0] || {}).mapping || '';
+      if (/FlexE|BGMP/i.test(tag + ' ' + map)) return 'f-flexe';
+      if (/IMP/i.test(map + ' ' + tag)) return 'f-imp';
+      if (/BMP/i.test(map)) return 'f-bmp';
+      if (/GFP/i.test(map + ' ' + tag)) return 'f-gfp';
+      return 'f-other';
+    }
+    return 'odu';
+  }
+  /** Nhóm palette theo thứ tự PAL_ORDER; trong nhóm giữ thứ tự `items` (đã xếp theo level). Khoá lạ thì cho vào cuối. */
+  function palGroups(items) {
+    var M = MUX(), by = {}, keys = [];
+    items.forEach(function (id) {
+      var u = M[id], k = u.kind === 'odu' || u.kind === 'stm' || u.kind === 'client' || !(u.accepts && u.accepts.length) ? palGroupKey(id) : 'kind-' + u.kind;
+      if (!by[k]) { by[k] = { key: k, title: PAL_TITLE[k] || (k.indexOf('kind-') === 0 ? 'Đơn vị ' + k.slice(5).toUpperCase() : k), ids: [] }; keys.push(k); }
+      by[k].ids.push(id);
+    });
+    keys.sort(function (a, b) {
+      var ia = PAL_ORDER.indexOf(a), ib = PAL_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    return keys.map(function (k) { return by[k]; });
+  }
+  /** Nhóm khung đích (OTUk / OTUCn / FlexO…): theo tiền tố chữ của tên; chỉ nhóm khi có nhiều gốc và ≥ 2 tiền tố. */
+  var ROOT_TITLE = { OTU: 'OTUk', OTUC: 'OTUCn', FlexO: 'FlexO-x' };
+  function rootGroups(roots) {
+    if (roots.length <= 8) return [];
+    var by = {}, order = [];
+    roots.forEach(function (r) {
+      var pre = String(MUX()[r].name || r).match(/^[A-Za-z]+/);
+      var k = pre ? pre[0] : r;
+      if (!by[k]) { by[k] = { title: ROOT_TITLE[k] || k, ids: [] }; order.push(k); }
+      by[k].ids.push(r);
+    });
+    return order.length > 1 ? order.map(function (k) { return by[k]; }) : [];
+  }
+  function rootBtn(r) {
+    var on = r === lb.st.root;
+    return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-lroot="' + esc(r) + '" aria-pressed="' + on + '">' + esc(nm(r)) + '</button>';
+  }
+  function renderRootPicker(roots) {
+    var gs = rootGroups(roots);
+    if (!gs.length) return '<span class="toolbar-label">Khung đích</span><div class="seg-group">' + roots.map(rootBtn).join('') + '</div>';
+    return '<span class="toolbar-label">Khung đích</span>' + gs.map(function (g) {
+      return '<span class="root-grp"><span class="root-grp-t">' + esc(g.title) + '</span><span class="seg-group">' + g.ids.map(rootBtn).join('') + '</span></span>';
+    }).join('');
+  }
+
   function renderPalette() {
     var M = MUX(), root = lb.st.root;
     var items = (lb.lab.palette || []).filter(function (id) { return M[id]; });
     items.sort(function (a, b) { return (M[a].level || 0) - (M[b].level || 0); });
+    function one(id) {
+      var max = maxIn(root, id);
+      return palItem(id, max ? ' — tối đa ' + max + ' trong ' + nm(root) : ' — không ghép được vào ' + nm(root), !max);
+    }
+    var groups = items.length > PAL_GROUP_MIN ? palGroups(items) : [];
+    var body;
+    if (groups.length < 2) body = '<div class="pal-list">' + items.map(one).join('') + '</div>';
+    else body = groups.map(function (g) {
+      var folded = !!(lb.st.palFold && lb.st.palFold[g.key]);
+      var okN = g.ids.filter(function (id) { return maxIn(root, id) > 0; }).length;
+      return '<div class="pal-grp' + (okN ? '' : ' is-dim') + '">' +
+        '<button type="button" class="pal-grp-h" data-lpgrp="' + esc(g.key) + '" aria-expanded="' + !folded + '">' +
+        '<span class="pal-guest-caret">' + (folded ? '▸' : '▾') + '</span> ' + esc(g.title) +
+        '<span class="muted"> · ' + okN + '/' + g.ids.length + '</span></button>' +
+        (folded ? '' : '<div class="pal-list">' + g.ids.map(one).join('') + '</div>') + '</div>';
+    }).join('');
     return '<div class="section-title"><h2>Đơn vị</h2><span class="muted">từ bé đến lớn</span></div>' +
-      '<div class="pal-list">' + items.map(function (id) {
-        var max = maxIn(root, id);
-        return palItem(id, max ? ' — tối đa ' + max + ' trong ' + nm(root) : ' — không ghép được vào ' + nm(root), !max);
-      }).join('') + '</div>' + renderGuestPalette() +
+      body + renderGuestPalette() +
       '<p class="muted pal-hint">' + palHint(root) +
       (items.some(function (id) { return M[id].members; }) ? ' <b>VCAT</b>: thả VCG (VC-n-Xv) hoặc Ethernet vào khung — các thành viên được rải vào VC trống bất kỳ (không cần liền kề), mỗi thành viên mang nhãn VCG#·SQ; gỡ một thành viên để thấy LCAS giảm băng thông.' : '') + '</p>';
   }
@@ -743,6 +824,10 @@
       lb.confirmClear = false;
       lb.st.trees[lb.st.root] = L().newRoot(MUX(), lb.st.root); lb.st.collapsed = {};
       lb.msg = { ok: true, html: 'Đã xoá hết ' + esc(nm(lb.st.root)) + '.' }; lb.lastPath = null;
+      save(); render(); return;
+    }
+    if ((b = t.closest('[data-lpgrp]'))) {
+      var pk = b.getAttribute('data-lpgrp'); lb.st.palFold = lb.st.palFold || {}; lb.st.palFold[pk] = !lb.st.palFold[pk];
       save(); render(); return;
     }
     if ((b = t.closest('[data-lguest]'))) { var gid = b.getAttribute('data-lguest'); lb.guestFold = lb.guestFold || {}; lb.guestFold[gid] = !lb.guestFold[gid]; render(); return; }

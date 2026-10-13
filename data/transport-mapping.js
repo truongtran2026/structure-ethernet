@@ -348,7 +348,7 @@ window.TMAPS = window.TMAPS || [];
         unit: "một khối 66B toàn Idle (8 ký tự /I/) – CHƯA XÁC MINH (không có IEEE 802.3 trong nguồn)",
         where: "chỉ ở khoảng trống giữa hai gói (IPG); gói liên tục dài thì phải đợi tới IPG kế tiếp – bộ đệm FIFO nhỏ",
         nominalDeletePerFrame: c - P, nominalPpm: (c / P - 1) * 1e6,
-        otn: { id: "oduflex-imp-5 (đề xuất GD11, chưa có trong TMUX)", opuflexKbps: opf, oduflexKbps: opf * 239 / 238,
+        otn: { id: "oduflex-imp-5", opuflexKbps: opf, oduflexKbps: opf * 239 / 238,
           frameUs: perO, blocksPerFrame: 15232 * 8 / 66, pt: "0x1D",
           note: "G.709 §17.11: OPUflex(IMP,s) = s × 5 156 250 kbit/s ±100 ppm (s = 5 → 25 781 250, đúng bằng client); ODUflex = × 239/238 ≈ 25 889 574,58. Khung OPUflex 4 × 3808 byte ≈ 4,7265 µs mang 15 232 × 8 / 66 ≈ 1846,30 khối 66B (khối vắt qua ranh giới khung, bit đầu sync header ở bit 1/3/5/7 của byte). Danh định không cần chèn/xoá; biên ±200 ppm ≈ ±0,37 khối/khung." } },
       budget: [ { kind: "block", cells: P, note: "5 khe × 1023 vòng = 5115 vị trí khối 66B của client mỗi chu kỳ OH." } ],

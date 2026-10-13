@@ -167,7 +167,7 @@ window.TLABS = window.TLABS || [];
       desc: "Dòng khối 66B (IEEE 802.3 Hình 82-5, ký tự Start căn biên 8 byte) của một MAC " + g + "G – có thể sinh trong hệ thống (NPU) hoặc chuyển từ một PHY Ethernet cùng tốc độ (§7.2). Vào shim, client được thích ứng tốc độ bằng thêm/bớt Idle xuống " + mbps(adapted(g)) + " (× 16383/16384 × 20460/20461, thấp hơn ≈ 0,011 % – không mất gói) để vừa đúng " + s + " khe lịch (§5.2.1.2, §6.7)." +
         (g === 10 || g === 40 ? " Tốc độ " + g + "G không phải bội 25G: chỉ dùng được với thiết bị hỗ trợ khe 5G (thiết bị chỉ hỗ trợ khe 25G không nhận; Idle không đủ bù chênh lệch lớn, ví dụ 10G vào khe 25G cần bộ đệm khung MAC – §5.2.1.2 Note)." : "") +
         (g > 100 ? " Lớn hơn một instance 100G: cần nhóm có ít nhất " + Math.ceil(s / 20) + " instance; các khe trải qua nhiều instance/PHY (§6.8)." : "") +
-        " Qua OTN khi kết cuối FlexE (§8.2): client vào ODUflex(IMP,s) với s = " + s + ", OPUflex = " + s + " × 5 156 250 kbit/s (G.709 Bảng 7-3, §17.11; GD10)." });
+        " Qua OTN khi kết cuối FlexE (§8.2): client vào ODUflex(IMP,s) với s = " + s + ", OPUflex = " + s + " × 5 156 250 kbit/s (G.709 Bảng 7-3, §17.11; GD11)." });
   });
 
   function slotOpts(nSlots) {

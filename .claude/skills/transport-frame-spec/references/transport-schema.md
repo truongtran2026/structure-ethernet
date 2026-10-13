@@ -87,6 +87,7 @@ hàng `r … r+h-1`. Dùng cho TUG-3 trong VC-4, TU-12 trong TUG-2…
   level: 30,                      // thứ tự từ bé đến lớn (để lab sắp palette)
   bytesPer125us: 108,             // kích thước trung bình mỗi 125 µs (SDH) — rateKbps = bytes × 64
   rateKbps: 2048,                 // cho đơn vị không chia được theo byte (PDH, Ethernet…) — chọn đúng một trong hai
+  lineKbps: 212500000,            // (tuỳ chọn) tốc độ đường dây khi khác rateKbps (vd sau FEC/256B/257B); quiz/calc dùng cho câu 'tốc độ đường dây'
   leafOk: true,                   // (tuỳ chọn, chỉ khi có accepts) dùng được như client nguyên khối (không cần lấp con);
                                   // lab mặc định là nguyên khối, người dùng có thể chọn phương án accepts để xem bên trong
   frame: "tug-2",                 // (tuỳ chọn) id TFRAMES để mở lưới

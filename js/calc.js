@@ -19,7 +19,7 @@
     var u = M[id];
     if (!u) return null;
     var lab = L();
-    var out = { id: id, name: nm(M, id), fullName: u.name, kind: u.kind, family: u.family, kbps: lab.unitKbps(M, id),
+    var out = { id: id, name: nm(M, id), fullName: u.name, kind: u.kind, family: u.family, kbps: lab.unitKbps(M, id), lineKbps: u.lineKbps > 0 ? +u.lineKbps : null,
       bytes: lab.isByteUnit(M, id) ? u.bytesPer125us : null, summary: u.summary || '', desc: u.desc || '', standard: u.standard || '' };
     var f = u.frame && F && F[u.frame];
     if (f && f.grid) {
@@ -544,7 +544,9 @@
   function renderUnit() {
     var M = MUX(), info = unitInfo(M, root.TFRAMES || {}, cv.st.unit);
     if (!info) return '<p class="muted">Chọn một đơn vị.</p>';
-    var cards = stat('Tốc độ', esc(rate(info.kbps)), esc(n(info.kbps, 3)) + ' kbit/s') +
+    // lineKbps (nếu có) ≠ rateKbps: rateKbps là dòng 64B/66B mang vào OTN, lineKbps mới là tốc độ đường dây
+    var cards = (info.lineKbps ? stat('Tốc độ đường dây', esc(rate(info.lineKbps)), esc(n(info.lineKbps, 3)) + ' kbit/s') : '') +
+      stat(info.lineKbps ? 'Dòng 64B/66B mang vào OTN' : 'Tốc độ', esc(rate(info.kbps)), esc(n(info.kbps, 3)) + ' kbit/s') +
       (info.bytes != null ? stat('Byte mỗi 125 µs', esc(n(info.bytes, 3)), '× 64 kbit/s = tốc độ') : '');
     if (info.frame) {
       var fb = info.frame.bits / 8;

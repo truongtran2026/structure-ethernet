@@ -744,8 +744,28 @@
   // =====================================================================
   // Dựng trang
   // =====================================================================
+  /** Lab chứa đơn vị unit trong palette + khung gốc nhỏ nhất của lab nhận được nó ({lab, root}) hoặc null. */
+  function unitInLab(unit) {
+    var M = root.TMUX || {}, TVL = root.TransViz && root.TransViz.lab;
+    if (!unit || !M[unit] || !TVL) return null;
+    var lab = (root.TLABS || []).filter(function (l) { return (l.palette || []).indexOf(unit) >= 0; })[0];
+    if (!lab) return null;
+    var r = (lab.roots || []).filter(function (x) { return M[x] && TVL.maxCount(M, x, unit) > 0; })[0];
+    return r ? { lab: lab, root: r } : null;
+  }
+  /** Ghi trạng thái lab (cùng khoá với js/mux-lab.js): gốc + đơn vị cầm sẵn, lab dùng một lần khi mở. */
+  function seedLab(labId, unit) {
+    var hit = unitInLab(unit);
+    if (!hit || hit.lab.id !== labId) return;
+    try {
+      var key = 'fs.lab.v1.' + labId, s = JSON.parse(localStorage.getItem(key) || 'null') || {};
+      s.root = hit.root; s.arm = unit;
+      localStorage.setItem(key, JSON.stringify(s));
+    } catch (err) { /* không có localStorage: lab mở bình thường */ }
+  }
   function headHtml(sc, eyebrow, title, summary) {
     var fl = sc ? frameLinks(sc) : [], lab = sc ? labLink(sc) : null;
+    var impU = sc && sc.imp && sc.imp.otn && sc.imp.otn.id, impHit = unitInLab(impU);
     return '<section class="stack-head"><div class="head-top"><span class="eyebrow">' + esc(eyebrow) + '</span>' +
       '<h1 class="stack-title">' + esc(title) + '</h1>' +
       '<p class="stack-summary">' + esc(summary) + '</p>' +
@@ -754,6 +774,7 @@
         (sc.server ? '<span class="chip">server: ' + esc(nameOfUnit(sc.server)) + (sc.serverPayloadKbps ? ' · tải ' + esc(rate(+sc.serverPayloadKbps)) : '') + '</span>' : '') +
         fl.map(function (f) { return '<a class="btn-ghost" href="#t/' + esc(f) + '">Xem khung ' + esc((root.TFRAMES[f] || {}).name || f) + '</a>'; }).join('') +
         (lab ? '<a class="btn-ghost" href="#lab/' + esc(lab.id) + '">Mở lab ' + esc(lab.name || lab.id) + '</a>' : '') +
+        (impHit ? '<a class="btn-ghost" data-simlab="' + esc(impHit.lab.id) + '" data-simunit="' + esc(impU) + '" href="#lab/' + esc(impHit.lab.id) + '">Xem ' + esc(nameOfUnit(impU)) + ' trong lab ' + esc(impHit.lab.name || impHit.lab.id) + '</a>' : '') +
       '</div>' + (sc.standard ? '<p class="muted calc-small">Chuẩn: ' + esc(sc.standard) + '</p>' : '') : '') + '</div></section>';
   }
   function pickerHtml() {
@@ -1707,6 +1728,8 @@
   // ---------- sự kiện ----------
   function onClick(e) {
     if (!sv.active) return;
+    var lk = e.target.closest && e.target.closest('[data-simlab]');
+    if (lk) { seedLab(lk.getAttribute('data-simlab'), lk.getAttribute('data-simunit')); return; } // rồi để liên kết #lab/… chạy
     var b = e.target.closest && e.target.closest('[data-sact]');
     if (b) {
       var a = b.getAttribute('data-sact');

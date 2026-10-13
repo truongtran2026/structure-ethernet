@@ -642,10 +642,10 @@ button { font: inherit; color: inherit; }
    ===================================================================== */
 .lab-rate { font-family: var(--mono); font-size: .82rem; }
 .lab-grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px; align-items: start; }
-.lab-pal { position: sticky; top: calc(var(--topbar-h) + 12px); }
+.lab-pal { position: sticky; top: calc(var(--topbar-h) + 12px); max-height: calc(100vh - var(--topbar-h) - 24px); overflow-y: auto; }
 .pal-list { display: flex; flex-direction: column; gap: 5px; }
 .pal-item {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 9px;
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 8px; padding: 6px 9px;
   border: 1px solid var(--kd); border-left-width: 5px; border-radius: 7px; background: var(--kb); color: var(--kf);
   cursor: grab; font-size: .88rem; text-align: left;
 }
@@ -661,6 +661,14 @@ button { font: inherit; color: inherit; }
 .pal-guest-h { background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 600; cursor: pointer; text-align: left; color: inherit; }
 .pal-guest-h:hover { text-decoration: underline; }
 .pal-guest .pal-list { margin-top: 6px; }
+.pal-grp { margin-top: 8px; }
+.pal-grp:first-of-type { margin-top: 0; }
+.pal-grp.is-dim .pal-grp-h { opacity: .65; }
+.pal-grp-h { display: block; width: 100%; background: none; border: 0; border-bottom: 1px solid var(--border); padding: 4px 0; margin-bottom: 5px; font: inherit; font-size: .84rem; font-weight: 700; cursor: pointer; text-align: left; color: inherit; }
+.pal-grp-h:hover { text-decoration: underline; }
+.pal-grp-h .muted { font-weight: 400; }
+.root-grp { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.root-grp-t { font-size: .78rem; font-weight: 700; color: var(--muted); }
 .lab-msg:empty { display: none; }
 .lab-msg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .lab-tree { overflow-x: auto; padding-bottom: 4px; }
