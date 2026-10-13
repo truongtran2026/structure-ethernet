@@ -898,23 +898,26 @@ button { font: inherit; color: inherit; }
   --sim-empty: #e9ecf1; --sim-data: #7fc28f; --sim-data2: #4f9e63; --sim-fs: #9aa3b2; --sim-jdata: #1e7bd6; --sim-jstuff: #e8590c;
   --sim-gstuff: #d6336c; --sim-gfph: #7048e8; --sim-gidle: #d9dde4; --sim-bdata: #4f9e63; --sim-bidle: #c9ced8; --sim-bins: #f08c00;
   --sim-oh: #5c6b80; --sim-jc: #fab005; --sim-other: #eef0f4; --sim-gridline: rgba(16, 24, 40, .25);
+  --sim-bad: #e03131; --sim-conv: #e7ebf1; --sim-f0: #74c0fc; --sim-f1: #ffc078; --sim-f2: #b2f2bb; --sim-f3: #eebefa; --sim-f4: #ffe066; --sim-f5: #99e9f2;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) #view-sim {
     --sim-empty: #232833; --sim-data: #3f8f55; --sim-data2: #2b6b3c; --sim-fs: #5b6474; --sim-jdata: #4dabf7; --sim-jstuff: #ff8a3d;
     --sim-gstuff: #f06595; --sim-gfph: #9775fa; --sim-gidle: #343a46; --sim-bdata: #3f8f55; --sim-bidle: #3a404c; --sim-bins: #ffa94d;
     --sim-oh: #8492a6; --sim-jc: #ffd43b; --sim-other: #1d2129; --sim-gridline: rgba(255, 255, 255, .22);
+  --sim-bad: #ff6b6b; --sim-conv: #1b2029; --sim-f0: #1c7ed6; --sim-f1: #d9480f; --sim-f2: #2f9e44; --sim-f3: #9c36b5; --sim-f4: #e67700; --sim-f5: #0c8599;
   }
 }
 :root[data-theme="dark"] #view-sim {
   --sim-empty: #232833; --sim-data: #3f8f55; --sim-data2: #2b6b3c; --sim-fs: #5b6474; --sim-jdata: #4dabf7; --sim-jstuff: #ff8a3d;
   --sim-gstuff: #f06595; --sim-gfph: #9775fa; --sim-gidle: #343a46; --sim-bdata: #3f8f55; --sim-bidle: #3a404c; --sim-bins: #ffa94d;
   --sim-oh: #8492a6; --sim-jc: #ffd43b; --sim-other: #1d2129; --sim-gridline: rgba(255, 255, 255, .22);
+  --sim-bad: #ff6b6b; --sim-conv: #1b2029; --sim-f0: #1c7ed6; --sim-f1: #d9480f; --sim-f2: #2f9e44; --sim-f3: #9c36b5; --sim-f4: #e67700; --sim-f5: #0c8599;
 }
 .sim-card { display: flex; flex-direction: column; gap: 10px; }
 .sim-card .section-title { margin-bottom: 0; }
 .sim-links { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
-.sim-links .btn-ghost { text-decoration: none; }
+.sim-links .btn-ghost { text-decoration: none; white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
 .sim-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
 .sim-tab { font-size: .8rem; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none; }
 .sim-tab b { color: var(--accent); margin-right: 2px; }
@@ -947,6 +950,45 @@ button { font: inherit; color: inherit; }
 .sim-timeline { display: flex; flex-direction: column; gap: 4px; }
 .sim-steps { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
 @media (max-width: 640px) { .sim-gridwrap { flex-direction: column; } .sim-oh { width: auto; flex-direction: row; flex-wrap: wrap; } }
+/* GD10b: chế độ Minh hoạ / Thực tế, băng chuyền + bộ đệm + khung, nhật ký, so sánh */
+.sim-modebar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 8px; }
+.sim-seg { display: inline-flex; border: 1px solid var(--border-strong, var(--border)); border-radius: 99px; overflow: hidden; flex: 0 0 auto; }
+.sim-seg button { border: 0; background: var(--surface); color: var(--text); padding: 6px 16px; font: inherit; font-size: .86rem; font-weight: 600; cursor: pointer; }
+.sim-seg button + button { border-left: 1px solid var(--border); }
+.sim-seg button.is-on { background: var(--accent); color: #fff; }
+.sim-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.sim-scale { font-size: .8rem; color: var(--muted); flex: 1 1 260px; }
+.sim-guide { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 8px 12px; border-radius: 8px; font-size: .88rem; line-height: 1.45; margin: 0 0 10px; }
+.sim-stagecard { container-type: inline-size; }
+.sim-stagewrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@container (min-width: 760px) { .sim-stagewrap { grid-template-columns: minmax(0, 1fr) 250px; } .sim-logbox { max-height: 420px; } }
+.sim-stage { min-width: 0; }
+.sim-stagecv { display: block; width: 100%; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+.sim-caption { margin: 6px 0 0; font-size: .86rem; line-height: 1.45; }
+.sim-sd { margin: 4px 0 0; font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+.sim-k-jdata { color: var(--sim-jdata); font-weight: 700; }
+.sim-k-jstuff { color: var(--sim-jstuff); font-weight: 700; }
+.sim-k-bins { color: var(--sim-bins); font-weight: 700; }
+.sim-k-bad { color: var(--sim-bad); font-weight: 700; }
+.sim-logbox { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--surface-2); max-height: 240px; overflow: auto; min-width: 0; }
+.sim-logbox h3 { margin: 0 0 4px; font-size: .82rem; }
+.sim-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: .78rem; line-height: 1.35; }
+.sim-log li { border-left: 3px solid var(--border); padding-left: 6px; color: var(--muted); }
+.sim-log li:first-child { color: var(--text); font-weight: 600; }
+.sim-log li.lk-up { border-left-color: var(--sim-jdata); }
+.sim-log li.lk-down { border-left-color: var(--sim-jstuff); }
+.sim-log li.lk-bad { border-left-color: var(--sim-bad); color: var(--sim-bad); }
+.sim-legnote { flex-basis: 100%; color: var(--muted); }
+.sim-legnote .sim-sw { margin-right: 2px; }
+.sim-tab--cmp { border-style: dashed; }
+.sim-cmpwrap { container-type: inline-size; }
+.sim-cmp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@container (min-width: 900px) { .sim-cmp { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.sim-lane { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sim-lane-h { font-size: .9rem; }
+.sim-lane-h b { color: var(--accent); margin-right: 4px; }
+.sim-lane p { margin: 0; }
+.sim-minilog li { font-weight: 400; }
 
 /* ===================== GD10: Máy tính — vùng khung, MTU, cổng khai báo ===================== */
 .calc-purpose { max-width: 70em; }
