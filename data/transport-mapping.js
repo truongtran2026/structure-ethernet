@@ -8,6 +8,7 @@
 //   ITU-T G.7041/Y.1303 (08/2016): §6.1.1 (core header 4 byte), §6.1.2 (payload header), §6.2.1 (GFP Idle 4 byte),
 //     §7.1.1–7.1.2 (Ethernet MAC: DA…FCS vào GFP, bỏ preamble/SFD/IPG).
 //   ITU-T G.707/Y.1322 (01/2007): §10.6 (GFP vào C-n, C2 = 0x1B), §11.2 (VC-4-Xv), Appendix XIV (thứ tự rải byte vào VCG).
+//   G.709 06/2020 §17.13, §17.13.2, Hình 17-23…17-25, Bảng 17-16…17-18 (BMP 400GBASE-R → OPUflex, căn 2 bit khối 66B, khối RC) – GD13.
 //   ITU-T G.742 (11/88) §3–§5 (E2: 4 E1 ghép xen bit, chèn dương), G.703 (dung sai ±50/±30 ppm).
 //   OIF FlexE IA 2.2 (OIF-FLEXE-02.2): §5.2.1.2 (thích ứng tốc độ client bằng chèn/xoá Idle theo IEEE 802.3 82.2.3.6), §6.7, §6.8.
 // Quy ước toạ độ: row/col theo ĐÁNH SỐ CỦA CHUẨN (1-based; OTN: cột 15–16 là OPU OH, 17–3824 là OPU payload).
@@ -149,6 +150,59 @@ window.TMAPS = window.TMAPS || [];
   })();
 
   // =====================================================================
+  // 3b. BMP – 400GBASE-R → OPUflex (§17.13, §17.13.2) – không JC/NJO/PJO, khối 66B căn 2 bit (GD13)
+  // =====================================================================
+  (function () {
+    var X = 412500000, Y = 425000000, Z = 32;                  // Bảng 17-18 (400GBASE-R)
+    var ODUF = 239 / 238 * X, per = period(ODUF), P = 15232;   // OPUflex tải = X (Bảng 7-3: OPUflex CBR = tốc độ client)
+    var bpf = P * 8 / 66;                                       // khối 66B / khung ≈ 1846,30
+    var ref = 528 / 544 * 20479 / 20480 * Y;                     // OTN reference signal (§17.13.2)
+    T.push({
+      id: "bmp-400gbase-r-opuflex", method: "BMP", order: 35,
+      name: "400GBASE-R → OPUflex (BMP, khối 66B)", client: "400gbe", server: "oduflex-bmp-400g", frames: ["opuc-ts", "otuc"],
+      standard: G709 + " §17.13 (BMP + căn 2 bit khối 66B), Hình 17-23, Bảng 17-16, 17-17; §17.13.2, Bảng 17-18 (X/Y/Z), Hình 17-24, 17-25; Bảng 7-3 (OPUflex CBR); Bảng 15-9 (PT 0x32)",
+      summary: "400GbE vào ODUflex bằng BMP: đồng hồ OPUflex lấy từ client, OPU OH KHÔNG có JC/NJO/PJO (chỉ PSI + 7 byte RES). Trước đó bộ ánh xạ bỏ RS-FEC + AM, chuyển mã 256B/257B → 64B/66B và chèn 32 khối RC; dòng 66B xáo trộn đặt liền vào 4 × 3808 byte, mỗi khối bắt đầu ở bit 1/3/5/7 của byte.",
+      steps: [
+        "Ở giao diện PMA, 400GBASE-R là 16 lane × 26 562 500 = Y = 425 000 000 kbit/s (mã 256B/257B + RS(544,514) + AM). Bộ ánh xạ sửa lỗi rồi BỎ parity FEC và AM, chuyển mã 257B → 4 khối 66B: còn 528/544 × 20479/20480 × Y ≈ 412 479 858 kbit/s (tín hiệu tham chiếu OTN).",
+        "Chèn Z = 32 khối RC (16 RC0 + 16 RC1) sau mỗi 32 × 20 479 khối client – lấp đúng chỗ AM vừa bỏ – được X = 528/544 × Y = 412 500 000 kbit/s ±100 ppm (Bảng 17-18).",
+        "Xáo trộn 1 + x³⁹ + x⁵⁸ (như IEEE 802.3 §49.2.6; 2 bit sync header không xáo trộn) để chống nhận nhầm ranh giới khối 66B và chống khối 66B (kể cả sau xáo trộn OTU) giả mẫu FAS của OTU/ODU (§17.13).",
+        "Đồng hồ OPUflex lấy từ client: OPUflex = X, ODUflex = 239/238 × X. Mỗi khung (≈ 0,2954 µs) nhận đúng 15 232 byte = 1846,30 khối 66B – không cần bù, nên OPU OH không có JC, NJO, PJO.",
+        "Khối 66B đặt liền nhau, vắt qua ranh giới byte và khung; vì 66 = 8 × 8 + 2, bit đầu sync header luôn rơi vào bit 1, 3, 5 hoặc 7 ('căn 2 bit', Hình 17-23). Sau 33 khung (60 928 khối) mẫu ranh giới lặp lại.",
+        "Đầu thu: tìm lại ranh giới khối 66B, giải xáo trộn, bỏ khối RC, rồi (ngoài OTN) chuyển mã lại 257B, chèn AM + FEC trước khi phát ra PMA. Mất client → chuỗi LF 0x4B (Bảng 17-17)."
+      ],
+      clientKbps: X, serverPayloadKbps: X,
+      ppm: { client: 100, server: 100, locked: true, note: "BMP: OPUflex bám client (cùng ppm), giới hạn ±100 ppm theo Bảng 17-16/7-3; không có cơ chế bù nên không có 'tổng lệch' như AMP." },
+      frame: { rows: 4, cols: 3808, cellBits: 8, firstCol: 17, ohCols: [15, 16], periodUs: per,
+        note: "Lưới byte của vùng tải OPUflex (4 × 3808). 15 232 × 8 / 66 không nguyên nên KHÔNG vẽ ô 66B: ranh giới khối 66B (block66) phủ lên lưới byte – khối k (k = 0, 1, …) bắt đầu ở bit 66k của luồng tải, tức byte ⌊66k/8⌋ + 1, bit (66k mod 8) + 1." },
+      oh: [
+        { row: 4, col: 15, abbr: "PSI", note: "PSI[0] = PT 0x32 (400GBASE-R vào OPUflex, Bảng 15-9); PSI[2] bit 1 = CSF; PSI[1], 7 bit còn lại của PSI[2], PSI[3…255] = RES (Hình 17-23)." },
+        { rows: [1, 3], col: 15, abbr: "RES", note: "Dự trữ (§17.13)." },
+        { rows: [1, 4], col: 16, abbr: "RES", note: "Dự trữ – nơi AMP/BMP CBR2G5/10G đặt JC + NJO; ở §17.13 không có JC/NJO (7 byte RES tổng cộng ở cột 15–16)." }
+      ],
+      fixedStuff: [],
+      // Không có `just`: BMP §17.13 "does not generate any justification control signals" (schema mục 5: BMP không just khi ppm.locked + block66).
+      block66: {
+        bits: 66, align: 2, startBits: [1, 3, 5, 7], perFrame: bpf, cycleFrames: 33, cycleBlocks: 33 * bpf,
+        scrambler: "1 + x³⁹ + x⁵⁸ tự đồng bộ (IEEE 802.3 §49.2.6); 2 bit sync header đi qua không xáo trộn",
+        rule: "66 = 8 × 8 + 2: mỗi khối dịch 2 bit so với biên byte → bit đầu sync header ở bit 1, 3, 5, 7 (bit 1 = MSB). Một khung = 121 856 bit = 1846 khối + 20 bit; mẫu lặp sau 33 khung = 4 021 248 bit = 60 928 khối.",
+        rc: { Z: Z, rc0: Z / 2, rc1: Z / 2, everyBlocks: Z * 20479, perFrame: bpf / 20480, periodUs: Z * 20480 * 66 * 1000 / X,
+          rc0Hex: "SH 10 + 00 FF FF 00 00 00 FF FF", rc1Hex: "SH 10 + 00 00 00 00 FF FF FF FF",
+          note: "Khối RC: sync header 10 (khối điều khiển), byte vị trí 'block type' = 0x00 (không trùng loại khối nào, giữ khoảng cách Hamming 4). 32 khối RC liền nhau (16 RC0 rồi 16 RC1, Hình 17-25) sau mỗi 655 328 khối client → tỉ lệ 1/20 480 ≈ 0,090 khối RC/khung, một cụm ≈ 104,86 µs ≈ 354,96 khung." },
+        chain: [
+          { label: "400GBASE-R ở PMA (16 lane × 26 562 500; 256B/257B + RS-FEC + AM)", kbps: Y },
+          { label: "Bỏ parity RS(544,514) + chuyển mã 257B → 4 × 66B (514/544 × 264/257 = 528/544)", kbps: Y * 528 / 544, ratio: [528, 544] },
+          { label: "Bỏ alignment marker (× 20479/20480) = tín hiệu tham chiếu OTN", kbps: ref, ratio: [20479, 20480] },
+          { label: "Chèn Z = 32 khối RC mỗi 32 × 20 479 khối (× 20480/20479) = X", kbps: X, ratio: [20480, 20479] },
+          { label: "ODUflex = 239/238 × OPUflex (OPUflex tải = X)", kbps: ODUF, ratio: [239, 238] }
+        ]
+      },
+      budget: [ { kind: "data", cells: P, note: "Toàn bộ 15 232 byte tải mang dòng khối 66B (≈ 1846,30 khối, khối RC tính như khối client). Không có PJO, NJO hay fixed stuff." } ],
+      sim: { entity: "byte", entityBits: 8, perFrame: { nom: P, min: P, max: P }, carry: { fixed: P, min: P, max: P }, locked: true },
+      note: "T = 122 368 / (239/238 × 412 500 000) ms ≈ 0,295408 µs; byte client/khung = 412 500 000 × T / 8 = 15 232 (vì OPUflex = X); ±100 ppm chỉ co giãn T (0,295379…0,295438 µs), số byte/khung luôn 15 232. serverPayloadKbps = OPUflex = X; TMUX không có unit OPUflex riêng nên server là oduflex-bmp-400g (rate = 239/238 × X ≈ 414 233 193,28). Chuỗi tốc độ: Y × 528/544 = 412 500 000 (bỏ FEC + chuyển mã); × 20479/20480 ≈ 412 479 858,40 (bỏ AM); × 20480/20479 = 412 500 000 (chèn RC). Khối 66B/khung = 15 232 × 8 / 66 ≈ 1846,303; RC/khung = 1846,303 / 20 480 ≈ 0,0902. ODUflex chiếm 80 TS 5G của OPUCn (Bảng 7-9; 20-1a: ⌈79,05⌉). So với bmp-10gbase-r-opu2e: ở đó còn JC/NJO/PJO (JC cố định 00) và 64 byte FS; ở §17.13 OH chỉ còn PSI + RES."
+    });
+  })();
+
+  // =====================================================================
   // 4. GMP – 1000BASE-X (TTT) → OPU0 (§17.7.1, §17.7.1.1)
   // =====================================================================
   (function () {
@@ -160,11 +214,11 @@ window.TMAPS = window.TMAPS || [];
       standard: G709 + " §17.7, công thức 17-1…17-6; §17.7.1, Bảng 17-4; §17.7.1.1 (TTT); Annex D; Bảng D.1 (OPU0: m = 8, P = 15 232)",
       summary: "GbE được chuyển mã TTT (8B/10B → GFP-T 64B/65B) còn 15/16 × 1,25 Gbit/s rồi GMP rải Cm ≈ 14 407 byte dữ liệu đều khắp 15 232 byte tải của OPU0.",
       steps: [
-        "1000BASE-X 1 250 000 kbit/s được chuyển mã TTT thành luồng GFP-T 1 171 875 kbit/s (= 15/16) – giữ nguyên ký tự điều khiển và định thời.",
-        "Mỗi khung OPU0 (≈ 98,354 µs) bộ ghép đếm số byte client đến: trung bình cm ≈ 14 407,31 byte, nên Cm thực phát chủ yếu là 14 407, khoảng 31 % số khung là 14 408 (tích luỹ phần lẻ 0,311).",
-        "Cm của khung sau được ghi vào JC1–JC3 của khung này (14 bit + II/DI + CRC-8); đầu thu biết trước khung sau có bao nhiêu byte dữ liệu.",
-        "Sigma-delta rải Cm byte dữ liệu đều khắp 15 232 vị trí: byte j là dữ liệu nếu (j × Cm) mod 15 232 < Cm – khoảng 825 byte chèn được trải mỏng, không dồn cục như AMP.",
-        "Client lệch ±100 ppm, OPU0 ±20 ppm → Cm dao động trong 14 405…14 410; với 1000BASE-X không dùng C1D nên JC4–JC6 = 0."
+        "Cổng GbE (1000BASE-X) chạy 1,25 Gbit/s. Trước khi vào OTN, tín hiệu được nén mã (chuyển mã TTT) còn 1 171 875 kbit/s, tức 15/16, mà không mất dữ liệu hay định thời.",
+        "Mỗi khung OPU0 dài khoảng 98,35 µs và có 15 232 byte tải. Trong thời gian đó client gửi tới khoảng 14 407 byte, nên khung mang 14 407 (đôi khi 14 408) byte dữ liệu. Khoảng 825 byte còn lại là byte chèn.",
+        "Số byte dữ liệu của mỗi khung (gọi là Cm) được báo trước trong overhead (OH) của khung đi trước. Nhờ vậy đầu thu biết trước khung sau có bao nhiêu byte dữ liệu.",
+        "Byte chèn không dồn vào một chỗ mà được rải đều khắp khung, trung bình cứ khoảng 18 byte lại có 1 byte chèn. Khác với AMP, ở đây không có cột chèn riêng.",
+        "Khi đồng hồ client lệch (tới ±100 ppm), Cm chỉ nhích trong khoảng 14 405…14 410. Đầu thu theo dõi Cm để dựng lại đúng tốc độ client."
       ],
       clientKbps: f, serverPayloadKbps: OPU0,
       ppm: { client: 100, server: 20, note: "Bảng 17-4: 1000BASE-X (sau TTT) ±100 ppm; OPU0 ±20 ppm (Bảng 7-3)." },
@@ -174,11 +228,11 @@ window.TMAPS = window.TMAPS || [];
       gmp: { m: 8, M: 1, n: 8, cnBits: 14, P: P, word: "1 byte", jc: GMP_JC, cndUsed: false,
         cmNom: c, cmMin: lo(c, 100, 20), cmMax: hi(c, 100, 20), CmMin: Math.floor(lo(c, 100, 20)), CmMax: Math.ceil(hi(c, 100, 20)),
         appliesTo: "khung kế tiếp", iiDi: GMP_IIDI,
-        formula: "cm = f_client × T / m = (15/16 × 1 250 000) × T / 8 byte; T = 122 368 / 1 244 160 ms; Cm,min = floor(cm × (1 − 100e-6)/(1 + 20e-6)), Cm,max = ceiling(cm × (1 + 100e-6)/(1 − 20e-6))",
+        formula: "cm = f_client × T / m = (15/16 × 1 250 000) × T / 8 byte; T = 122 368 / 1 244 160 ms; Cm,min = floor(cm × (1 − 100e-6)/(1 + 20e-6)), Cm,max = ceiling(cm × (1 + 100e-6)/(1 − 20e-6)). Biên ≈ 14 405,58 … 14 409,04 → Cm 14 405…14 410. Cm = 14 bit trong JC1–JC2 (+ II/DI), JC3 = CRC-8. Công thức 17-6 bản 06/2020 in 'Cm,max = ceiling(cm,min)' – lỗi in; dùng ceiling(cm,max) như công thức 19-7 (§19.6) và Annex D.3. OPU0 chỉ có m = 8 nên CnD (n = 8) luôn 0 (Bảng D.1 'C8D: N/A'), JC4–JC6 = 0.",
         sigmaDelta: SIGMA },
       budget: [ { kind: "gmp", cells: P, note: "Toàn bộ 15 232 byte là vị trí GMP (dữ liệu hoặc chèn theo Cm)." } ],
       sim: { entity: "byte", entityBits: 8, perFrame: { nom: c, min: lo(c, 100, 20), max: hi(c, 100, 20) }, carry: { fixed: 0, min: 0, max: P }, locked: false },
-      note: "cm,nom = 1 171 875 × 98,3539 µs / 8 ≈ 14 407,311 byte/khung; biên ppm ≈ 14 405,58 … 14 409,04 → Cm,min = 14 405, Cm,max = 14 410. Công thức 17-6 trong bản 06/2020 in 'Cm,max = ceiling(cm,min)' – rõ là lỗi in, ở đây dùng ceiling(cm,max): công thức tương ứng cho ODTU ở §19.6 (19-7) ghi đúng 'Cm,max = ceiling(cm,max)', và Annex D.3 nói Cm(t) nằm giữa Floor(Cm,min) và Ceiling(Cm,max). OPU0 chỉ có m = 8 nên CnD (n = 8) luôn 0 (Bảng D.1 'C8D: N/A')."
+      note: "Cách tính nhanh: byte client mỗi khung = 1 171 875 kbit/s × 98,354 µs / 8 ≈ 14 407,3 byte; phần lẻ 0,3 nghĩa là khoảng 3 khung trong 10 mang 14 408 byte. Byte chèn = 15 232 − 14 407 ≈ 825 (cứ 15 232 / 825 ≈ 18 byte có 1 chèn). Công thức chuẩn và ghi chú chi tiết (lỗi in công thức 17-6, CnD) ở mục 'Công thức' của khung chi tiết."
     });
   })();
 
@@ -193,11 +247,11 @@ window.TMAPS = window.TMAPS || [];
       standard: G709 + " §17.7.5, Hình 17-15, Bảng 17-12 (m = 640, n = 8, CnD có); Annex D; Bảng D.1 (OPU4: P = 190, C8D 0…79)",
       summary: "100GbE vào OPU4 bằng GMP với 'từ' 80 byte: mỗi khung ≈ 188 trên 190 khối 80 byte mang dữ liệu, 2 khối là chèn; 8 cột cuối là fixed stuff.",
       steps: [
-        "Gom 20 PCS lane 100GBASE-R thành một luồng 103 125 000 kbit/s (khối 66B nguyên vẹn, không chuyển mã).",
-        "Vùng tải OPU4 = 3800 cột × 4 hàng chia thành 190 'từ' 80 byte (m = 640 bit); cột 3817–3824 là 32 byte fixed stuff.",
-        "Mỗi khung (≈ 1,1677 µs) đến ≈ 188,154 từ client → Cm phát 188 (đôi khi 189); ΣC8D (0…79 byte) báo phần lẻ dưới 80 byte để tái tạo đồng hồ mịn.",
-        "Sigma-delta rải 188 từ dữ liệu + 2 từ chèn đều trong 190 vị trí; Cm của khung sau nằm ở JC1–JC3 khung này.",
-        "Client ±100 ppm, OPU4 ±20 ppm → Cm luôn trong 188…189: GMP chịu lệch lớn mà không cần cột chèn riêng."
+        "Cổng 100GbE gửi luồng khối 64B/66B ở 103,125 Gbit/s. Luồng được đưa nguyên vẹn vào OTN, không chuyển mã.",
+        "Vùng tải OPU4 có 15 200 byte dùng được mỗi khung (32 byte cuối là byte chèn cố định). GMP chia chúng thành 190 'từ', mỗi từ 80 byte.",
+        "Mỗi khung dài khoảng 1,17 µs, trong thời gian đó client gửi tới khoảng 188,15 từ. Vì vậy khung mang 188 từ dữ liệu (thỉnh thoảng 189), các từ còn lại là chèn.",
+        "Số từ dữ liệu (Cm) của khung sau được báo trong overhead (OH) của khung này. Kèm theo là phần lẻ dưới 1 từ (0…79 byte), giúp đầu thu dựng lại đồng hồ client thật mịn.",
+        "Khoảng 2 từ chèn được rải đều trong khung. Client lệch tới ±100 ppm thì Cm vẫn chỉ là 188 hoặc 189, nên không cần cột chèn riêng như AMP."
       ],
       clientKbps: 103125000, serverPayloadKbps: OPU4,
       ppm: { client: 100, server: 20, note: "Bảng 17-12: 100GBASE-R ±100 ppm; OPU4 ±20 ppm." },
@@ -207,11 +261,11 @@ window.TMAPS = window.TMAPS || [];
       gmp: { m: 640, M: 80, n: 8, cnBits: 14, P: P, word: "80 byte liên tiếp", jc: GMP_JC, cndUsed: true, cndRange: [0, 79],
         cmNom: c, cmMin: lo(c, 100, 20), cmMax: hi(c, 100, 20), CmMin: Math.floor(lo(c, 100, 20)), CmMax: Math.ceil(hi(c, 100, 20)),
         c8Nom: bits / 8, appliesTo: "khung kế tiếp", iiDi: GMP_IIDI,
-        formula: "cm = 103 125 000 × T / 640; T = 122 368 / (239/227 × 99 532 800) ms ≈ 1,16770 µs; c8 = 103 125 000 × T / 8 byte; C8D = C8 − 80 × Cm",
+        formula: "cm = 103 125 000 × T / 640; T = 122 368 / (239/227 × 99 532 800) ms ≈ 1,16770 µs; c8 = 103 125 000 × T / 8 ≈ 15 052,32 byte; C8D = C8 − 80 × Cm (ΣC8D ở JC4–JC6). Biên ±100/±20 ppm ≈ 188,131 … 188,177 → Cm,min = floor = 188, Cm,max = ceiling = 189. Dung lượng GMP tối đa 190 × 640 / T ≈ 104 136 740 kbit/s. Bảng D.1 ghi B_server OPU4 = 8 × 15 200; ở đây T tính trực tiếp từ chu kỳ khung ODU4 (Bảng 7-4) nên không phụ thuộc cách hiểu đó.",
         sigmaDelta: "Từ 80 byte thứ j (1…190) là dữ liệu nếu (j × Cm) mod 190 < Cm (Annex D, D-23)." },
       budget: [ { kind: "gmp", cells: 15200, note: "190 từ GMP × 80 byte." }, { kind: "fs", cells: 32, note: "Cột 3817–3824." } ],
       sim: { entity: "từ 80 byte", entityBits: 640, perFrame: { nom: c, min: lo(c, 100, 20), max: hi(c, 100, 20) }, carry: { fixed: 0, min: 0, max: P }, locked: false },
-      note: "cm,nom = 103 125 000 × 1,1676955 µs / 640 ≈ 188,154 (khớp mô tả khung opu4-100ge); c8 ≈ 15 052,32 byte. Biên ≈ 188,131 … 188,177 → Cm,min = 188, Cm,max = 189. Dung lượng GMP tối đa 190 × 640 / T ≈ 104 136 740 kbit/s. Bảng D.1 ghi B_server OPU4 = 8 × 15 200; ở đây tính T trực tiếp từ chu kỳ khung ODU4 (Bảng 7-4) nên không phụ thuộc cách hiểu đó."
+      note: "Cách tính nhanh: bit client mỗi khung = 103 125 000 kbit/s × 1,1677 µs ≈ 120 419 bit = 15 052 byte; chia 80 byte/từ ≈ 188,15 từ (khớp mô tả khung opu4-100ge). 190 − 188 = 2 từ chèn mỗi khung; 0,15 từ lẻ (≈ 12 byte) được báo riêng để đầu thu dựng đồng hồ. Công thức chuẩn và biên ppm chi tiết ở mục 'Công thức' của khung chi tiết."
     });
   })();
 
@@ -224,13 +278,13 @@ window.TMAPS = window.TMAPS || [];
       id: "gmp-odu0-odtu21", method: "GMP", order: 60,
       name: "ODU0 → ODTU2.1 → OPU2 TS (GMP)", client: "odu0", server: "opu2", frames: ["opu2-ts", "otu2"],
       standard: G709 + " §19.3 (ODTU2.ts 476 cột × 32 hàng), §19.3.5, §19.4 (TSOH), §19.6 (GMP ODUj → ODTUk.ts), Bảng 7-7 (ODTU2.1 = 1 249 409,620 kbit/s ±20 ppm), Annex D Bảng D.1",
-      summary: "Ghép ODU0 vào một tributary slot 1,25G của OPU2: GMP chạy theo ĐA KHUNG 8 (một TS = 476 cột × 4 hàng × 8 khung = 15 232 byte), Cm ≈ 15 168 byte.",
+      summary: "Ghép ODU0 vào một TS (khe nhánh) 1,25G của OPU2: GMP chạy theo ĐA KHUNG 8 (một TS = 476 cột × 4 hàng × 8 khung = 15 232 byte), Cm ≈ 15 168 byte.",
       steps: [
-        "OPU2 (PT 21) chia 8 TS ghép xen cột; TS1 = cột 17, 25, 33… (476 cột). ODU0 dùng 1 TS → ODTU2.1.",
-        "Một 'khung' GMP của ODTU2.1 là đa khung 8 khung OPU2 (≈ 97,531 µs): 476 × 4 × 8 = 15 232 byte tải, m = 8 bit.",
-        "ODU0 1 244 160 kbit/s đến ≈ 15 168 byte mỗi đa khung → khoảng 64 byte chèn được sigma-delta rải đều trong TS.",
-        "Cm và CnD của đa khung sau nằm ở TSOH (hàng 1–3 cột 15–16) của khung có MFAS mod 8 = TS − 1 (TS1 → MFAS bit 6–8 = 000).",
-        "ODU0 và OPU2 cùng ±20 ppm nên Cm chỉ dao động 15 167…15 169 – nhưng cơ chế giống hệt GMP client CBR."
+        "OPU2 được chia thành 8 khe (TS) 1,25G, xen kẽ theo cột: TS1 là các cột 17, 25, 33… ODU0 (1,244 Gbit/s) chỉ cần 1 TS.",
+        "Một TS chỉ có 1904 byte trong mỗi khung OPU2, nên GMP gom 8 khung liền nhau (một đa khung, khoảng 97,5 µs) thành 15 232 byte để tính.",
+        "Trong mỗi đa khung, ODU0 gửi tới khoảng 15 168 byte dữ liệu. 64 byte còn lại là byte chèn, rải đều trong TS.",
+        "Số byte dữ liệu (Cm) của đa khung sau được ghi trong overhead (OH) riêng của TS (TSOH, cột 15–16). Với TS1, TSOH nằm ở khung đầu tiên của đa khung.",
+        "ODU0 và OPU2 đều chỉ lệch tối đa ±20 ppm, nên Cm gần như cố định ở 15 167…15 169. Cơ chế vẫn giống hệt GMP cho client CBR."
       ],
       clientKbps: ODU0, serverPayloadKbps: OPU2 / 8,
       ppm: { client: 20, server: 20, note: "ODU0 ±20 ppm (Bảng 7-2), ODTU2.1 payload ±20 ppm (Bảng 7-7)." },
@@ -242,11 +296,11 @@ window.TMAPS = window.TMAPS || [];
         cndUsed: false, cndRange: [0, 0],
         cmNom: c, cmMin: lo(c, 20, 20), cmMax: hi(c, 20, 20), CmMin: Math.floor(lo(c, 20, 20)), CmMax: Math.ceil(hi(c, 20, 20)),
         appliesTo: "đa khung kế tiếp", iiDi: GMP_IIDI,
-        formula: "cm = ODU0 × T_mf / 8; T_mf = 8 × 122 368 / (239/237 × 9 953 280) ms ≈ 97,531 µs; P = 476 × 4 × 8 = 15 232",
+        formula: "cm = ODU0 × T_mf / 8; T_mf = 8 × 122 368 / (239/237 × 9 953 280) ms ≈ 97,531 µs; P = 476 × 4 × 8 = 15 232. cm = 15 168,000 vì ODU0 / ODTU2.1 = 1 244 160 / 1 249 409,62 = 15 168/15 232. Biên ±40 ppm ≈ 15 167,39 … 15 168,61 → Cm 15 167…15 169. JC1–JC6 ở TSOH (hàng 1–3, cột 15–16) của khung có MFAS bit 6–8 = TS − 1 (TS1 → 000). m = n = 8 nên C8D không dùng (Bảng D.1 'ODTUk.1: N/A', §19.4.3.2): JC4–JC6 có mặt nhưng C8D luôn 0.",
         sigmaDelta: "Byte j (1…15 232, đếm theo hàng rồi theo khung trong đa khung) là dữ liệu nếu (j × Cm) mod 15 232 < Cm." },
       budget: [ { kind: "gmp", cells: 15232 / 8, note: "Mỗi khung OPU2: 476 × 4 = 1904 byte của TS1; × 8 khung = 15 232 vị trí GMP." } ],
       sim: { entity: "byte", entityBits: 8, perFrame: { nom: c, min: lo(c, 20, 20), max: hi(c, 20, 20) }, carry: { fixed: 0, min: 0, max: P }, locked: false },
-      note: "cm,nom = 1 244 160 × 97,5309 µs / 8 = 15 168,000 byte/đa khung (vì ODU0 / ODTU2.1 = 1 244 160 / 1 249 409,62 = 15 168/15 232). Biên ±40 ppm ≈ 15 167,39 … 15 168,61 → Cm 15 167…15 169. Với m = n = 8, C8D (Bảng D.1 'ODTUk.1: N/A', §19.4.3.2) không dùng – JC4–JC6 có mặt trong TSOH nhưng C8D luôn 0 → cndUsed false, cndRange [0, 0]. budget tính theo MỘT khung OPU2 (1904 ô = rows × cols) – nhân 8 cho đa khung."
+      note: "Cách tính nhanh: byte ODU0 mỗi đa khung = 1 244 160 kbit/s × 97,531 µs / 8 = 15 168 byte, đúng bằng 15 232 − 64. Lưới vẽ MỘT khung OPU2 của TS1 (4 × 476 = 1904 ô); nhân 8 cho cả đa khung. Công thức chuẩn và biên ppm ở mục 'Công thức' của khung chi tiết."
     });
   })();
 

@@ -570,7 +570,7 @@
     }
     if (info.members) cards += stat('Thành viên', esc(info.members.count + ' × ' + nm(M, info.members.of)), 'tải: ' + esc(nm(M, info.members.payloadOf)));
     if (info.pool) cards += info.kind === 'flexe' ? stat('Khe lịch', esc(info.pool.n + ' khe'), esc(rate(info.pool.kbps)) + ' mỗi khe')
-      : stat('Tributary slot', esc(info.pool.n + ' TS'), esc(rate(info.pool.kbps)) + ' mỗi TS');
+      : stat('TS (khe nhánh)', esc(info.pool.n + ' TS'), esc(rate(info.pool.kbps)) + ' mỗi TS');
     var html = '<div class="stats">' + cards + '</div>' +
       (info.summary ? '<p class="note calc-note">' + esc(info.summary) + '</p>' : '') +
       (sym ? '<p><a class="btn-ghost btn-link" href="#line/' + esc(sym.chain) + '">〰 Xem từng bước từ khung tới bước sóng</a></p>' : '');
@@ -611,7 +611,7 @@
     }
     var b = r.breakdown;
     if (b) {
-      var parts = [['Tải khách hàng', b.clientKbps, 'k-payload'], ['Overhead các cấp', b.overheadKbps, 'k-poh'], ['Chèn / bù tốc độ', b.justificationKbps, 'k-stuff'], ['Còn trống', b.emptyKbps, 'k-reserved']];
+      var parts = [['Tải client', b.clientKbps, 'k-payload'], ['Overhead các cấp', b.overheadKbps, 'k-poh'], ['Chèn / bù tốc độ', b.justificationKbps, 'k-stuff'], ['Còn trống', b.emptyKbps, 'k-reserved']];
       html += '<div class="calc-stackbar" role="img" aria-label="Phân bổ dung lượng">' + parts.map(function (p) {
         var w = b.totalKbps ? p[1] / b.totalKbps * 100 : 0;
         return w > 0.05 ? '<span class="' + p[2] + '" style="width:' + w + '%" title="' + esc(p[0] + ': ' + rate(p[1]) + ' (' + pct(w) + ')') + '"></span>' : '';
@@ -799,7 +799,7 @@
     var warn = [];
     if (rl.tech === 'otn') warn.push('OTN không cắt nhỏ hơn ODU0 (≈ 1,25 Gbit/s) ở lớp ODU: dịch vụ ' + rate(r.cirKbps) + ' vẫn chiếm trọn một ODU0/ODUflex(GFP) 1 TS — phần thừa lãng phí; muốn đúng ' + rate(r.cirKbps) + ' thì thêm policer/shaper ở thiết bị gói, hoặc gom nhiều dịch vụ vào một ODU qua thiết bị gói/SDH.');
     if (rl.tech === 'eos') {
-      warn.push('Container là giới hạn CỨNG: cổng Ethernet vẫn nhận 1G, thiết bị EoS phải đệm/rớt phần vượt dung lượng ' + (r.pick ? r.pick.name : 'VCG') + ' (thực tế nên shape ở thiết bị khách hàng).');
+      warn.push('Container là giới hạn CỨNG: cổng Ethernet vẫn nhận 1G, thiết bị EoS phải đệm/rớt phần vượt dung lượng ' + (r.pick ? r.pick.name : 'VCG') + ' (thực tế nên shape ở thiết bị client).');
       if (it.transportNote) warn.push(it.transportNote.note + ' (' + it.transportNote.standard + ')');
     }
     if (rl.tech === 'policer') {
@@ -871,7 +871,7 @@
       '<div class="detail-card"><span class="eyebrow">Máy tính tốc độ</span><h2>Cách đọc</h2>' +
       '<p>Mọi số tính từ dữ liệu <code>TMUX</code> / <code>STACKS</code> bằng đúng logic của phòng thí nghiệm ghép kênh (số tối đa, chuỗi đóng gói, kế toán overhead).</p>' +
       '<dl class="kv"><dt>Tốc độ</dt><dd>byte/125 µs × 64 kbit/s (SDH) hoặc rateKbps (PDH, OTN, Ethernet)</dd>' +
-      '<dt>Hiệu suất</dt><dd>tải khách hàng ÷ tốc độ cấp đang xét</dd>' +
+      '<dt>Hiệu suất</dt><dd>tải client ÷ tốc độ cấp đang xét</dd>' +
       '<dt>GFP-F</dt><dd>tốc độ cần = tốc độ Ethernet × (L + 8) / (L + 20)</dd>' +
       '<dt>Stack IP</dt><dd>payload ÷ kích thước frame (không tính preamble/SFD, IFG); vượt MTU → tính trên mọi mảnh</dd>' +
       '<dt>MTU</dt><dd>phần nằm trong khung lớp 2 (sau MAC/VLAN, trước FCS); MSS = MTU người dùng − IP − 20</dd>' +

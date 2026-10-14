@@ -13,18 +13,18 @@
 
   var TOPICS = [
     { id: 'all', name: 'Tất cả', hint: 'Trộn mọi chủ đề' },
-    { id: 'ip', name: 'IP / Ethernet', hint: 'Header, field, stack, vai trò đóng gói' },
+    { id: 'ip', name: 'IP / Ethernet', hint: 'Header, trường, stack, vai trò đóng gói' },
     { id: 'pdh', name: 'PDH', hint: 'E1…E4: khung, tốc độ, ghép kênh' },
     { id: 'sdh', name: 'SDH', hint: 'STM-N, VC, TU, TUG: khung, con trỏ, overhead' },
-    { id: 'otn', name: 'OTN', hint: 'OTUk/ODUk/OPUk, tributary slot' },
+    { id: 'otn', name: 'OTN', hint: 'OTUk/ODUk/OPUk, TS (khe nhánh)' },
     { id: 'flexe', name: 'FlexE', hint: 'Instance 100G, khe lịch 5G, nhóm, PHY mang FlexE' },
     { id: 'eos', name: 'Ethernet qua truyền dẫn', hint: 'GFP-F, VCAT, ODUflex(GFP)' }
   ];
   var TYPE_NAME = {
-    'ip-bits': 'Độ dài field', 'ip-offset': 'Vị trí field', 'ip-value': 'Giá trị field',
+    'ip-bits': 'Độ dài trường', 'ip-offset': 'Vị trí trường', 'ip-value': 'Giá trị trường',
     'ip-hbytes': 'Độ dài header', 'ip-added': 'Header thêm vào', 'ip-role': 'Vai trò đóng gói',
     't-cell': 'Ô trong khung', 't-bits': 'Bit trong byte', 'u-rate': 'Tốc độ',
-    'u-max': 'Số nhánh tối đa', 'u-oh': 'Overhead bước ghép', 'u-ts': 'Tributary slot', 'u-baud': 'Ký hiệu & điều chế'
+    'u-max': 'Số nhánh tối đa', 'u-oh': 'Overhead bước ghép', 'u-ts': 'TS (khe nhánh)', 'u-baud': 'Ký hiệu & điều chế'
   };
 
   // ---------- số ngẫu nhiên theo seed ----------
@@ -272,7 +272,7 @@
       leaves.forEach(function (l) {
         if (!l.label || l.isVar || !l.bits) return;
         out.push({ key: 'ip-bits|' + hid + '|' + l.id, topic: topic, type: 'ip-bits', make: function (rng) {
-          var q = { prompt: 'Field “' + l.label + '” trong header ' + hName(h) + ' dài bao nhiêu bit?',
+          var q = { prompt: 'Trường “' + l.label + '” trong header ' + hName(h) + ' dài bao nhiêu bit?',
             explain: l.def.desc || '', open: openStack(hid, { field: l.id }),
             check: { header: hid, field: l.id } };
           return assemble(q, l.bits + ' bit', numDistractors(l.bits, allBits, function (v) { return v + ' bit'; }, rng), rng);
@@ -287,7 +287,7 @@
             var others = lay.filter(function (y) { return y !== x; });
             var d = textDistractors(x.leaf.label, [others.map(function (y) { return y.leaf.label; })], rng);
             if (!d) return null;
-            var q = { prompt: 'Trong header ' + hName(h) + ' (cấu hình tối thiểu, không bật trường tuỳ chọn), field nào bắt đầu tại bit offset ' + x.offset + ' (bit 0 = bit đầu tiên của header)?',
+            var q = { prompt: 'Trong header ' + hName(h) + ' (cấu hình tối thiểu, không bật trường tuỳ chọn), trường nào bắt đầu tại bit offset ' + x.offset + ' (bit 0 = bit đầu tiên của header)?',
               explain: x.leaf.label + ' chiếm bit ' + x.offset + '–' + (x.offset + x.leaf.bits - 1) + '. ' + (x.leaf.def.desc || ''),
               open: openStack(hid, { field: x.leaf.id }),
               alias: [x.leaf.name, x.leaf.def.abbr],
@@ -319,7 +319,7 @@
               });
             });
             var d = textDistractors(e.m, [t1, t2], rng);
-            var q = { prompt: 'Field “' + l.label + '” của header ' + hName(h) + ' có giá trị ' + e.v + '. Giá trị này nghĩa là gì?',
+            var q = { prompt: 'Trường “' + l.label + '” của header ' + hName(h) + ' có giá trị ' + e.v + '. Giá trị này nghĩa là gì?',
               explain: l.def.desc || '', open: openStack(hid, { field: l.id }),
               check: { header: hid, field: l.id, v: e.v } };
             return assemble(q, e.m, d, rng);
@@ -645,7 +645,7 @@
         var d = numDistractors(x.a.slots, slotPool, fmtT, rng);
         var oname = objectName(x.a.of, fmtT(x.a.slots));
         if (!oname) return null;
-        var q = { prompt: 'Trong ' + nm(x.B) + ' (' + t.n + (fx ? ' khe lịch' : ' tributary slot') + (t.size ? ' × ' + t.size : '') + '), một ' + oname + ' chiếm bao nhiêu ' + (fx ? 'khe lịch' : 'tributary slot') + '?',
+        var q = { prompt: 'Trong ' + nm(x.B) + ' (' + t.n + (fx ? ' khe lịch' : ' TS') + (t.size ? ' × ' + t.size : '') + '), một ' + oname + ' chiếm bao nhiêu ' + (fx ? 'khe lịch' : 'TS') + '?',
           objNames: [oname],
           explain: (x.a.note || M[x.a.of].summary || '') + (x.a.mapping ? ' Ánh xạ: ' + x.a.mapping + '.' : '') + ' Tối đa ' + (L.effCount ? L.effCount(M, x.B, x.a) : x.a.count) + ' ' + nm(x.a.of) + ' khi chỉ dùng loại này.',
           open: openUnit(D, x.a.of, x.B), check: { B: x.B, of: x.a.of } };
@@ -1025,8 +1025,8 @@
       '<div class="toolbar quiz-bar">' +
         '<span class="toolbar-label">Số câu</span><div class="seg-group">' +
         [10, 20].map(function (n) { var on = qv.store.n === n; return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-qn="' + n + '" aria-pressed="' + on + '">' + n + '</button>'; }).join('') + '</div>' +
-        '<label class="quiz-seed"><span class="toolbar-label">Seed</span><input type="text" inputmode="numeric" maxlength="12" value="' + esc(s.review ? '' : s.seed) + '" placeholder="' + (s.review ? 'ôn câu sai' : '') + '" data-qseed aria-label="Seed của bộ câu"></label>' +
-        '<button type="button" class="btn-ghost" data-qact="seed">Dùng seed</button>' +
+        '<label class="quiz-seed"><span class="toolbar-label">Mã bộ câu</span><input type="text" inputmode="numeric" maxlength="12" value="' + esc(s.review ? '' : s.seed) + '" placeholder="' + (s.review ? 'ôn câu sai' : '') + '" data-qseed aria-label="Mã bộ câu"></label>' +
+        '<button type="button" class="btn-ghost" data-qact="seed">Dùng mã</button>' +
         '<button type="button" class="btn-ghost" data-qact="new">Bộ mới</button>' +
         (s.review ? '' : '<button type="button" class="btn-ghost" data-qact="redo">Làm lại bộ này</button>') +
         '<button type="button" class="btn-ghost" data-qact="review"' + (wl ? '' : ' disabled') + '>Ôn lại câu sai (' + wl + ')</button>' +
@@ -1079,7 +1079,7 @@
     var pct = s.n ? Math.round(score / s.n * 100) : 0;
     return '<section class="card quiz-card" aria-label="Kết quả">' +
       '<h2>Kết quả: ' + score + '/' + s.n + ' (' + pct + '%)</h2>' +
-      '<p class="muted">' + (s.review ? 'Bộ ôn câu sai' : 'Seed ' + esc(s.seed) + ' — nhập lại seed này để làm đúng bộ câu cũ.') + '</p>' +
+      '<p class="muted">' + (s.review ? 'Bộ ôn câu sai' : 'Mã bộ câu ' + esc(s.seed) + ' — nhập lại mã này để làm đúng bộ câu cũ.') + '</p>' +
       '<ol class="quiz-sum">' + s.qs.map(function (q, j) {
         var ok = s.ans[j] === q.answer;
         return '<li class="' + (ok ? 'is-ok' : 'is-bad') + '"><button type="button" class="btn-link" data-qgo="' + j + '">' + (ok ? '✓ ' : '✗ ') + esc(q.prompt) + '</button>' +
@@ -1102,10 +1102,10 @@
       '<div class="tbl-wrap"><table class="values"><thead><tr><th>Chủ đề</th><th class="num">Đúng</th><th class="num">Sai</th><th class="num">%</th><th class="num">Câu sai lưu</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<h3>Các lượt gần đây — ' + esc(topicName(qv.topic)) + '</h3>' +
       (runs.length ? '<ul class="plain">' + runs.map(function (r) {
-        return '<li><b>' + r.score + '/' + r.n + '</b> <span class="muted">' + (r.review ? 'ôn câu sai' : 'seed ' + esc(r.seed)) + ' · ' + esc(new Date(r.at).toLocaleString('vi-VN')) + '</span></li>';
+        return '<li><b>' + r.score + '/' + r.n + '</b> <span class="muted">' + (r.review ? 'ôn câu sai' : 'mã ' + esc(r.seed)) + ' · ' + esc(new Date(r.at).toLocaleString('vi-VN')) + '</span></li>';
       }).join('') + '</ul>' : '<p class="muted">Chưa có lượt nào.</p>') +
       '<p class="muted">Lưu trên trình duyệt này (localStorage). <button type="button" class="btn-link" data-qact="reset">Xoá tiến độ</button></p></div>' +
-      '<div class="detail-empty"><h2>Cách dùng</h2><ol><li>Chọn chủ đề và số câu.</li><li>Trả lời bằng chuột hoặc phím 1–4.</li><li>Đọc giải thích, bấm <b>Mở ở đây</b> để xem đúng field/ô/đơn vị trong ứng dụng; quay lại bằng nút Back — bài đang làm được giữ.</li><li>Seed giống nhau → bộ câu giống nhau (gửi seed cho bạn học để cùng làm).</li></ol></div>';
+      '<div class="detail-empty"><h2>Cách dùng</h2><ol><li>Chọn chủ đề và số câu.</li><li>Trả lời bằng chuột hoặc phím 1–4.</li><li>Đọc giải thích, bấm <b>Mở ở đây</b> để xem đúng trường/ô/đơn vị trong ứng dụng; quay lại bằng nút Quay lại của trình duyệt — bài đang làm được giữ.</li><li>Mã bộ câu giống nhau → bộ câu giống nhau (gửi mã cho bạn học để cùng làm).</li></ol></div>';
   }
 
   // ---------- sự kiện ----------

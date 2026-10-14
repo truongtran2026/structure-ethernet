@@ -225,7 +225,7 @@ window.TLABS = window.TLABS || [];
               "Bộ đếm đa khung OPUCn 0–19 (bit 4–8), chọn TS nào được dùng TSOH ở khung này (Bảng 20-1). Có ở cả n lát với cùng giá trị (§20.4.4, Hình 20-10).", { bitFields: OMFI_BITS })
           ] }),
       R("opuc-payload", "OPUC payload", "OPUC Payload (4 × 3808 byte) – 20 TS 5G", "payload", [0, 16, 4, 3808],
-        "Vùng tải 15 232 byte/khung/lát ≈ " + gbps(OPUC) + ". Chia 20 tributary slot 5G ghép xen theo KHỐI 16 BYTE (không phải từng byte như OPUk): khối 16 byte thứ i tính liên tục qua các hàng thuộc TS (i mod 20) + 1; mỗi hàng có 238 khối nên hàng sau lùi 2 TS. Mỗi TS ≈ " + mbps(TS5G) + " (Bảng 7-7). Xem khung opuc-ts.")
+        "Vùng tải 15 232 byte/khung/lát ≈ " + gbps(OPUC) + ". Chia 20 TS (khe nhánh) 5G ghép xen theo KHỐI 16 BYTE (không phải từng byte như OPUk): khối 16 byte thứ i tính liên tục qua các hàng thuộc TS (i mod 20) + 1; mỗi hàng có 238 khối nên hàng sau lùi 2 TS. Mỗi TS ≈ " + mbps(TS5G) + " (Bảng 7-7). Xem khung opuc-ts.")
     ]
   };
 
@@ -272,7 +272,7 @@ window.TLABS = window.TLABS || [];
         desc: "Khung OMFI = " + f + ": JC1–JC6 thuộc TS #A." + (f + 1) + " (Bảng 20-1). Có nghĩa nếu TS #A." + (f + 1) + " là TS cuối của một ODTUCn.ts; nếu không, 6 byte này RES." });
     }
     F["opuc-ts"] = {
-      id: "opuc-ts", name: "OPUC – 20 tributary slot 5G (PT 22)", family: "otn", category: CAT, order: 20,
+      id: "opuc-ts", name: "OPUC – 20 TS (khe nhánh) 5G (PT 22)", family: "otn", category: CAT, order: 20,
       standard: STD + " §20.1 (Hình 20-1, 20-2, 20-3, Bảng 20-1), §20.2–20.5 (Hình 20-7…20-10); Bảng 7-6, 7-7, 7-9",
       summary: "Vùng OPUC (cột 15–3824 của một lát) chia 20 TS 5G ghép xen theo khối 16 byte; TSOH luân phiên theo OMFI (đa khung 20 khung).",
       detail: "OPUCn = n OPUC; mỗi OPUC có 20 TS 5G (TS #A.B: A = lát 1…n, B = 1…20), tổng 20n TS ≈ 5,241 Gbit/s mỗi TS. Khác OPUk (ghép xen từng byte/cột), TS 5G ghép xen theo khối 16 byte – khớp với khối 128 bit mà FlexO dùng để mang OTUC (G.709.1 §10.1.2). 3808 cột = 238 khối/hàng, không chia hết cho 20, nên vị trí TS trượt 2 TS mỗi hàng; trên đa khung 20 khung (80 hàng) mỗi TS có đúng 952 khối = 15 232 byte = một khung tải (§20.2: ODTUCn.ts payload 15 232 × ts byte). Lưới vẽ khung OMFI = 0 (giống khung 5, 10, 15); chọn khung để xem TS đổi. ODUk → ODTUCn.ts bằng GMP rồi vào ts TS bất kỳ (không cần liền nhau, chống phân mảnh; §20.3 NOTE 1); thứ tự TS trong OPUCn là n × (B − 1) + A vì các lát OPUC ghép xen 16 byte (Hình 20-3, 20-5). Số TS: ODU0, ODU1 1 TS (không lấp đầy TS), ODU2/ODU2e 2, ODU3 8, ODU4 20, ODUflex(CBR) theo công thức 20-1a (FC-800: 2), ODUflex(GFP) n TS 1,25G → ⌈n/4⌉ TS 5G (công thức 20-1b). OPUCn hỗ trợ tối đa 10n ODUk (cổng nhánh 1…10n, §20 và §20.4.1.1) dù có 20n TS.",

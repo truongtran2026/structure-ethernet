@@ -96,12 +96,14 @@
     var cellBits = +fr.cellBits || (m === 'PDH-BIT' ? 1 : 8);
     var unit = cellBits === 1 ? 'bit' : cellBits === 66 ? 'block' : 'byte';
     var J = sc.just || {};
+    // BMP không có sc.just (vd 400GBASE-R → OPUflex, §17.13: không sinh tín hiệu điều khiển chèn): mọi ô tải là dữ liệu, không JC/NJO/PJO
+    var noJust = m === 'BMP' && !sc.just;
     var col0 = +(fr.firstCol || fr.col0 || 0);
     if (!col0) col0 = J.pjo && J.njo && J.pjo.col === J.njo.col + 1 && J.pjo.col > 1 ? J.pjo.col : 1;
     var colStep = Math.max(1, +fr.colStep || 1), mf = Math.max(1, +fr.multiframe || 1);
     var dRows = rows * mf, cellsN = dRows * cols;
     var P = { sc: sc, method: m, unit: unit, cellBits: cellBits, rows: rows, mf: mf, dRows: dRows, cols: cols, col0: col0, colStep: colStep,
-      interleave: +fr.interleave || 0, errors: errs, ohOut: [], fifoC: 4, band: 0, ppmScale: 1 };
+      interleave: +fr.interleave || 0, noJust: noJust, block66: sc.block66 || null, errors: errs, ohOut: [], fifoC: 4, band: 0, ppmScale: 1 };
     /** ô (hàng chuẩn r, cột chuẩn c, khung f của đa khung, mặc định 1) → chỉ số trong lưới, −1 nếu ngoài vùng tải. */
     function at(r, c, f) {
       var d = c - col0;
@@ -138,7 +140,7 @@
       if (J.fixedJc != null) usable = table.filter(function (e) { return e.jc === String(J.fixedJc); });
       var normal = (J.fixedJc != null ? usable[0] : null) || usable.filter(function (e) { return /^0+$/.test(e.jc); })[0] ||
         usable.filter(function (e) { return /bình thường|danh định|normal/i.test(e.meaning); })[0] || usable[0] || null;
-      if (!table.length) errs.push('Thiếu just.table — mô phỏng không bù.');
+      if (!table.length && !noJust) errs.push('Thiếu just.table — mô phỏng không bù.');
       P.just = { opp: opp, table: table, usable: usable, normal: normal, jc: J.jc || null, fixedJc: J.fixedJc != null ? String(J.fixedJc) : null };
       opp.forEach(function (q) { if (q.cell >= 0) base[q.cell] = T.JDATA; });
       if (J.jc) {
@@ -300,7 +302,10 @@
   /** Trạng thái mô phỏng mới. */
   function create(P, seed) {
     var S = { P: P, k: 0, acc: 0.5, cumSent: 0, cumArr: 0, cumNom: 0, plus: 0, minus: 0, hist: [], rnd: rng(seed || 12345), over: 0, sentU: 0, arrU: 0, nextArr: null };
-    if (P.method === 'GMP') { S.acc = 0; S.prevCm = null; }
+    if (P.method === 'GMP') {
+      // Annex D: Cm báo trong JC của khung n được ÁP DỤNG cho khung n+1. Khung đầu dùng Cm "báo từ trước" = phần nguyên của lượng client đến một khung.
+      var a0 = P.cmNom; S.pend = Math.max(0, Math.min(P.Pw, Math.floor(a0 + 1e-9))); S.acc = a0 - S.pend; S.prevCm = null;
+    }
     if (P.method === 'GFP-F') { S.q = []; S.cur = null; S.budget = 0; S.nextL = 0; S.qBytes = 0; S.drops = 0; S.carried = 0; S.ethBytes = 0; S.parity = 0; S.idleBytes = 0; S.totBytes = 0; S.fid = 0; }
     if (P.method === 'IMP') {
       S.capAcc = 0; S.cliAcc = 0; S.q = []; S.target = P.impTarget || 8;
@@ -308,6 +313,27 @@
       S.ins = 0; S.del = 0; S.pkLeft = 0; S.gapLeft = 2; S.pkLen = 10; S.pkId = 0;
     }
     return S;
+  }
+
+  /**
+   * Ranh giới khối 66B (dòng khối đặt liền nhau vào vùng tải, không căn byte) trong khung n (0-based).
+   * Luồng tải dài cap × 8 bit mỗi khung; khối thứ k (toàn cục) bắt đầu ở bit 66k của luồng. Khung 0: khối k ở byte ⌊66k/8⌋ + 1, bit (66k mod 8) + 1.
+   * Khung n bắt đầu khi khối đang dở đã chạy 'lead' = (n × cap × 8) mod 66 bit, nên khối đầu tiên bắt đầu ở bit (66 − lead) mod 66 của khung;
+   * vì 15 232 × 8 mod 66 = 20, mẫu lặp lại sau 33 khung (cycleFrames).
+   * Trả về { n, lead, first, k0, count, offs (Int32Array: bit bắt đầu mỗi khối trong khung), byteOf(i), bitOf(i) (bit 1 = MSB) }.
+   */
+  function blockStarts(P, n) {
+    var B = P.block66, bits = (B && +B.bits) || 66, capBits = P.order.length * P.cellBits, lead = (n * capBits) % bits, first = (bits - lead) % bits;
+    var count = first < capBits ? Math.floor((capBits - 1 - first) / bits) + 1 : 0, offs = new Int32Array(count);
+    for (var i = 0; i < count; i++) offs[i] = first + i * bits;
+    return { n: n, bits: bits, lead: lead, first: first, k0: Math.ceil(n * capBits / bits), count: count, offs: offs, capBits: capBits };
+  }
+  /** Khối bắt đầu trong byte (vị trí luồng) j của khung có blk → { k, bit } hoặc null; bit 1–8 (1 = MSB). */
+  function blockAtByte(blk, j) {
+    var q = Math.max(0, Math.ceil((j * 8 - blk.first) / blk.bits));
+    if (q >= blk.count) return null;
+    var off = blk.offs[q];
+    return off >> 3 === j ? { k: blk.k0 + q, bit: (off & 7) + 1 } : null;
   }
 
   /** Tỉ lệ tốc độ client/server theo độ lệch ppm (nhân ppmScale của khung đồ chơi). */
@@ -330,6 +356,7 @@
     else res = { cells: new Uint8Array(P.base), units: 0 };
     S.k++;
     res.k = S.k;
+    if (P.block66) res.blk = blockStarts(P, S.k - 1);
     S.hist.push(res.hist != null ? res.hist : 0);
     if (S.hist.length > 64) S.hist.shift();
     return res;
@@ -367,7 +394,7 @@
       return { key: q.key, row: q.row, col: q.col, inGrid: q.cell >= 0, data: isData };
     });
     for (var i = 0; i < P.order.length; i++) { var c = P.order[i]; if (cells[c] === T.EMPTY) cells[c] = T.DATA; }
-    return { cells: cells, units: sent, nominal: P.n0, delta: delta, jc: pick.jc, entry: pick, opp: opp, buffer: S.acc, rate: r, outOfRange: best > 0, hist: delta,
+    return { cells: cells, units: sent, nominal: P.n0, delta: delta, jc: P.noJust ? '' : pick.jc, entry: pick, opp: P.noJust ? null : opp, noJc: !!P.noJust, buffer: S.acc, rate: r, outOfRange: best > 0, hist: delta,
       level: C + avail - P.n0, lo: C + lo, hi: C + hi, lvl0: C + acc0, lvl1: C + S.acc, s0: s0, a0: a0, a1: a0 + r };
   }
 
@@ -376,8 +403,9 @@
     var P = S.P, r = P.cmNom * ppmRatio(o, P), C = P.fifoC || 4, wb = P.wb;
     var acc0 = S.acc, s0 = S.sentU, a0 = S.arrU;
     var avail = S.acc + r;
-    var Cm = Math.max(0, Math.min(P.Pw, Math.floor(avail + 1e-9)));
-    S.acc = avail - Cm;
+    // Cm áp cho khung NÀY là Cm đã báo ở JC khung trước (S.pend); Cm tính từ client đến trong khung này sẽ báo ở JC khung này, áp cho khung SAU
+    var Cm = S.pend, CmNext = Math.max(0, Math.min(P.Pw, Math.floor(avail + 1e-9)));
+    S.acc = avail - CmNext; S.pend = CmNext;
     S.cumSent += Cm; S.cumArr += r; S.cumNom += P.cmNom;
     S.sentU = s0 + Cm * wb; S.arrU = a0 + r * wb;
     var cells = new Uint8Array(P.base), Pw = P.Pw;
@@ -388,7 +416,7 @@
     for (var i = Pw * wb; i < P.order.length; i++) cells[P.order[i]] = T.GSTUFF;
     var change = S.prevCm == null ? 0 : Cm - S.prevCm;
     S.prevCm = Cm;
-    return { cells: cells, units: Cm * wb, cm: Cm, cmNom: P.cmNom, cmRate: r, change: change, buffer: S.acc, nominal: P.cmNom * wb, hist: Cm - Math.round(P.cmNom),
+    return { cells: cells, units: Cm * wb, cm: Cm, cmNext: CmNext, nextChange: CmNext - Cm, cmNom: P.cmNom, cmRate: r, change: change, buffer: S.acc, nominal: P.cmNom * wb, hist: Cm - Math.round(P.cmNom),
       avail: avail, lvl0: (C + acc0) * wb, lvl1: (C + S.acc) * wb, s0: s0, a0: a0, a1: a0 + r * wb };
   }
 
@@ -549,6 +577,10 @@
   /** Một dòng nhật ký tiếng Việt cho khung vừa chạy. */
   function describe(P, res) {
     var m = P.method, u = unitName(P), f = (P.mf > 1 ? 'Đa khung ' : 'Khung ') + res.k + ': ';
+    if (res.noJc) {
+      var bk = res.blk && res.blk.count ? '; ' + fmtN(res.blk.count, 0) + ' khối 66B bắt đầu trong khung, khối đầu (#' + res.blk.k0 + ') ở byte ' + ((res.blk.first >> 3) + 1) + ' bit ' + ((res.blk.first & 7) + 1) : '';
+      return f + 'đồng hồ server lấy từ client → đến đúng ' + fmtN(res.units, 0) + ' ' + u + ', không có JC/NJO/PJO (§17.13) nên không có gì để bù — toàn bộ vùng tải là dữ liệu' + bk + '.';
+    }
     if (isJust(m)) {
       var jn = m === 'PDH-BIT' ? 'Cj' : 'JC';
       var opp = res.opp.map(function (q) { return q.key.toUpperCase() + (q.data ? ' mang dữ liệu' : ' là chèn'); }).join(', ');
@@ -558,10 +590,11 @@
       return f + 'bộ đệm ' + fmtN(res.level, 1) + ' ' + u + ' trong ngưỡng [' + fmtN(res.lo, 0) + ', ' + fmtN(res.hi, 0) + ') → ' + jn + ' = ' + res.jc + ', ' + opp + '.';
     }
     if (m === 'GMP') {
-      var st = gmpStuffPositions(res.cm, P.Pw, 4), nSt = P.Pw - res.cm, w = P.wb > 1 ? 'từ' : 'byte';
-      var ch = res.change ? ' (' + (res.change > 0 ? '+' : '−') + Math.abs(res.change) + (iiDiOf(P, res.change) ? ', II = ' + iiDiOf(P, res.change).ii + ' DI = ' + iiDiOf(P, res.change).di : '') + ')' : ' (giữ nguyên)';
-      return f + 'chờ ' + fmtN(res.avail, 2) + ' ' + w + ' → Cm = ' + fmtN(res.cm, 0) + ch + '; ' + fmtN(nSt, 0) + ' ' + w + ' chèn' +
-        (nSt ? ' ở ' + w + ' ' + st.join(', ') + (nSt > st.length ? ', …' : '') : '') + '.';
+      var st = gmpStuffPositions(res.cm, P.Pw, 4), nSt = P.Pw - res.cm, w = P.wb > 1 ? 'từ' : 'byte', nx = res.nextChange, ii = iiDiOf(P, nx);
+      var ch = nx ? ' (' + (nx > 0 ? '+' : '−') + Math.abs(nx) + ' so với khung này' + (ii ? ', II = ' + ii.ii + ' DI = ' + ii.di : '') + ')' : ' (giữ nguyên)';
+      // Annex D: Cm báo trong JC khung n áp cho khung n+1 → dữ liệu khung này theo Cm khung trước đã báo
+      return f + 'dữ liệu khung này theo Cm = ' + fmtN(res.cm, 0) + ' (đã báo ở JC khung trước): ' + fmtN(nSt, 0) + ' ' + w + ' chèn' +
+        (nSt ? ' ở ' + w + ' ' + st.join(', ') + (nSt > st.length ? ', …' : '') : '') + '. Client đến ' + fmtN(res.avail, 2) + ' ' + w + ' → JC khung này báo Cm = ' + fmtN(res.cmNext, 0) + ch + ' cho khung sau.';
     }
     if (m === 'GFP-F') {
       var ok = res.arr.filter(function (a) { return !a.drop; }), dr = res.arr.filter(function (a) { return a.drop; });
@@ -582,14 +615,14 @@
   function logKind(P, res) {
     var m = P.method;
     if (isJust(m)) return res.delta > 0 ? 'up' : res.delta < 0 ? 'down' : '';
-    if (m === 'GMP') return res.change > 0 ? 'up' : res.change < 0 ? 'down' : '';
+    if (m === 'GMP') return res.nextChange > 0 ? 'up' : res.nextChange < 0 ? 'down' : '';
     if (m === 'GFP-F') return res.dropped ? 'bad' : '';
     if (m === 'IMP') return res.del ? 'up' : res.ins ? 'down' : '';
     return '';
   }
 
   var api = { T: T, TYPE_INFO: TYPE_INFO, rng: rng, listOf: listOf, prep: prep, prepToy: prepToy, create: create, step: step, countTypes: countTypes,
-    gmpDataCount: gmpDataCount, gmpStuffPositions: gmpStuffPositions, gmpRange: gmpRange, ppmRatio: ppmRatio, methodOf: methodOf,
+    blockStarts: blockStarts, blockAtByte: blockAtByte, gmpDataCount: gmpDataCount, gmpStuffPositions: gmpStuffPositions, gmpRange: gmpRange, ppmRatio: ppmRatio, methodOf: methodOf,
     describe: describe, logKind: logKind, fmtN: fmtN, unitName: unitName };
   root.MapSim = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -618,6 +651,12 @@
     'IMP': 'Khối 66B lấp theo thứ tự lịch (từng cột). Bộ đệm vượt mục tiêu → một khối Idle của client bị xoá (gạch đỏ trên băng chuyền); thiếu → chèn khối Idle (cam).',
     'PDH-BIT': 'Mỗi ô là 1 bit; 4 nhánh E1 xen bit (số 2/3/4 là bit nhánh khác). Theo dõi nhánh 1: Cj = 111 thì bit cơ hội chèn (hàng 4, cột 5) là bit chèn, Cj = 000 thì mang dữ liệu.'
   };
+  /** Câu mô tả phương pháp theo kịch bản (BMP khối 66B không có JC nên không dùng câu BMP chung). */
+  function hintOf(P) {
+    if (P && P.noJust) return 'Bit-synchronous Mapping: clock server suy từ clock client → không cần bù. Ở kịch bản này (G.709 §17.13) KHÔNG có JC, NJO, PJO: mọi ô tải là dữ liệu, chỉ có PSI + RES ở OPU OH.';
+    return METHOD_HINT[P && P.method] || '';
+  }
+  var LOOK_66 = 'Mọi ô tải đều là dữ liệu và không có JC: kéo ppm cũng không đổi gì. Chỉ có ranh giới khối 66B (vạch đen + dải 2 bit sync header ở đầu mỗi khối) dịch khác đi mỗi khung — khối vắt qua byte và qua cả khung, mẫu lặp lại sau 33 khung.';
   var DURS = [[3000, 'Chậm (3 s/khung)'], [1500, 'Vừa (1,5 s/khung)'], [600, 'Nhanh (0,6 s/khung)'], [200, 'Rất nhanh (0,2 s/khung)']];
   var FILL_PART = 0.85;   // phần chu kỳ hoạt ảnh dùng để lấp ô; phần còn lại giữ khung đầy cho mắt kịp nhìn
 
@@ -822,7 +861,9 @@
     var g = toy ? 'Nhìn từ trái sang phải: đơn vị client chạy trên băng chuyền vào bộ đệm (thanh mức), rồi được rót vào khung server theo thứ tự truyền từng ô (khung mờ = khung trước). ' +
       'Ô màu riêng là ô đặc biệt và nhấp nháy khi đổi trạng thái; nhật ký giải thích từng khung. ' :
       'Chế độ Thực tế: lưới là toàn bộ vùng tải chuẩn (thu nhỏ, mỗi ô vẽ gộp nhiều byte) — bù chỉ đổi 1 ô trong hàng chục nghìn, nên dùng kính lúp, bộ đếm và nhật ký. ';
-    return '<div class="sim-guide"><b>Nhìn vào đâu.</b> ' + esc(g) + esc(toy ? (METHOD_LOOK[m] || '') : '') + '</div>';
+    var P0 = sv.P;
+    if (!toy && P0 && P0.block66) g += 'Kính lúp có thêm thước khối 66B: mỗi khối là một đoạn dài 66 bit, 2 bit đầu (đậm) là sync header. ';
+    return '<div class="sim-guide"><b>Nhìn vào đâu.</b> ' + esc(g) + esc(toy ? (P0 && P0.noJust && P0.block66 ? LOOK_66 : METHOD_LOOK[m] || '') : '') + '</div>';
   }
 
   /** Thanh chọn chế độ Minh hoạ / Thực tế. */
@@ -874,13 +915,13 @@
         '<div class="sim-logbox sim-logbox--wide"><h3>Nhật ký sự kiện</h3><ol class="sim-log" data-sim="log"></ol></div>' +
       '</section>';
     }
-    html += ohColsBox(m);
+    html += ohColsBox(m, !!(P.noJust && P.block66));
     html += '<section class="card sim-card" aria-labelledby="sim-cnt-t"><div class="section-title"><h2 id="sim-cnt-t">Bộ đếm</h2></div>' +
         '<div class="stats" data-sim="stats"></div>' +
         '<div class="sim-timeline"><span class="muted calc-small" data-sim="tlabel"></span><canvas class="sim-hist" data-sim="hist" role="img" aria-label="Dòng thời gian các khung gần nhất"></canvas></div>' +
       '</section>' +
       '<section class="card sim-card" aria-labelledby="sim-steps-t"><div class="section-title"><h2 id="sim-steps-t">Từng bước (theo chuẩn)</h2></div>' +
-        (sc.steps && sc.steps.length ? '<ol class="sim-steps">' + sc.steps.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>' : '<p class="muted">' + esc(METHOD_HINT[m] || '') + '</p>') +
+        (sc.steps && sc.steps.length ? '<ol class="sim-steps">' + sc.steps.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>' : '<p class="muted">' + esc(hintOf(P)) + '</p>') +
         (sc.note ? '<p class="note calc-note">' + esc(sc.note) + '</p>' : '') +
       '</section>';
     $('#view-sim').innerHTML = html;
@@ -890,14 +931,15 @@
   }
 
   /** Hộp "Cột 15–16 (OPU OH) tuỳ kiểu ánh xạ": 4 dòng, tô dòng của phương pháp đang xem (m = '' → không tô). */
-  function ohColsBox(m) {
+  function ohColsBox(m, p66) {
     var rows = [
-      { k: 'AMP BMP', a: 'AMP / BMP', t: 'Cột 15: RES (hàng 1–3) + PSI (hàng 4). Cột 16: JC ×3 (bit 7–8, biểu quyết 2/3) + NJO (hàng 4). PJO ở cột 17 hàng 4 (trong vùng tải).' },
+      { k: 'BMP66', a: 'BMP khối 66B (400GBASE-R → OPUflex)', t: 'Cột 15: RES ×3 (hàng 1–3) + PSI (hàng 4). Cột 16: RES ×4. Không có JC, NJO, PJO (G.709 §17.13): đồng hồ OPUflex lấy thẳng từ client nên không bao giờ phải bù.' },
+      { k: 'AMP BMP', a: 'AMP / BMP (CBR 2G5–10G)', t: 'Cột 15: RES (hàng 1–3) + PSI (hàng 4). Cột 16: JC ×3 (bit 7–8, biểu quyết 2/3) + NJO (hàng 4). PJO ở cột 17 hàng 4 (trong vùng tải).' },
       { k: 'GMP', a: 'GMP', t: 'Cột 15: JC4 · JC5 (ΣCnD) · JC6 (CRC-5), hàng 4 PSI. Cột 16: JC1 (Cm bit 1–8) · JC2 (Cm bit 9–14 + II/DI) · JC3 (CRC-8). Không có NJO/PJO; byte chèn rải đều trong vùng tải.' },
       { k: 'GFP-F', a: 'GFP-F', t: 'Cột 15: PSI (hàng 4) + RES; cột 16: RES. Không có JC: tốc độ khớp bằng khung Idle GFP.' },
-      { k: 'ODU', a: 'Ghép ODU (ODTU)', t: 'Cột 15–16 là TSOH: mang JC1–JC6 của từng khe thời gian (TS) theo GMP/AMP của ODTU, lặp theo MFAS.' }
+      { k: 'ODU', a: 'Ghép ODU (ODTU)', t: 'Cột 15–16 là TSOH: mang JC1–JC6 của từng TS (khe nhánh) theo GMP/AMP của ODTU, lặp theo MFAS.' }
     ];
-    var cur = m === 'AMP' || m === 'BMP' ? 'AMP BMP' : m === 'GMP' ? 'GMP' : m === 'GFP-F' ? 'GFP-F' : '';
+    var cur = p66 ? 'BMP66' : m === 'AMP' || m === 'BMP' ? 'AMP BMP' : m === 'GMP' ? 'GMP' : m === 'GFP-F' ? 'GFP-F' : '';
     return '<section class="card sim-card sim-ohcols" aria-labelledby="sim-ohc-t"><div class="section-title"><h2 id="sim-ohc-t">Cột 15–16 (OPU OH) tuỳ kiểu ánh xạ</h2></div>' +
       '<p class="muted calc-small">Cùng vị trí cột 15–16 nhưng ý nghĩa ô đổi theo cách ánh xạ — vì vậy khung OTU2 (vẽ theo AMP) và mô phỏng GMP trông khác nhau mà đều đúng.</p>' +
       '<div class="tbl-wrap"><table class="values"><thead><tr><th>Kiểu ánh xạ</th><th>Nội dung cột 15–16</th></tr></thead><tbody>' +
@@ -938,7 +980,8 @@
   /** Panel bên phải: ý nghĩa phương pháp + bảng JC / công thức GMP / tham số GFP / IMP (luôn theo số liệu chuẩn). */
   function renderDetail(P) {
     var sc = P.sc, m = P.method, h = '';
-    h += '<div class="detail-card"><span class="eyebrow">Mô phỏng ánh xạ</span><h2>' + esc(m === 'PDH-BIT' ? 'Chèn bit PDH' : m) + '</h2><p>' + esc(METHOD_HINT[m] || '') + '</p>';
+    h += '<div class="detail-card"><span class="eyebrow">Mô phỏng ánh xạ</span><h2>' + esc(m === 'PDH-BIT' ? 'Chèn bit PDH' : m) + '</h2><p>' + esc(hintOf(P)) + '</p>';
+    if (P.noJust) h += '<p class="opu-note"><b>Không có JC.</b> G.709 §17.13: bộ ánh xạ "không sinh tín hiệu điều khiển chèn" — nên mô phỏng không có hộp JC/NJO/PJO và không có bảng JC.</p>';
     if (P.just && P.just.table.length) {
       h += '<h3>Bảng JC</h3><div class="tbl-wrap"><table class="values"><thead><tr><th>JC</th><th>NJO</th><th>PJO</th><th>Ý nghĩa</th></tr></thead><tbody>' +
         P.just.table.map(function (e) { return '<tr' + (e.never ? ' class="is-off"' : '') + '><td><code>' + esc(e.jc) + '</code></td><td>' + esc(e.njo) + '</td><td>' + esc(e.pjo) + '</td><td>' + esc(e.meaning) + '</td></tr>'; }).join('') +
@@ -957,6 +1000,7 @@
       if (g.iiDi && g.iiDi.length) h += '<h3>Báo thay đổi Cm (II/DI)</h3><div class="tbl-wrap"><table class="values"><thead><tr><th>Đổi</th><th>II</th><th>DI</th><th>Ý nghĩa</th></tr></thead><tbody>' +
         g.iiDi.map(function (x) { return '<tr data-cmchg="' + esc(x.change) + '"><td>' + esc(x.change) + '</td><td>' + esc(x.ii) + '</td><td>' + esc(x.di) + '</td><td>' + esc(x.meaning) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
+    if (P.block66) h += block66Html(P.block66);
     if (m === 'GFP-F') {
       var f = P.gfp;
       h += '<dl class="kv"><dt>Core header</dt><dd>' + f.core + ' B (PLI + cHEC)</dd><dt>Payload header</dt><dd>' + f.type + ' B (Type + tHEC)</dd>' +
@@ -980,6 +1024,21 @@
     }
     h += '<h3>Hai chế độ</h3><p class="muted calc-small"><b>Minh hoạ</b>: khung nhỏ cùng luật, ppm phóng đại để thấy bù mỗi vài khung. <b>Thực tế</b>: lưới đúng kích thước chuẩn (thu nhỏ khi vẽ), kính lúp xem từng byte.</p></div>';
     document.getElementById('detail').innerHTML = h;
+  }
+  /** Panel khối 66B: quy tắc căn 2 bit, bộ xáo trộn, khối RC và chuỗi tốc độ (theo sc.block66). */
+  function block66Html(B) {
+    var rc = B.rc || {}, h = '<h3>Khối 66B trong vùng tải</h3><dl class="kv">' +
+      '<dt>Khối</dt><dd>' + esc(B.bits) + ' bit = 2 bit sync header + 64 bit; ' + esc(n(B.perFrame, 3)) + ' khối / khung</dd>' +
+      '<dt>Chu kỳ lặp</dt><dd>' + esc(B.cycleFrames) + ' khung = ' + esc(n(B.cycleBlocks, 0)) + ' khối (mẫu ranh giới lặp lại)</dd>' +
+      (B.scrambler ? '<dt>Xáo trộn</dt><dd>' + esc(B.scrambler) + '</dd>' : '') + '</dl>' +
+      (B.rule ? '<p class="muted calc-small"><b>Quy tắc:</b> ' + esc(B.rule) + '</p>' : '');
+    if (rc.note) h += '<p class="muted calc-small"><b>Khối RC:</b> ' + esc(rc.note) + (rc.rc0Hex ? ' RC0 = ' + esc(rc.rc0Hex) + '; RC1 = ' + esc(rc.rc1Hex) + '.' : '') + '</p>';
+    if (B.chain && B.chain.length) {
+      h += '<h3>Chuỗi tốc độ</h3><ol class="plain calc-small">' + B.chain.map(function (c) {
+        return '<li>' + esc(c.label) + ' — <b>' + esc(rate(c.kbps)) + '</b>' + (c.ratio ? ' <span class="muted">(× ' + esc(c.ratio[0]) + '/' + esc(c.ratio[1]) + ')</span>' : '') + '</li>';
+      }).join('') + '</ol>';
+    }
+    return h;
   }
   function jcPlace(jc) {
     var rows = [].concat(jc.rows || []).join(', '), bits = [].concat(jc.bits || []).join(', ');
@@ -1052,9 +1111,9 @@
       else if (inf.kind === 'cm') {
         // Cm không nằm "trần" trong ô: JC1 = Cm bit 1–8, JC2 = Cm bit 9–cnBits + II/DI, JC3 = CRC-8; giá trị Cm hiện ở dòng trạng thái
         var cb = P.cnBits || 14;
-        it.t = T.JC; it.val = String(res.cm);
+        it.t = T.JC; it.val = String(res.cmNext);   // JC của khung này báo Cm cho khung SAU
         it.lab = 'JC' + (1 + inf.i);
-        it.lab2 = inf.i === 0 ? 'Cm bit 1–8' : inf.i === 1 ? 'Cm bit 9–' + cb + ' + II/DI' : 'CRC-8';
+        it.lab2 = inf.i === 0 ? 'Cm bit 1–8 (cho khung sau)' : inf.i === 1 ? 'Cm bit 9–' + cb + ' + II/DI' : 'CRC-8';
       }
       else if (inf.kind === 'cnd') {
         var used = !(sc.gmp && sc.gmp.cndUsed === false);
@@ -1081,6 +1140,7 @@
       else if (t === T.JC) { var bi = jcRows.indexOf(r); it.lab = jcStr.charAt(bi >= 0 ? bi : 0) || ''; it.val = jcStr; }
       else if (t === T.OTHER && P.tributaries) it.lab = String(((c - 1) % P.tributaries) + 1);
       if (m === 'GMP' && L.orderPos[idx] >= 0) it.j = Math.floor(L.orderPos[idx] / P.wb) + 1;
+      if (res.blk && L.orderPos[idx] >= 0) { var bb = blockAtByte(res.blk, L.orderPos[idx]); if (bb) { it.blk = bb.bit; it.blkK = bb.k; } }
       if (res.fids || res.pks) lastF = t === T.GIDLE || t === T.BIDLE || t === T.BINS ? -1 : it.fid;
       push(it);
     }
@@ -1312,6 +1372,16 @@
         ctx.globalAlpha = 0.45 + 0.55 * pulse; ctx.lineWidth = 3; ctx.strokeRect(x + 1.5, yy + 1.5, cs - 3, cs - 3); ctx.globalAlpha = 1;
       }
     }
+    // khối 66B (BMP §17.13): vạch đứng tại bit bắt đầu khối + dải 2 bit sync header ở mép trên ô
+    if (P.block66) {
+      ctx.fillStyle = C.text; ctx.globalAlpha = 0.9;
+      for (i = 0; i < Math.min(head, items.length); i++) {
+        var bi = items[i]; if (!bi.blk) continue;
+        var bx = gx + bi.x * cs + (bi.blk - 1) / 8 * cs, by = gy + bi.y * cs;
+        ctx.fillRect(bx - 1, by, 2, cs); ctx.fillRect(bx, by, cs / 4, Math.max(3, cs * 0.2));
+      }
+      ctx.globalAlpha = 1;
+    }
     // viền khối khung Ethernet / gói (GFP-F, IMP): đường dày ở ranh giới giữa hai khung khác nhau
     if (P.method === 'GFP-F' || P.method === 'IMP') {
       ctx.strokeStyle = C.text; ctx.lineWidth = 2;
@@ -1397,13 +1467,18 @@
   // ---------- DOM theo khung (Minh hoạ) ----------
   function captionOf(L) {
     var P = L.P, r = L.cur, m = P.method, u = unitName(P);
+    if (r.noJc) {
+      return 'Không JC/NJO/PJO (§17.13) · khung mang <b>' + fmtN(r.units, 0) + '</b> ' + u + ', toàn bộ là dữ liệu' +
+        (r.blk && r.blk.count ? ' · <b>' + fmtN(r.blk.count, 0) + '</b> khối 66B bắt đầu trong khung, khối đầu ở byte ' + ((r.blk.first >> 3) + 1) + ' bit ' + ((r.blk.first & 7) + 1) : '') +
+        ' · <i>BMP: đồng hồ server suy từ client → không bù.</i>';
+    }
     if (isJust(m)) {
       var jn = m === 'PDH-BIT' ? 'Cj' : 'JC';
       return jn + ' = <b>' + esc(r.jc) + '</b> · ' + r.opp.map(function (q) { return q.key.toUpperCase() + ' ' + (q.data ? '<span class="sim-k-jdata">dữ liệu</span>' : '<span class="sim-k-jstuff">chèn</span>'); }).join(' · ') +
         ' · khung mang <b>' + fmtN(r.units, 0) + '</b> ' + u + ' (danh định ' + fmtN(r.nominal, 0) + (r.delta ? ', ' + (r.delta > 0 ? '+' : '−') + Math.abs(r.delta) : '') + ')' +
         (P.locked ? ' · <i>BMP: đồng hồ server suy từ client → bộ đệm đứng yên, không bao giờ bù.</i>' : '');
     }
-    if (m === 'GMP') return 'Cm = <b>' + r.cm + '</b>' + (r.change ? ' (' + (r.change > 0 ? '+' : '−') + Math.abs(r.change) + ')' : '') + ' từ dữ liệu, ' + (P.Pw - r.cm) + ' từ chèn trên P = ' + P.Pw + (P.wb > 1 ? ' (từ ' + P.wb + ' byte)' : '') + '.';
+    if (m === 'GMP') return 'Khung này dùng Cm = <b>' + r.cm + '</b> (JC khung trước đã báo): ' + r.cm + ' ' + (P.wb > 1 ? 'từ' : 'byte') + ' dữ liệu, ' + (P.Pw - r.cm) + ' chèn trên P = ' + P.Pw + (P.wb > 1 ? ' (từ ' + P.wb + ' byte)' : '') + '. JC khung này báo Cm = <b>' + r.cmNext + '</b>' + (r.nextChange ? ' (' + (r.nextChange > 0 ? '+' : '−') + Math.abs(r.nextChange) + ')' : '') + ' cho khung sau.';
     if (m === 'GFP-F') return '<b>' + r.frames + '</b> khung GFP xong · Idle <b>' + fmtN(r.idle, 0) + '</b> B (' + fmtN(r.idlePct, 0) + ' %) · hàng đợi ' + fmtN(r.q1, 0) + '/' + fmtN(r.bufMax, 0) + ' B' + (r.drops ? ' · <span class="sim-k-bad">đã rớt ' + r.drops + ' khung</span>' : '');
     if (m === 'IMP') return '<b>' + r.blocks + '</b> chỗ khối · ' + r.data + ' khối gói · Idle <span class="sim-k-jdata">xoá ' + r.del + '</span> / <span class="sim-k-bins">chèn ' + r.ins + '</span> · bộ đệm ' + r.buffer + ' (mục tiêu ' + P.impTarget + ')';
     return '';
@@ -1544,6 +1619,7 @@
     else if (P.cellBits !== 66) parts.push('cột ' + P.col0 + '–' + (P.col0 + d.cols - 1) + ' của khung server');
     if (P.interleave) parts.push('cột xen ' + P.interleave + ' thành viên VCAT');
     if (P.colMajor) parts.push('hàng = khe lịch, cột = vòng lịch; khối lấp theo cột');
+    if (P.block66) parts.push('khối 66B dày ~8 byte nên chỉ vẽ ranh giới ở kính lúp');
     return parts.join(' · ');
   }
 
@@ -1555,18 +1631,43 @@
     return { r: r, c0: c0, len: len };
   }
 
+  /**
+   * Thước khối 66B dưới kính lúp: cửa sổ là `len` byte từ byte thứ j0 của luồng tải; mỗi khối là đoạn 66 bit
+   * (xen hai sắc), 2 bit đầu (sync header) tô đậm; vạch dọc xuyên qua hàng byte tại bit bắt đầu khối.
+   */
+  function drawBlockRuler(ctx, blk, j0, len, cw, y0, hr, C) {
+    var bitW = cw / 8, b0 = j0 * 8, b1 = (j0 + len) * 8, bits = blk.bits;
+    var q = Math.floor((b0 - blk.first) / bits);                 // khối đang phủ bit đầu cửa sổ (có thể là khối dở từ khung trước, q < 0)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (; blk.first + q * bits < b1; q++) {
+      var st = blk.first + q * bits, x0 = (st - b0) * bitW, x1 = x0 + bits * bitW, k = blk.k0 + q;
+      var cx0 = Math.max(0, x0), cx1 = Math.min(len * cw, x1);
+      ctx.globalAlpha = 0.55; ctx.fillStyle = (k & 1) ? C[T.DATA] : C[T.DATA2];
+      ctx.fillRect(cx0 + 0.5, y0 + 2, cx1 - cx0 - 1, hr - 4); ctx.globalAlpha = 1;
+      if (x0 >= 0) {                                              // sync header chỉ vẽ khi đầu khối nằm trong cửa sổ
+        ctx.fillStyle = C.text; ctx.fillRect(x0, y0, Math.max(2, 2 * bitW), hr);
+        ctx.fillRect(x0 - 0.5, 0, 1.5, y0);                       // vạch xuyên hàng byte
+      }
+      if (cx1 - cx0 > 34) { ctx.fillStyle = C.text; ctx.font = '600 10px system-ui, sans-serif'; ctx.fillText('66B #' + (k % 100000), Math.max(cx0 + 2 * bitW + 18, (cx0 + cx1) / 2 + bitW), y0 + hr / 2); }
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
   function drawZoom(cells) {
     var cv = $('#view-sim [data-sim="zoom"]');
     if (!cv) return;
     var d = gridDims(), z = zoomRange(d), cssW = Math.max(240, cv.parentNode.clientWidth || 600), dpr = root.devicePixelRatio || 1;
-    var cw = cssW / z.len, h = sv.zoomed ? 64 : 30;
+    // khối 66B: thêm thước phía dưới (chỉ khi mọi ô tải liền nhau theo thứ tự lưới)
+    var blk = sv.last && sv.last.blk && sv.P.block66 && sv.P.order.length === d.rows * d.cols ? sv.last.blk : null;
+    var cw = cssW / z.len, hb = sv.zoomed ? 64 : 30, rulerH = blk ? (sv.zoomed ? 34 : 26) : 0, h = hb + rulerH;
     cv.style.height = h + 'px'; cv.width = Math.round(cssW * dpr); cv.height = Math.round(h * dpr);
     var ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var C = sv.colors;
     for (var i = 0; i < z.len; i++) {
       var ty = cells[z.r * d.cols + z.c0 + i] || 0;
-      ctx.fillStyle = C[ty]; ctx.fillRect(i * cw + 0.5, 0.5, cw - 1, h - 1);
+      ctx.fillStyle = C[ty]; ctx.fillRect(i * cw + 0.5, 0.5, cw - 1, hb - 1);
     }
+    if (blk) drawBlockRuler(ctx, blk, z.r * d.cols + z.c0, z.len, cw, hb, rulerH, C);
     var unit = unitName(sv.P);
     $('#view-sim [data-sim="zoomlbl"]').textContent = 'hàng ' + (z.r + 1) + ', ' + unit + ' ' + (z.c0 + 1) + '–' + (z.c0 + z.len) + ' của vùng tải' +
       (sv.P.method === 'IMP' ? '' : ' (cột ' + (sv.P.col0 + z.c0) + '–' + (sv.P.col0 + z.c0 + z.len - 1) + ')') + ' — mỗi ô = 1 ' + unit;
@@ -1603,7 +1704,14 @@
   function renderStats(res) {
     var P = sv.P, S = sv.S, m = P.method, u = unitName(P), h = '';
     var dev = S.cumSent - S.cumNom;
-    if (isJust(m)) {
+    if (res.noJc) {
+      var bk = res.blk;
+      h += stat(u + ' client / khung', esc(n(res.units, 0)), 'mọi ô tải đều là dữ liệu') +
+        stat('Khối 66B bắt đầu', esc(n(bk ? bk.count : 0, 0)), bk && bk.count ? 'khối đầu ở byte ' + ((bk.first >> 3) + 1) + ', bit ' + ((bk.first & 7) + 1) + (bk.lead ? ' (' + bk.lead + ' bit đầu khung là đuôi khối dở)' : '') : '') +
+        stat('Bù tốc độ', 'không có', 'không JC/NJO/PJO (§17.13)') +
+        stat('Chu kỳ ranh giới', esc(n(P.block66 ? P.block66.cycleFrames : 0, 0)) + ' khung', 'đang ở vị trí ' + (res.k - 1) % (P.block66 ? P.block66.cycleFrames : 1) + ' trong chu kỳ' + (P.toy ? ' (đồ chơi)' : '')) +
+        stat('Bộ đệm', 'đứng yên', 'BMP: server bám client');
+    } else if (isJust(m)) {
       h += stat(u + (P.tributaries ? ' nhánh 1' : ' client') + ' / khung', esc(n(res.units, 0)), 'danh định ' + esc(n(P.n0, 0)) + (res.delta ? ' (' + (res.delta > 0 ? '+' : '') + res.delta + ')' : '')) +
         stat((m === 'PDH-BIT' ? 'Cj' : 'JC') + ' khung này', '<code>' + esc(res.jc || '–') + '</code>', esc(res.entry && res.entry.meaning || '')) +
         stat('Chèn dương / âm', esc(S.plus) + ' / ' + esc(S.minus), 'tổng từ khi chạy') +
@@ -1611,7 +1719,8 @@
         stat('Bộ đệm', esc(n(res.lvl1, 2)) + ' ' + u, res.outOfRange ? '<span class="vcg-bad">vượt khả năng bù!</span>' : P.locked ? 'đứng yên (BMP)' : 'ngưỡng ' + esc(n(res.lo, 0)) + ' … ' + esc(n(res.hi, 0)));
     } else if (m === 'GMP') {
       var rg = gmpRange(P);
-      h += stat('Cm ' + (P.mf > 1 ? 'đa khung' : 'khung') + ' này', esc(n(res.cm, 0)) + (res.change ? ' <small>(' + (res.change > 0 ? '+' : '−') + Math.abs(res.change) + ')</small>' : ''), 'danh định ' + esc(n(P.cmNom, 3)) + ' · dải ' + esc(n(rg.min, 0)) + '…' + esc(n(rg.max, 0))) +
+      h += stat('Cm áp cho ' + (P.mf > 1 ? 'đa khung' : 'khung') + ' này', esc(n(res.cm, 0)) + (res.change ? ' <small>(' + (res.change > 0 ? '+' : '−') + Math.abs(res.change) + ')</small>' : ''), 'JC khung trước đã báo · danh định ' + esc(n(P.cmNom, 3)) + ' · dải ' + esc(n(rg.min, 0)) + '…' + esc(n(rg.max, 0))) +
+        stat('JC khung này báo Cm', esc(n(res.cmNext, 0)) + (res.nextChange ? ' <small>(' + (res.nextChange > 0 ? '+' : '−') + Math.abs(res.nextChange) + ')</small>' : ''), 'áp cho ' + (P.mf > 1 ? 'đa khung' : 'khung') + ' SAU (Annex D)') +
         (P.wb > 1 ? stat('Từ dữ liệu / chèn', esc(n(res.cm, 0)) + ' / ' + esc(n(P.Pw - res.cm, 0)), 'mỗi từ ' + P.wb + ' byte · ' + esc(n(res.units, 0)) + ' byte dữ liệu')
           : stat('Byte dữ liệu / chèn', esc(n(res.units, 0)) + ' / ' + esc(n(P.cap - res.units, 0)), 'trên ' + esc(n(P.cap, 0)) + ' byte tải')) +
         stat('Cm trung bình', esc(n(S.k ? S.cumSent / S.k : 0, 3)), 'client đến ' + esc(n(S.cumArr / Math.max(1, S.k), 3)) + ' từ / ' + (P.mf > 1 ? 'đa khung' : 'khung')) +
@@ -1645,10 +1754,12 @@
       res.opp.forEach(function (q) {
         h += '<div class="sim-ohbox ' + (q.data ? 'sim-t-jdata' : 'sim-t-jstuff') + '" title="hàng ' + q.row + ', cột ' + q.col + (q.inGrid ? ' (trong vùng tải)' : ' (cột OH)') + '"><span>' + esc(q.key.toUpperCase()) + '</span><b>' + (q.data ? 'dữ liệu' : 'chèn') + '</b><small>h' + q.row + ' c' + q.col + '</small></div>';
       });
+    } else if (res.noJc) {
+      h += '<div class="sim-ohbox sim-t-oh" title="G.709 §17.13: không sinh JC, NJO, PJO"><span>JC</span><b>không có</b><small>§17.13</small></div>';
     } else if (m === 'GMP') {
-      var bin = res.cm.toString(2); while (bin.length < P.cnBits) bin = '0' + bin;
+      var bin = res.cmNext.toString(2); while (bin.length < P.cnBits) bin = '0' + bin;
       var gj = P.sc.gmp || {}, cndOn = gj.cndUsed !== false;
-      h += '<div class="sim-ohbox sim-t-jc" title="Cm ' + P.cnBits + ' bit trong JC1 (bit 1–8) và JC2 (bit 9–' + P.cnBits + ' + II/DI); JC3 = CRC-8. Áp dụng cho ' + esc(gj.appliesTo || 'khung kế tiếp') + '"><span>JC1–JC2 · Cm</span><b>Cm = ' + esc(n(res.cm, 0)) + (P.wb > 1 ? ' từ' : ' byte') + ' dữ liệu</b><small><code>' + esc(bin) + '</code></small></div>';
+      h += '<div class="sim-ohbox sim-t-jc" title="Cm ' + P.cnBits + ' bit trong JC1 (bit 1–8) và JC2 (bit 9–' + P.cnBits + ' + II/DI); JC3 = CRC-8. Áp dụng cho ' + esc(gj.appliesTo || 'khung kế tiếp') + '"><span>JC1–JC2 · Cm cho khung sau</span><b>Cm = ' + esc(n(res.cmNext, 0)) + (P.wb > 1 ? ' từ' : ' byte') + ' dữ liệu</b><small><code>' + esc(bin) + '</code></small></div>';
       h += '<div class="sim-ohbox sim-t-oh" title="JC4–JC5 = ΣCnD, JC6 = CRC-5 (cột 15)"><span>JC4–JC6 · ΣCnD</span><b>' + (cndOn ? 'phần lẻ dưới 1 từ' : '= 0, không dùng') + '</b><small>JC6 = CRC-5</small></div>';
     } else if (m === 'GFP-F') {
       h += '<div class="sim-ohbox sim-t-gfph"><span>GFP</span><b>' + esc(res.frames) + ' khung</b><small>' + esc(n(res.idlePct, 0)) + '% Idle</small></div>';
@@ -1661,8 +1772,9 @@
 
   function renderLegend(cells, toy) {
     var c = countTypes(cells), u = unitName(sv.P), m = sv.P.method;
-    var extra = toy ? (isJust(m) || m === 'GMP' ? '<li class="sim-legnote"><span class="swatch sim-sw" style="background:' + esc(sv.colors[T.DATA]) + '"></span><span class="swatch sim-sw" style="background:' + esc(sv.colors[T.DATA2]) + '"></span> hai sắc xanh đổi mỗi 4 ' + u + ' client (số nhỏ = thứ tự ' + u + ') — để thấy dòng chảy từ băng chuyền vào khung</li>' :
+    var extra = toy ? (isJust(m) && !sv.P.noJust || m === 'GMP' ? '<li class="sim-legnote"><span class="swatch sim-sw" style="background:' + esc(sv.colors[T.DATA]) + '"></span><span class="swatch sim-sw" style="background:' + esc(sv.colors[T.DATA2]) + '"></span> hai sắc xanh đổi mỗi 4 ' + u + ' client (số nhỏ = thứ tự ' + u + ') — để thấy dòng chảy từ băng chuyền vào khung</li>' :
       m === 'GFP-F' || m === 'IMP' ? '<li class="sim-legnote">' + sv.colors.f.map(function (x) { return '<span class="swatch sim-sw" style="background:' + esc(x) + '"></span>'; }).join('') + ' mỗi ' + (m === 'IMP' ? 'gói (Pn)' : 'khung Ethernet (#n)') + ' một màu, viền đậm bao quanh</li>' : '') : '';
+    if (sv.P.block66) extra += '<li class="sim-legnote"><span class="swatch sim-sw" style="background:' + esc(sv.colors.text) + '"></span> vạch + dải trên cùng = đầu khối 66B (2 bit sync header)</li>';
     $('#view-sim [data-sim="legend"]').innerHTML = TYPE_INFO.map(function (t, i) {
       if (!c[i] && !legendAlways(i)) return '';
       if (toy && (i === T.DATA2 || (i === T.DATA && (m === 'GFP-F'))) ) return '';

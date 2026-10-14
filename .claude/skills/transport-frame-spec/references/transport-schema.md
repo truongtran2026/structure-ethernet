@@ -221,7 +221,7 @@ mọi tốc độ ghi bằng biểu thức từ chuẩn. Validator transport kh�
   },
   oh: [ { row | rows: [đầu, cuối], col | cols: [đầu, cuối], abbr, note } ],   // ô OH đáng chú ý (PSI, RES, FAS…)
   fixedStuff: [ { rows: [đầu, cuối], cols: [đầu, cuối], note } ],          // DẢI bao gồm hai đầu, số chuẩn
-  just: {                                             // AMP / BMP / PDH-bit
+  just: {                                             // AMP / BMP / PDH-bit (BMP được BỎ – xem "BMP không JC" dưới)
     njo?: { row, col, note }, pjo: { row, col, note, tributary? },
     jc: { rows: [1, 2, 3], col, bits: [7, 8], vote: "2/3", note },         // rows là DANH SÁCH hàng
     fixedJc?: "00",                                   // BMP
@@ -236,6 +236,14 @@ mọi tốc độ ghi bằng biểu thức từ chuẩn. Validator transport kh�
          fullLoad: { L1518, L64 },                    // tỉ lệ tải GFP / dung lượng ở 100% tải Ethernet
          bytesPerFrameFullLoad: { L1518, L64 } },
   imp: { block: 66, idle, unit, where, nominalDeletePerFrame, nominalPpm, otn?: { … ODUflex(IMP) } },
+  block66?: {                                         // GD13: dòng khối 66B đặt trên lưới BYTE (BMP §17.13; ô vẫn 8 bit vì 15 232 × 8 / 66 không nguyên)
+    bits: 66, align: 2, startBits: [1, 3, 5, 7],      // align = 66 mod 8; startBits = bit (1 = MSB) chứa bit đầu sync header
+    perFrame,                                         // = rows × cols × cellBits / 66 (≈ 1846,30 với 4 × 3808 byte)
+    cycleFrames, cycleBlocks,                         // số khung nhỏ nhất để ranh giới khối trùng ranh giới khung (33 khung = 60 928 khối)
+    scrambler, rule,
+    rc?: { Z, rc0, rc1, everyBlocks: Z × 20479, perFrame: perFrame / 20480, periodUs: Z × 20480 × 66 / clientKbps, rc0Hex, rc1Hex, note },
+    chain?: [ { label, kbps, ratio?: [num, den] } ]   // từ lineKbps client (PMA) tới tốc độ server: kbps = trước × num/den
+  },
   budget: [ { kind: "data"|"pjo"|"fs"|"gmp"|"gfp"|"block"|"oh"|"jc", cells, note } ],   // Σ cells = rows × cols
   sim: {
     entity: "byte" | "bit" | "từ 80 byte" | "khối 66B", entityBits,
@@ -251,6 +259,14 @@ Bất biến (script tự kiểm): client/server/frames tồn tại; `clientKbps
 `perFrame.min ≤ nom ≤ max`; `perFrame.nom = clientKbps × periodUs / 1000 / entityBits` (trừ BMP, GFP, PDH); biên ppm nằm trong
 `carry.min…max` (IMP: lệch < 2 khối); GMP: `CmMin ≤ cmNom ≤ CmMax`, `CmMin = floor(cmMin)`, `CmMax = ceil(cmMax)`, `m = 8M`,
 ô GMP × đa khung = P × M, sigma-delta (j × Cm) mod P < Cm cho đúng Cm vị trí dữ liệu.
+
+**BMP không JC (GD13, G.709 §17.13 – "does not generate any justification control signals")**: `method: "BMP"` được bỏ hẳn `just`
+khi đồng thời: `ppm.locked` và `sim.locked` true; có `block66` (dòng khối 66B, chọn tên này thay cho cờ `oh66`/`entity: "66B"` vì cần
+mang số liệu căn 2 bit + RC + chuỗi tốc độ); `oh` không có ô JC/NJO/PJO (OPUflex OH = PSI + 7 byte RES); budget không có `pjo`/`jc`;
+`perFrame.nom = carry.fixed` = mọi ô tải. `sim.entity` vẫn là "byte" (lưới byte) – khối 66B là lớp phủ (`block66`).
+Server là ODUflex (TMUX không có unit OPUflex riêng): `serverPayloadKbps` = OPUflex = rate(ODUflex) × 238/239 và
+`periodUs` = 122 368 bit / rate(ODUflex). Script kiểm `block66`: perFrame, startBits = {(66k mod 8) + 1}, cycleFrames nhỏ nhất,
+rc (Z, 1/20 480, chu kỳ), chain (tích tỉ lệ; bước đầu = `lineKbps` client; có bước = clientKbps; bước cuối = rate server).
 
 ## 6. Giao diện đường truyền (GD12) — `data/transport-line.js`
 

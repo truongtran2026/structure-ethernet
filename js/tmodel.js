@@ -1282,7 +1282,7 @@
     var U = MUX[at], XU = MUX[X];
     if (!U || !XU) return 'Không thả được.';
     var un = nameOf(MUX, at), xn = nameOf(MUX, X);
-    if (!U.accepts || !U.accepts.length) return un + ' là tín hiệu khách hàng, không chứa đơn vị khác.';
+    if (!U.accepts || !U.accepts.length) return un + ' là tín hiệu client, không chứa đơn vị khác.';
     if (reaches(MUX, at, X) && node) {
       var ps = poolShortage(MUX, node, X);
       if (ps) return ps;

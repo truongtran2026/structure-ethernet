@@ -14,8 +14,8 @@
   var LEVELS = [
     { n: 0, label: 'Thu gọn tất cả', hint: 'Chỉ hiện các nhóm cấp stack và header' },
     { n: 1, label: 'Cấp header', hint: 'Bung nhóm stack, mỗi header một dòng' },
-    { n: 2, label: 'Cấp nhóm field', hint: 'Bung header, các nhóm field gộp thành một khối' },
-    { n: 3, label: 'Bung tất cả', hint: 'Hiện mọi field và bit' }
+    { n: 2, label: 'Cấp nhóm trường', hint: 'Bung header, các nhóm trường gộp thành một khối' },
+    { n: 3, label: 'Bung tất cả', hint: 'Hiện mọi trường và bit' }
   ];
   var STORE_PREFIX = 'ethviz.v1.';
 
@@ -647,7 +647,7 @@
     return '<div class="detail-empty"><h2>Cách dùng</h2><ol>' +
       '<li>Chọn một loại frame ở danh sách bên trái.</li>' +
       '<li>Dùng <b>Cấp hiển thị</b> để xem tổng thể (thu gọn) hoặc chi tiết (bung).</li>' +
-      '<li>Bấm ▸ để bung từng nhóm, header hoặc nhóm field; bấm ô ⊞ trong sơ đồ bit để bung nhóm đó.</li>' +
+      '<li>Bấm ▸ để bung từng nhóm, header hoặc nhóm trường; bấm ô ⊞ trong sơ đồ bit để bung nhóm đó.</li>' +
       '<li>Chọn một dòng hoặc một ô để xem giải thích ở đây.</li>' +
       '<li>Bàn phím: ↑/↓ di chuyển, ←/→ thu/bung, Enter chọn, Space thu/bung.</li></ol></div>';
   }
@@ -760,7 +760,7 @@
     var html = '<nav class="crumbs">' + crumbs.map(function (c) {
       return '<a href="#" data-goto="' + attr(c.path) + '">' + esc(c.kind === 'header' ? (c.label || c.name) : c.name) + '</a>';
     }).join(' › ') + '</nav>' +
-      '<span class="eyebrow">' + (n.kind === 'group' ? 'Nhóm field' : 'Field') + '</span>' +
+      '<span class="eyebrow">' + (n.kind === 'group' ? 'Nhóm trường' : 'Trường') + '</span>' +
       '<h2>' + esc(n.name) + (n.abbr && n.abbr !== n.name ? ' <span class="abbr">(' + esc(n.abbr) + ')</span>' : '') + '</h2>' +
       dl([
         ['Kích thước', n.present ? esc(fmtSize(n.bits)) + (n.isVar ? ' — độ dài thay đổi' : '') : esc('đang tắt (nếu bật: ' + fmtSize(n.sizeIfOn) + ')')],

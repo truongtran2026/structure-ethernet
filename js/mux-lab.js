@@ -292,8 +292,8 @@
   function palHint(root) {
     var M = MUX();
     if (M[root] && M[root].family === 'flexe') return 'Đơn vị tính theo kbit/s. Một instance FlexE có <b>20 khe lịch 5G</b> (một nhóm n instance: 20n khe phẳng); chọn “Ghép khe lịch” rồi thả client 10/25/40/50/100/… G — mỗi client chiếm số khe nguyên, tốc độ được <b>thích ứng Idle</b> (thêm/bớt Idle) cho vừa khe. Hết khe thì bị từ chối kèm số khe còn trống; gỡ client (×) trả lại khe.';
-    if (poolUnder(root)) return 'Đơn vị tính theo kbit/s. OPU có <b>bể tributary slot (TS)</b>: chọn “Ghép TS” để trộn nhiều loại ODU, miễn còn đủ TS trống; ' +
-      'thả tín hiệu khách hàng thẳng vào khung — các bước trung gian tự dựng. ODU và tín hiệu SDH mặc định <b>nguyên khối</b>; đổi phương án ở ô chọn để mở xem bên trong.';
+    if (poolUnder(root)) return 'Đơn vị tính theo kbit/s. OPU có <b>bể TS (khe nhánh)</b>: chọn “Ghép TS” để trộn nhiều loại ODU, miễn còn đủ TS trống; ' +
+      'thả tín hiệu client thẳng vào khung — các bước trung gian tự dựng. ODU và tín hiệu SDH mặc định <b>nguyên khối</b>; đổi phương án ở ô chọn để mở xem bên trong.';
     return (L().isByteUnit(M, root)
         ? 'Số byte là mỗi 125 µs (1 byte/125 µs = 64 kbit/s). Thả đơn vị bậc thấp thẳng vào hộp bậc cao — các bước trung gian tự dựng.'
         : 'Đơn vị PDH tính theo kbit/s: mỗi bậc ghép 4 nhánh bậc dưới + bit overhead/chèn. Thả bậc thấp vào bậc cao — các bậc giữa tự dựng.') +
@@ -331,7 +331,7 @@
     if (c !== 'ts') { var a = MUX()[uid].accepts[c]; return (ohPhrase(a) || 'không thêm overhead') + (a.mapping ? ' · ' + a.mapping : '') + (a.fit === 'le' ? ' · có chèn/khoảng trống ánh xạ' : '') + (a.note ? ' — ' + a.note : ''); }
     var pi = L().poolInfo(MUX(), uid);
     var w = pi.word;
-    return 'Bể ' + pi.n + (w === 'TS' ? ' tributary slot, mỗi TS ' : ' khe lịch, mỗi khe ') + TV().fmtRate(pi.kbps) + (pi.note ? ' (' + pi.note + ')' : '') + ': ' +
+    return 'Bể ' + pi.n + (w === 'TS' ? ' TS (khe nhánh), mỗi TS ' : ' khe lịch, mỗi khe ') + TV().fmtRate(pi.kbps) + (pi.note ? ' (' + pi.note + ')' : '') + ': ' +
       L().slotOpts(MUX(), uid).map(function (s) { return nm(s.a.of) + ' ' + s.a.slots + ' ' + w + (s.a.mapping ? ' ' + s.a.mapping : ''); }).join(', ') +
       ' — trộn các loại, miễn tổng ' + w + ' ≤ ' + pi.n + '.';
   }
@@ -454,7 +454,7 @@
             return renderBox(k, k.u, last.path.concat(i), depth + 1, String(i + 1), big, { ts: k.ts || [], word: pi.word, hue: tsHue(i), pa: L().slotOptFor(M, pn.u, k.u) });
           }).join('') +
           (free && !L().portsFull(M, pn) ? '<div class="lab-slot ts-free" data-drop="' + pkey(last.path) + '" role="button" tabindex="0" title="Thả ODU/tín hiệu vào bể ' + pi.word + ' của ' + esc(nm(pn.u)) + '">' +
-            '<span class="slot-name">' + free + ' ' + pi.word + ' trống</span><span class="slot-hint">thả ' + esc(L().slotOpts(M, pn.u).map(function (s) { return nm(s.a.of) + ' (' + s.a.slots + ')'; }).join(', ')) + ' hoặc tín hiệu khách hàng</span>' +
+            '<span class="slot-name">' + free + ' ' + pi.word + ' trống</span><span class="slot-hint">thả ' + esc(L().slotOpts(M, pn.u).map(function (s) { return nm(s.a.of) + ' (' + s.a.slots + ')'; }).join(', ')) + ' hoặc tín hiệu client</span>' +
             (lb.armed && L().reaches(M, pn.u, lb.armed) ? '<button type="button" class="slot-open" data-lfillat="' + pkey(last.path) + '" title="Lấp các ' + pi.word + ' trống bằng ' + esc(nm(lb.armed)) + '">lấp đầy bằng ' + esc(nm(lb.armed)) + '</button>' : '') +
             '</div>' : free ? '<div class="muted ts-full">' + esc(nm(pn.u)) + ' tối đa ' + L().maxPorts(M, pn.u) + ' cổng nhánh, đã dùng ' + pn.kids.length + '; còn ' + free + ' ' + pi.word + ' trống — gỡ bớt con (×) để nhường cổng.</div>' : '<div class="muted ts-full">' + esc(nm(pn.u)) + ' đã dùng hết ' + pi.n + ' ' + pi.word + ' — gỡ bớt con (×) để trả lại ' + pi.word + '.</div>') +
           '</div>';
@@ -501,9 +501,9 @@
         : '<span class="ts-cell" style="--tsh:' + tsHue(i) + '" title="' + pi.word + ' #' + (s + 1) + ': ' + esc(nm(pn.kids[i].u)) + ' #' + (i + 1) + '">' + (s + 1) + '</span>';
     }
     var free = L().tsFree(MUX(), pn);
-    return '<div class="ts-wrap"><div class="ts-legend muted">Bể ' + pi.n + (pi.word === 'TS' ? ' tributary slot × ' : ' khe lịch × ') + esc(TV().fmtRate(pi.kbps)) + (pi.note ? ' · ' + esc(pi.note) : '') +
+    return '<div class="ts-wrap"><div class="ts-legend muted">Bể ' + pi.n + (pi.word === 'TS' ? ' TS (khe nhánh) × ' : ' khe lịch × ') + esc(TV().fmtRate(pi.kbps)) + (pi.note ? ' · ' + esc(pi.note) : '') +
       ' · đã dùng ' + (pi.n - free) + ', trống ' + free + (L().maxPorts(MUX(), pn.u) < Infinity ? ' · cổng nhánh ' + pn.kids.length + '/' + L().maxPorts(MUX(), pn.u) : '') + ' · cấp ' + pi.word + ' trống thấp nhất, không cần liền kề</div>' +
-      '<div class="ts-bar" data-drop="' + pkey(path) + '" role="img" aria-label="' + esc((pi.word === 'TS' ? 'Tributary slot: ' : 'Khe lịch: ') + (pi.n - free) + '/' + pi.n + ' đã dùng') + '">' + cells + '</div></div>';
+      '<div class="ts-bar" data-drop="' + pkey(path) + '" role="img" aria-label="' + esc((pi.word === 'TS' ? 'TS (khe nhánh): ' : 'Khe lịch: ') + (pi.n - free) + '/' + pi.n + ' đã dùng') + '">' + cells + '</div></div>';
   }
 
   // ---------- VCG (ghép chuỗi ảo) ----------
@@ -560,7 +560,7 @@
     var M = MUX(), acc = L().account(M, t);
     var total = acc.totalKbps, byteMode = acc.byteBased;
     var segs = [
-      { k: 'client', label: 'Tải khách hàng', v: acc.clientKbps },
+      { k: 'client', label: 'Tải client', v: acc.clientKbps },
       { k: 'stuff', label: 'Chèn/bù tốc độ, khoảng trống ánh xạ', v: acc.justificationKbps },
       { k: 'oh', label: 'Overhead các cấp', v: acc.overheadKbps },
       { k: 'empty', label: 'Chưa dùng', v: acc.emptyKbps }
@@ -593,7 +593,7 @@
     var extra = [
       ['Chèn bù tốc độ / khoảng trống ánh xạ (justification)', acc.justificationKbps, 'Dung lượng bước ghép lớn hơn overhead + tổng nhánh (vd C-12 2176 kbit/s mang E1 2048 kbit/s; STM-64 AMP trong OPU2; phần TS dư so với ODU).'],
       ['Chưa dùng (ô trống' + (acc.freeTs.length ? ', ' + (acc.freeTs.every(function (f) { return L().slotWord(M, f.u) !== 'TS'; }) ? 'khe lịch' : 'TS') + ' trống' : '') + ')', acc.emptyKbps, 'Dung lượng chưa lấp.' + (freeTsTxt ? ' Chỗ trống: ' + freeTsTxt + ' = ' + TV().fmtRate(acc.emptyTsKbps) + '.' : '')],
-      ['Tải khách hàng', acc.clientKbps, (clientsTxt(acc.clients) || 'chưa có') + (tcTxt ? ' · tính theo tốc độ thực mang sau ' + (idleOnly ? 'thích ứng Idle' : 'chuyển mã/GFP-F') + ' (' + tcTxt + ')' : '')]
+      ['Tải client', acc.clientKbps, (clientsTxt(acc.clients) || 'chưa có') + (tcTxt ? ' · tính theo tốc độ thực mang sau ' + (idleOnly ? 'thích ứng Idle' : 'chuyển mã/GFP-F') + ' (' + tcTxt + ')' : '')]
     ].map(function (r) {
       return '<tr class="tr-sum"><td colspan="3">' + esc(r[0]) + ' <span class="muted">' + esc(r[2]) + '</span></td>' + byteCols(r[1]) +
         '<td class="num">' + esc(n(r[1])) + '</td><td class="num">' + esc(n(r[1] / total * 100)) + '%</td></tr>';
@@ -602,9 +602,9 @@
         (byteMode ? 'kbit/s và byte mỗi 125 µs · 1 byte/125 µs = 64 kbit/s' : 'kbit/s · client + overhead + chèn + trống = tốc độ khung') + '</span></div>' +
       '<div class="stats">' +
         '<div class="stat"><div class="stat-label">Tốc độ khung đích</div><div class="stat-value">' + esc(TV().fmtRate(total)) + '</div><div class="stat-sub">' + esc(byteMode ? n(total / 64, 0) + ' byte/125 µs' : n(total, 0) + ' kbit/s') + '</div></div>' +
-        '<div class="stat"><div class="stat-label">Tải khách hàng thực mang</div><div class="stat-value">' + esc(TV().fmtRate(acc.clientKbps)) + '</div><div class="stat-sub">' + esc(clientsTxt(acc.clients) || 'chưa thả gì') +
+        '<div class="stat"><div class="stat-label">Tải client thực mang</div><div class="stat-value">' + esc(TV().fmtRate(acc.clientKbps)) + '</div><div class="stat-sub">' + esc(clientsTxt(acc.clients) || 'chưa thả gì') +
           (Math.abs(acc.clientLineKbps - acc.clientKbps) > 1e-6 ? ' · đường dây ' + esc(TV().fmtRate(acc.clientLineKbps)) + ' (transcode/GFP-F)' : '') + '</div></div>' +
-        '<div class="stat"><div class="stat-label">Hiệu suất</div><div class="stat-value">' + esc(n(acc.efficiency)) + '%</div><div class="stat-sub">tải khách hàng / tốc độ khung</div></div>' +
+        '<div class="stat"><div class="stat-label">Hiệu suất</div><div class="stat-value">' + esc(n(acc.efficiency)) + '%</div><div class="stat-sub">tải client / tốc độ khung</div></div>' +
         '<div class="stat"><div class="stat-label">Tổng overhead</div><div class="stat-value">' + esc(TV().fmtRate(acc.overheadKbps)) + '</div><div class="stat-sub">' + esc(byteMode ? n(acc.overheadKbps / 64, 0) + ' byte/125 µs' : 'cộng mọi cấp') + '</div></div>' +
       '</div>' + bar +
       '<h3 class="lab-h3">Overhead theo cấp</h3>' +
@@ -678,17 +678,17 @@
         var mc = s.vcgStep === 'vcg' ? 0 : L().maxCount(M, s.u, mem.of);
         if (s.vcgStep === 'vcg') {
           eff = clientK / s.kbps * 100;
-          effTxt = 'Tải khách hàng chiếm <b>' + esc(n(eff, 1)) + '%</b> dung lượng ' + esc(nm(s.u));
+          effTxt = 'Tải client chiếm <b>' + esc(n(eff, 1)) + '%</b> dung lượng ' + esc(nm(s.u));
         } else {
           eff = clientK / (mem.count / mc * s.kbps) * 100;
           effTxt = 'Một ' + esc(nm(route.vcg)) + ' dùng ' + (s.vcgStep === 'members' ? mem.count + ' thành viên' : '≈ ' + esc(n(mem.count / mc, 2)) + ' ' + esc(nm(s.u))) +
-            ' → tải khách hàng chiếm <b>' + esc(n(eff, 1)) + '%</b>';
+            ' → tải client chiếm <b>' + esc(n(eff, 1)) + '%</b>';
         }
-      } else effTxt = 'Đầy ' + max + ' ' + esc(nm(cl)) + ' → tải khách hàng chiếm <b>' + esc(n(eff, 1)) + '%</b>';
+      } else effTxt = 'Đầy ' + max + ' ' + esc(nm(cl)) + ' → tải client chiếm <b>' + esc(n(eff, 1)) + '%</b>';
       var fr = u.frame && window.TFRAMES && window.TFRAMES[u.frame];
       var ohl = i ? L().ohLabel({ overhead: oh }) : '';
       var desc;
-      if (!i) desc = '<div class="step-desc">Tín hiệu khách hàng — điểm bắt đầu.</div>';
+      if (!i) desc = '<div class="step-desc">Tín hiệu client — điểm bắt đầu.</div>';
       else {
         var from = s.vcgStep === 'members'
           ? 'VCG chia thành <b>' + s.count + '×' + esc(nm(s.u)) + '</b> <span class="muted">(SQ 0…' + (s.count - 1) + ', mỗi thành viên có POH và con trỏ riêng)</span>'
@@ -711,8 +711,8 @@
           desc + (i ? '<div class="step-eff">' + effTxt + '<span class="effbar"><span style="width:' + Math.min(100, eff) + '%"></span></span></div>' : '') +
         '</div></li>';
     }).reverse().join('');
-    return '<div class="section-title"><h2>Đóng gói từng bước</h2><span class="muted">từ tín hiệu khách hàng đi lên ' + esc(nm(root)) + '</span></div>' +
-      '<div class="toolbar"><span class="toolbar-label">Khách hàng</span><div class="seg-group">' + clients.map(function (id) {
+    return '<div class="section-title"><h2>Đóng gói từng bước</h2><span class="muted">từ tín hiệu client đi lên ' + esc(nm(root)) + '</span></div>' +
+      '<div class="toolbar"><span class="toolbar-label">Client</span><div class="seg-group">' + clients.map(function (id) {
         var on = id === cl;
         return '<button type="button" class="seg-btn' + (on ? ' is-on' : '') + '" data-lstepc="' + esc(id) + '" aria-pressed="' + on + '">' + esc(nm(id)) + '</button>';
       }).join('') + '</div>' +
@@ -738,7 +738,7 @@
       '<li>Thả bậc thấp vào bậc cao: các bước trung gian tự dựng, thông báo nêu overhead từng bước.</li>' +
       '<li>Hộp có nhiều phương án (VC-4, TUG-3) có ô chọn — đổi phương án sẽ xoá nội dung bên trong hộp đó.</li>' +
       '<li>FlexE: instance 100G có 20 khe lịch 5G (nhóm n instance: 20n khe); client chiếm số khe nguyên và được thích ứng Idle cho vừa khe; phần ngoài bể là khối overhead FlexE (1/20 461).</li>' +
-      '<li>OTN: OPU có lựa chọn <b>“Ghép TS”</b> — bể tributary slot cho trộn ODU0/ODU1/ODU2/ODUflex…; mỗi con được cấp các TS trống thấp nhất (thanh ô màu). Thiếu TS thì bị từ chối kèm số TS còn trống; gỡ con (×) trả lại TS.</li>' +
+      '<li>OTN: OPU có lựa chọn <b>“Ghép TS”</b> — bể TS (khe nhánh) cho trộn ODU0/ODU1/ODU2/ODUflex…; mỗi con được cấp các TS trống thấp nhất (thanh ô màu). Thiếu TS thì bị từ chối kèm số TS còn trống; gỡ con (×) trả lại TS.</li>' +
       '<li>Ethernet qua SDH: thả <b>VCG</b> (VC-4-7v, VC-12-46v…) hoặc thả thẳng Ethernet — lab chọn VCG vừa với khung và rải thành viên vào VC trống bất kỳ (nhãn VCG#·SQ). Gỡ một thành viên (×) để thấy <b>LCAS</b>: dung lượng giảm, báo còn đủ/không đủ cho client.</li>' +
       '<li>Luồng PDH (E1, E2, E3, E4) mặc định là <b>nguyên khối</b> (client). Ô chọn của nó có “Nguyên khối (client)” và các phương án (vd 4×E2) — chọn để mở xem bên trong.</li>' +
       '<li>Bấm tên một đơn vị để xem chi tiết ở đây. Trạng thái tự lưu trong trình duyệt.</li></ol></div>';
@@ -767,7 +767,7 @@
       '<dl class="kv">' +
         '<dt>Kích thước</dt><dd>' + (u.bytesPer125us == null ? esc(TV().fmtRate(u.rateKbps)) + ' <span class="muted">(≈ ' + esc(n(u.rateKbps / 64)) + ' B/125 µs)</span>'
           : esc(n(u.bytesPer125us, 0)) + ' byte/125 µs = ' + esc(TV().fmtRate(u.bytesPer125us * 64))) + '</dd>' +
-        (u.tribSlots ? '<dt>' + (u.kind === 'flexe' ? 'Khe lịch' : 'Tributary slot') + '</dt><dd>' + esc(u.tribSlots.n + ' × ' + TV().fmtRate(L().poolInfo(M, id).kbps) + (u.tribSlots.note ? ' · ' + u.tribSlots.note : '')) +
+        (u.tribSlots ? '<dt>' + (u.kind === 'flexe' ? 'Khe lịch' : 'TS (khe nhánh)') + '</dt><dd>' + esc(u.tribSlots.n + ' × ' + TV().fmtRate(L().poolInfo(M, id).kbps) + (u.tribSlots.note ? ' · ' + u.tribSlots.note : '')) +
           ' <span class="muted">— các phương án có “' + L().slotWord(M, id) + ' mỗi cái” trộn được trong cùng ' + esc(nm(id)) + '</span></dd>' : '') +
         (u.members ? '<dt>Thành viên</dt><dd>' + u.members.count + ' × <a href="#" data-lunit="' + esc(u.members.of) + '">' + esc(nm(u.members.of)) + '</a>, tải mỗi cái ' +
           esc(nm(u.members.payloadOf)) + ' ' + esc(TV().fmtRate(L().unitKbps(M, u.members.payloadOf))) + ' <span class="muted">— ghép chuỗi ảo: thành viên đi độc lập, đặt vào VC trống bất kỳ</span></dd>' : '') +
@@ -775,7 +775,7 @@
         (u.standard ? '<dt>Chuẩn</dt><dd>' + esc(u.standard) + '</dd>' : '') +
         (parents.length ? '<dt>Nằm trong</dt><dd>' + parents.map(function (p) { return '<a href="#" data-lunit="' + esc(p) + '">' + esc(nm(p)) + '</a>'; }).join(', ') + '</dd>' : '') +
       '</dl>' + (u.desc ? '<p>' + esc(u.desc) + '</p>' : '') +
-      (acc ? '<h3>Cách lấp (phương án)</h3><ul class="plain unit-acc">' + acc + '</ul>' : '<p class="muted">Tín hiệu khách hàng — điểm bắt đầu của cây ghép.</p>') +
+      (acc ? '<h3>Cách lấp (phương án)</h3><ul class="plain unit-acc">' + acc + '</ul>' : '<p class="muted">Tín hiệu client — điểm bắt đầu của cây ghép.</p>') +
       (fr ? '<p><a class="btn-ghost btn-link" href="#t/' + esc(fr.id) + '">▦ Xem lưới ' + (fr.grid && fr.grid.cellBits === 1 ? 'bit ' : 'byte ') + esc(fr.name) + '</a></p>' : '') + '</div>';
     if (!quiet && window.matchMedia && window.matchMedia('(max-width: 1240px)').matches) {
       var d = document.getElementById('detail'); if (d.scrollIntoView) d.scrollIntoView({ behavior: 'smooth', block: 'start' });

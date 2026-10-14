@@ -339,7 +339,7 @@
       return '<button type="button" class="tp ' + kindCls(node) + (collapsed ? ' is-collapsed' : '') + (pf ? ' has-pf' : '') + (bandIn ? ' has-band' : '') + (wpx > 360 ? ' is-wide' : '') +
         (tv.state.selected === node.id ? ' is-sel' : '') + '" style="grid-row:' + (p.r + 2) + ' / span ' + p.h + ';grid-column:' + (p.dc + 2) + ' / span ' + p.w + '"' +
         ' data-rg="' + esc(node.id) + '" data-anc="' + esc(anc) + '"' + (collapsed ? ' data-texpand="1"' : '') + ' title="' + esc(tip) + '" tabindex="-1">' +
-        (fitsH || fitsV ? '<span class="tp-l' + (fitsV ? ' is-vert' : '') + '">' + (collapsed && fitsH && wpx > label.length * 6.4 + 20 ? '⊞ ' : '') + esc(label) + '</span>' : '') +
+        (fitsH || fitsV ? '<span class="tp-l' + (fitsV ? ' is-vert' : '') + '" title="' + esc(label) + '">' + (collapsed && fitsH && wpx > (label.length + 2) * 7.2 + 16 ? '⊞ ' : '') + esc(label) + '</span>' : '') +
         '</button>';
     }).join('');
 
