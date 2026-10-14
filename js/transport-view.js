@@ -40,7 +40,7 @@
   function bytesTxt(b) { return !bitMode() && Number.isInteger(b) ? n(b, 0) + ' byte' : n(b * 8, 0) + ' bit'; }
   /** Ô lớn hơn một byte (FlexE: khối 66B) → đếm theo khối, vẫn tính tổng theo bit. */
   function blockMode() { return !!(tv.fm && tv.fm.cellBits > 8); }
-  function unitWord() { return blockMode() ? 'khối ' + tv.fm.cellBits + 'B' : bitMode() ? 'bit' : 'byte'; }
+  function unitWord() { return T().cellWord(tv.fm ? tv.fm.cellBits : 8); }
   /** Chu kỳ khung: thập phân gọn (100,38 µs; 125 µs). */
   function periodTxt(us) { return n(us, Number.isInteger(us) ? 0 : 2) + ' µs'; }
   /** Nhãn/tên/mô tả hiệu lực của region theo khung đang chọn trong đa khung. */
@@ -256,9 +256,11 @@
     if (node.kind === 'tributary') {
       // các nhánh ghép xen cạnh nhau: luân phiên 3 sắc độ để mắt tách được
       var sib = node.parent >= 0 ? tv.fm.list[node.parent].children : tv.fm.list.filter(function (x) { return x.parent < 0; }).map(function (x) { return x.idx; });
-      var k = 0;
-      for (var i = 0; i < sib.length; i++) { if (sib[i] === node.idx) break; if (tv.fm.list[sib[i]].kind === 'tributary') k++; }
-      c += ' trib-' + (k % 3);
+      var k = 0, nTrib = 0;
+      for (var i = 0; i < sib.length; i++) { if (tv.fm.list[sib[i]].kind !== 'tributary') continue; if (sib[i] === node.idx) k = nTrib; nTrib++; }
+      // 4–8 nhánh anh em (vd 8 instance ghép xen của 800ZR): mỗi nhánh một sắc riêng để nhận ra cột của từng nhánh;
+      // nhiều hơn 8 (bể TS) hoặc ít hơn 4: luân phiên 3 sắc độ như cũ
+      c += nTrib >= 4 && nTrib <= 8 ? ' tribi-' + k : ' trib-' + (k % 3);
     }
     return c;
   }
@@ -297,7 +299,7 @@
 
     // thước cột
     var every = dim.cw < 6 ? 30 : dim.cw < 12 ? 10 : dim.cw < 20 ? 5 : 1;
-    var ruler = blockMode() ? '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ cột (mỗi ô là một khối ' + fm.cellBits + 'B)">h\\c</span>'
+    var ruler = blockMode() ? '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ cột (mỗi ô là một ' + unitWord() + ')">h\\c</span>'
       : bitMode() ? '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ bit (cột = vị trí bit trong hàng)">bit</span>'
       : '<span class="tg-corner" style="grid-row:1;grid-column:1" title="hàng \\ cột">h\\c</span>';
     dcols.forEach(function (d, i) {
@@ -347,7 +349,7 @@
     if (hint) {
       var bands = dcols.filter(function (d) { return d.band; }).length;
       var hasPtr = fm.list.some(function (x) { return x.kind === 'pointer'; });
-      hint.textContent = fm.rows + ' hàng × ' + fm.cols + (blockMode() ? ' khối ' + fm.cellBits + 'B' : bitMode() ? ' bit' : ' cột') + (bands ? ' · ' + bands + ' dải cột đang nén (bấm số cột ở thước để bung)' : '') +
+      hint.textContent = fm.rows + ' hàng × ' + fm.cols + (blockMode() ? ' ' + unitWord() : bitMode() ? ' bit' : ' cột') + (bands ? ' · ' + bands + ' dải cột đang nén (bấm số cột ở thước để bung)' : '') +
         ' · bấm khối ⊞ để bung' + (hasPtr ? ' · VC trong lưới vẽ ở vị trí cố định để dễ học (thực tế trôi theo con trỏ)' : '');
     }
     applyHl();
@@ -446,7 +448,7 @@
         [bitMode() ? 'Số bit' : 'Số byte', esc(bytesTxt(x.bytes) + ' mỗi khung (' + x.cells + ' ô)')],
         ['Tốc độ riêng', esc(T().fmtRate(x.kbps)) + ' <span class="muted">= ' + esc(x.cells + ' × ' + fm.cellBits + ' bit × ' + n(1e6 / tv.frame.periodUs, 2) + '/s') + '</span>'],
         rg.repeat ? ['Lặp ở STM-N', esc(rg.repeat)] : null,
-        rg.rect.step > 1 ? ['Ghép xen', esc('mỗi ' + rg.rect.step + ' cột lấy 1 cột (' + (blockMode() ? 'khối' : bitMode() ? 'bit' : 'byte') + '-interleave)')] : null
+        rg.rect.step > 1 ? ['Ghép xen', esc('mỗi ' + rg.rect.step + ' cột lấy 1 cột (' + (blockMode() ? unitWord() : bitMode() ? 'bit' : 'byte') + '-interleave)')] : null
       ]) +
       (e.desc ? '<p>' + esc(e.desc) + '</p>' : '') +
       (e.pf && rg.desc && rg.desc !== e.desc ? '<p class="muted">Chung: ' + esc(rg.desc) + '</p>' : '');

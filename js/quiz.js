@@ -24,7 +24,7 @@
     'ip-bits': 'Độ dài field', 'ip-offset': 'Vị trí field', 'ip-value': 'Giá trị field',
     'ip-hbytes': 'Độ dài header', 'ip-added': 'Header thêm vào', 'ip-role': 'Vai trò đóng gói',
     't-cell': 'Ô trong khung', 't-bits': 'Bit trong byte', 'u-rate': 'Tốc độ',
-    'u-max': 'Số nhánh tối đa', 'u-oh': 'Overhead bước ghép', 'u-ts': 'Tributary slot'
+    'u-max': 'Số nhánh tối đa', 'u-oh': 'Overhead bước ghép', 'u-ts': 'Tributary slot', 'u-baud': 'Ký hiệu & điều chế'
   };
 
   // ---------- số ngẫu nhiên theo seed ----------
@@ -70,7 +70,7 @@
     g = g || root;
     return {
       H: g.HEADERS || {}, S: Array.isArray(g.STACKS) ? g.STACKS.filter(function (s) { return s && s.id; }) : [],
-      F: g.TFRAMES || {}, M: g.TMUX || {}, LABS: Array.isArray(g.TLABS) ? g.TLABS : [],
+      F: g.TFRAMES || {}, M: g.TMUX || {}, LABS: Array.isArray(g.TLABS) ? g.TLABS : [], LINE: g.TLINE || null,
       EV: g.EthViz || null, TV: g.TransViz || null
     };
   }
@@ -418,7 +418,7 @@
       if (fm.errors && fm.errors.length) return;
       var leaves = fm.list.filter(function (x) { return !x.children.length; });
       var leafLabels = uniq(leaves.map(function (x) { return regionLabel(x.region); }));
-      var unitWord = f.grid.cellBits === 1 ? 'bit' : f.grid.cellBits === 8 ? 'ô (byte)' : 'ô (khối ' + f.grid.cellBits + 'B)';
+      var unitWord = f.grid.cellBits === 8 ? 'ô (byte)' : TV.cellWord ? TV.cellWord(f.grid.cellBits) : f.grid.cellBits === 1 ? 'bit' : 'ô (khối ' + f.grid.cellBits + 'B)';
       // (7) ô [hàng, cột] thuộc vùng nào — chỉ vùng lá, không perFrame, khung có ≥ 4 nhãn lá
       if (leafLabels.length >= 4) {
         leaves.forEach(function (x) {
@@ -490,6 +490,8 @@
     ids.forEach(function (id) { nameCnt[nm(id)] = (nameCnt[nm(id)] || 0) + 1; });
     var named = function (id) { return nameCnt[nm(id)] === 1; };
     var rateOf = function (id) { return L.unitKbps(M, id); };
+    /** Đơn vị có ODU nào nhận trực tiếp (vd 400GbE → ODUflex) — để không nói "mang vào OPUflex" với client chỉ đi qua ZR. */
+    var intoOdu = function (id) { return L.parentsOf(M, id).some(function (p) { return M[p].kind === 'odu'; }); };
     var topicPool = {};
     ids.forEach(function (id) { var t = unitTopic(D, id); (topicPool[t] = topicPool[t] || []).push(id); });
     var allRates = ids.map(rateOf).filter(function (k) { return k > 0; });
@@ -531,12 +533,17 @@
         // rateKbps của client có lineKbps là dòng 64B/66B mang qua OTN, KHÔNG phải tốc độ đường dây → hỏi đúng tên.
         // Không có lineKbps: chỉ gọi "đường dây" khi dữ liệu nói rõ tín hiệu vật lý (Gbaud/lane/LAN PHY), còn lại hỏi "danh định".
         var lineCoded = coded && u.lineKbps == null && /Gbaud|\blane\b|LAN PHY/.test(String(u.summary || ''));
-        var q = { prompt: coded && u.lineKbps != null
-            ? 'Tốc độ dòng mã 64B/66B (sau thích ứng, mang vào OPUflex) của ' + oname + ' là bao nhiêu?'
+        // Khung đường truyền (kind otu có lineKbps, vd 400ZR/800ZR): rateKbps là tốc độ khung VẼ trong lưới, không phải đường dây
+        var lineFrame = u.kind === 'otu' && u.lineKbps != null && u.frame && D.F[u.frame];
+        var q = { prompt: lineFrame
+            ? 'Tốc độ khung ' + oname + ' đúng như lưới khung trong mục Truyền dẫn (chỉ tính những gì vẽ trong lưới) là bao nhiêu?'
+            : coded && u.lineKbps != null
+            ? 'Tốc độ dòng mã 64B/66B' + (intoOdu(id) ? ' (sau thích ứng, mang vào OPUflex)' : '') + ' của ' + oname + ' là bao nhiêu?'
             : lineCoded
               ? 'Tốc độ đường dây (sau mã hoá đường dây) của ' + oname + ' là bao nhiêu?'
               : 'Tốc độ danh định của ' + oname + ' là bao nhiêu?',
-          explain: (u.summary || '') + (u.bytesPer125us != null ? ' (' + fmtNum(u.bytesPer125us, 3) + ' byte mỗi 125 µs × 64 kbit/s)' : ''),
+          explain: (u.summary || '') + (u.bytesPer125us != null ? ' (' + fmtNum(u.bytesPer125us, 3) + ' byte mỗi 125 µs × 64 kbit/s)' : '') +
+            (lineFrame ? ' Khung vẽ: ' + D.F[u.frame].name + ' = ' + ans + '; tốc độ đường dây (sau mọi FEC, ký hiệu căn khung, pilot) = ' + fmtRate(+u.lineKbps) + '.' : ''),
           objNames: [oname],
           open: openUnit(D, id, null), check: { unit: id } };
         return assemble(q, fmtRate(k), d, rng);
@@ -554,8 +561,10 @@
         var keep = function (v) { return v === k || !(isRoundRate(v) && Math.abs(v / k - 1) <= 0.02); };
         var pool = lines.concat(ids.map(function (o) { return M[o].lineKbps != null ? rateOf(o) : 0; }), allRates).filter(function (v) { return v > 0 && keep(v); });
         var d = numDistractors(k, lines.concat(ids.map(function (o) { return M[o].lineKbps != null ? rateOf(o) : 0; })).filter(function (v) { return v > 0 && keep(v); }), fmtRate, rng) || numDistractors(k, pool, fmtRate, rng);
-        var q = { prompt: 'Tốc độ đường dây của ' + oname + ' là bao nhiêu?',
-          explain: (u.summary || '') + ' Tốc độ đường dây ' + ans + '; dòng 64B/66B mang vào OPUflex là ' + fmtRate(rateOf(id)) + '.',
+        var isFrame = u.kind === 'otu';
+        var q = { prompt: isFrame ? 'Tốc độ bit đường dây (sau FEC, ký hiệu căn khung và pilot) của ' + oname + ' là bao nhiêu?' : 'Tốc độ đường dây của ' + oname + ' là bao nhiêu?',
+          explain: (u.summary || '') + ' Tốc độ đường dây ' + ans + '; ' +
+            (isFrame ? 'khung vẽ trong lưới là ' : intoOdu(id) ? 'dòng 64B/66B mang vào OPUflex là ' : 'dòng 64B/66B là ') + fmtRate(rateOf(id)) + '.',
           objNames: [oname], open: openUnit(D, id, null), check: { unit: id, line: true } };
         return assemble(q, ans, d, rng);
       } });
@@ -694,6 +703,63 @@
     return null;
   }
 
+  // ---------- mẫu câu "từ khung tới bước sóng" (TLINE) ----------
+  /**
+   * (12) tốc độ ký hiệu: cho tốc độ bit đường dây và số bit/ký hiệu, hỏi GBd (nhiễu: nhầm 4 bit/ký hiệu – chỉ một
+   * phân cực, nhầm 2/16 bit, GBd của chuỗi khác). (13) số bit mỗi ký hiệu của điều chế (một câu cho mỗi điều chế).
+   */
+  function lineTemplates(D, out) {
+    var TL = D.LINE, TV = D.TV;
+    if (!TL || !Array.isArray(TL.chains) || !TV) return;
+    var fmtG = function (v) { return fmtNum(v, 3) + ' GBd'; };
+    var allG = TL.chains.map(function (c) { var s = symStep(c); return s ? s.gbd : 0; }).filter(function (v) { return v > 0; });
+    var seenBps = {};
+    /** "DP-16QAM" → "16 điểm = 4 bit (2 bit I + 2 bit Q) mỗi phân cực × 2 phân cực = 8 bit". */
+    function qamExplain(mod, bps) {
+      var m = /(\d+)QAM/.exec(mod), pts = m ? +m[1] : 0, per = pts ? Math.round(Math.log(pts) / Math.LN2) : bps / 2;
+      return (pts ? mod + ': ' + pts + ' điểm chòm sao = ' + per + ' bit (' + per / 2 + ' bit I + ' + per / 2 + ' bit Q) mỗi phân cực; ' : '') +
+        '“DP” = 2 phân cực X, Y gửi cùng lúc → ' + bps + ' bit mỗi ký hiệu.';
+    }
+    function symStep(c) { return (c.steps || []).filter(function (s) { return s.kind === 'symbol' && s.gbd > 0 && s.bitsPerSymbol > 0; })[0]; }
+    function prevKbps(c, st) {
+      var i = c.steps.indexOf(st), k = null;
+      for (var j = 0; j < i; j++) if (c.steps[j].kbps > 0) k = c.steps[j].kbps;
+      return k;
+    }
+    TL.chains.forEach(function (c) {
+      var st = symStep(c);
+      if (!st) return;
+      var line = prevKbps(c, st);
+      if (!(line > 0)) return;
+      var cname = String(c.name || c.id).replace(/\s*\(.*\)\s*$/, '');
+      var mod = /DP-\d+QAM/.exec(String(st.formula || '') + ' ' + String(st.note || '') + ' ' + JSON.stringify(TL.compare || []));
+      var modTxt = mod ? mod[0] : 'điều chế';
+      var open = { kind: 'line', chain: c.id, label: 'Từ khung tới bước sóng – ' + cname };
+      out.push({ key: 'u-baud|' + c.id, topic: 'otn', type: 'u-baud', make: function (rng) {
+        var ans = fmtG(st.gbd), bps = st.bitsPerSymbol;
+        var pool = [line / (bps / 2) / 1e6, line / (bps * 2) / 1e6, line / 2 / 1e6].concat(allG);
+        var d = numDistractors(st.gbd, pool, fmtG, rng);
+        var q = { prompt: 'Đường dây ' + cname + ' chạy ' + fmtRate(line) + ', mỗi ký hiệu ' + modTxt + ' mang ' + bps + ' bit (cả hai phân cực). Tốc độ ký hiệu là bao nhiêu?',
+          explain: [fmtRate(line) + ' ÷ ' + bps + ' bit/ký hiệu = ' + ans, st.formula, st.note].filter(Boolean).map(function (s) {
+            return /[.!?…]$/.test(s) ? s : s + '.';
+          }).join(' '),
+          objNames: [cname], open: open, check: { chain: c.id, gbd: st.gbd } };
+        return assemble(q, ans, d, rng);
+      } });
+      if (mod && !seenBps[modTxt]) {
+        seenBps[modTxt] = true;
+        out.push({ key: 'u-bps|' + modTxt, topic: 'otn', type: 'u-baud', make: function (rng) {
+          var bps = st.bitsPerSymbol, ans = bps + ' bit';
+          var d = [bps / 4, bps / 2, bps * 2].map(function (v) { return v + ' bit'; });
+          var q = { prompt: 'Mỗi ký hiệu ' + modTxt + ' (hai phân cực X và Y) mang bao nhiêu bit?',
+            explain: qamExplain(modTxt, bps),
+            open: open, check: { chain: c.id, bps: bps } };
+          return assemble(q, ans, d, rng);
+        } });
+      }
+    });
+  }
+
   // ---------- pool & sinh bộ câu ----------
   var poolCache = { key: null, pool: null };
   function buildPool(D) {
@@ -701,6 +767,7 @@
     try { ipTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz ip', e); }
     try { frameTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz frame', e); }
     try { unitTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz unit', e); }
+    try { lineTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz line', e); }
     return out;
   }
   function poolOf(D) {
@@ -925,6 +992,7 @@
       if (o.kind === 'ip') { seedIp(o); hash = '#' + o.stack; }
       else if (o.kind === 't') { seedFrame(o); hash = '#t/' + o.frame; }
       else if (o.kind === 'lab') { seedLab(o); hash = '#lab/' + o.lab; }
+      else if (o.kind === 'line') hash = '#line/' + o.chain;
     } catch (e) { /* không ghi được trạng thái → vẫn mở trang */ }
     if (!hash || !window.AppNav.has(hash)) return;
     window.AppNav.go(hash);

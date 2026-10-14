@@ -27,7 +27,8 @@
   }
   function storeGet(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function storeSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* đầy/riêng tư */ } }
-  function nm(id) { return L().nameOf(MUX(), id); }
+  // tên ngắn trong phạm vi family (lab chỉ một family): "100GBASE-R (100GbE, 64B/66B)" → "100GBASE-R"; trùng tên ngắn cùng family thì giữ tên đầy đủ
+  function nm(id) { var l = L(); return (l.shortName || l.nameOf)(MUX(), id); }
   function n(x, d) { return TV().fmtNum(x, d == null ? 2 : d); }
   function pkey(p) { return p.join('.'); }
   /** Giá trị lựa chọn từ thuộc tính/ô chọn: 'ts' (bể TS) hoặc số. */
@@ -184,9 +185,9 @@
 
   // ---------- nhóm palette / nhóm gốc (suy từ kind, tên, phương án ánh xạ — không liệt kê từng id) ----------
   var PAL_GROUP_MIN = 14; // palette ngắn hơn: giữ danh sách phẳng
-  var PAL_ORDER = ['c-eth', 'c-fc', 'c-flexe', 'c-stm', 'c-other', 'odu', 'f-gfp', 'f-bmp', 'f-imp', 'f-flexe', 'f-other'];
+  var PAL_ORDER = ['c-eth', 'c-eth-hi', 'c-fc', 'c-flexe', 'c-stm', 'c-other', 'odu', 'f-gfp', 'f-bmp', 'f-imp', 'f-flexe', 'f-other'];
   var PAL_TITLE = {
-    'c-eth': 'Client Ethernet', 'c-fc': 'Client Fibre Channel', 'c-flexe': 'Client FlexE', 'c-stm': 'Client SDH (STM-N trong OTN)', 'c-other': 'Client khác',
+    'c-eth': 'Client Ethernet < 100G', 'c-eth-hi': 'Client Ethernet ≥ 100G', 'c-fc': 'Client Fibre Channel', 'c-flexe': 'Client FlexE', 'c-stm': 'Client SDH (STM-N trong OTN)', 'c-other': 'Client khác',
     odu: 'ODUk (tốc độ cố định)', 'f-gfp': 'ODUflex ánh xạ GFP-F', 'f-bmp': 'ODUflex ánh xạ BMP', 'f-imp': 'ODUflex ánh xạ IMP (Idle)', 'f-flexe': 'ODUflex FlexE-aware (BGMP)', 'f-other': 'ODUflex khác'
   };
   /** Khoá nhóm của một đơn vị palette. */
@@ -195,7 +196,7 @@
     if (u.kind !== 'odu' && (u.kind === 'client' || !(u.accepts && u.accepts.length))) {
       if (u.kind === 'stm' || /^stm/i.test(name)) return 'c-stm';
       if (/FlexE/i.test(tag)) return 'c-flexe';
-      if (/GbE|Ethernet|BASE-/i.test(tag)) return 'c-eth';
+      if (/GbE|Ethernet|BASE-/i.test(tag)) return (+u.rateKbps || 0) >= 1e8 ? 'c-eth-hi' : 'c-eth';
       if (/^FC|Fibre/i.test(name)) return 'c-fc';
       return 'c-other';
     }
@@ -225,12 +226,14 @@
     return keys.map(function (k) { return by[k]; });
   }
   /** Nhóm khung đích (OTUk / OTUCn / FlexO…): theo tiền tố chữ của tên; chỉ nhóm khi có nhiều gốc và ≥ 2 tiền tố. */
-  var ROOT_TITLE = { OTU: 'OTUk', OTUC: 'OTUCn', FlexO: 'FlexO-x' };
+  var ROOT_TITLE = { OTU: 'OTUk', OTUC: 'OTUCn', FlexO: 'FlexO-x', ZR: 'ZR (OIF)' };
   function rootGroups(roots) {
     if (roots.length <= 8) return [];
     var by = {}, order = [];
     roots.forEach(function (r) {
-      var pre = String(MUX()[r].name || r).match(/^[A-Za-z]+/);
+      // tiền tố chữ đầu tên (OTU, OTUC, FlexO); tên bắt đầu bằng số ("400ZR", "800ZR") thì lấy phần chữ ngay sau số
+      var nmr = String(MUX()[r].name || r), pre = nmr.match(/^[A-Za-z]+/) || nmr.match(/^\d+([A-Za-z]+)/);
+      if (pre && pre[1]) pre = [pre[1]];
       var k = pre ? pre[0] : r;
       if (!by[k]) { by[k] = { title: ROOT_TITLE[k] || k, ids: [] }; order.push(k); }
       by[k].ids.push(r);

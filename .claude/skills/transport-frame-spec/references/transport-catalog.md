@@ -20,7 +20,36 @@ Id cố định để transport-expert và frontend-dev làm song song. Thêm m�
 | GD10 | Phản hồi người dùng 2026-10-12: (a) mô phỏng trực quan các cách ánh xạ AMP/BMP/GMP/GFP-F (+ IMP) – thấy từng byte client, byte chèn, Cm/JC, idle; (b) máy tính: giới hạn L theo chuẩn (64–1518/1522, jumbo tuỳ thiết bị ghi rõ), payload kẹp theo MTU đường đi, gợi ý MTU/MSS; kịch bản cổng 1G khai báo 150M (VCAT/ODUflex + policer/shaper, buffer) | xong 2026-10-13 (review G.709/G.742/RFC/MEF: ĐẠT cả 2 file dữ liệu, mục NHỎ đã sửa; QA ĐẠT) |
 | GD10b | Mô phỏng 'nhìn là thấy' (phản hồi 2026-10-13: lưới thật 15 232 byte đổi 1 byte/khung nên trông đứng yên): chế độ Minh hoạ (khung đồ chơi vài chục byte, ppm phóng đại, ghi rõ không đúng tỉ lệ) + chế độ Thực tế; băng chuyền byte client → FIFO (thanh mức đệm) → lấp khung theo thứ tự truyền, ô chèn nhấp nháy; nhật ký sự kiện từng khung; so sánh AMP/BMP/GMP cùng client | xong 2026-10-13 (test sim 154 OK; Chrome: ảnh khung n và n+3 khác nhau ở cả 10 kịch bản) |
 | GD11 | OTN 200G–800G: OTUC5/OTUC8 (n tuỳ ý trong máy tính); ODUflex(BMP) 200GbE/400GbE (§17.13, PT 0x31/0x32, 40/80 TS 5G); ODUflex(IMP) 25GbE/FlexE client (§17.11); lab "OTUC8 = 2×400GbE", "400GbE + 4×100GbE" | xong 2026-10-13 (review G.709 06/2020: 1 SAI tốc độ đường dây 50/200/400GbE → lineKbps, đã sửa; test + Chrome ĐẠT) |
-| GD12 | Giao diện đường truyền: FlexO 200/400/800G (G.709.x), OIF 400ZR/800ZR, 800GbE vào OTN (G.709 bản mới – cần tải nguồn), trang khung → FEC → DSP coherent → bước sóng | chờ |
+| GD12 | Giao diện đường truyền: FlexO 200/400/800G (G.709.x), OIF 400ZR/800ZR, 800GbE vào OTN (G.709 bản mới – cần tải nguồn), trang khung → FEC → DSP coherent → bước sóng | xong 2026-10-14 (nguồn OIF 400ZR 2.0 + 800ZR 1.0; G.709.3/.6 không tải được → CHƯA XÁC MINH; review: 1 SAI mô tả AM, đã sửa; test + Chrome ĐẠT) |
+
+## GD12 — Giao diện đường truyền coherent: OIF 400ZR / 800ZR (+ FlexO G.709.1) — trang "khung → FEC → DSP → bước sóng"
+
+Nguồn (scratchpad gd12/): `OIF-400ZR-02.0.txt/.pdf` (IA 400ZR 2.0), `OIF-800ZR-01.0.txt/.pdf` (IA 800ZR 1.0, dùng FlexO-8e / FlexO-8e-DO…),
+g709new/g7091.txt (G.709.1 03/2024 FlexO-x short reach). KHÔNG có văn bản G.709.3 / G.709.6 (ITU trả "Document Not Found"; chỉ có tóm tắt:
+G.709.6 = FlexO B400G long-reach 400G/800G, dùng G.709.1 + FEC của G.709.3) → mọi chi tiết thuộc G.709.3/.6 ghi CHƯA XÁC MINH.
+800GbE vào OTN (G.709 bản sau 2020): không có nguồn → không làm.
+
+### Frame (TFRAMES), family `otn`, category "Giao diện đường truyền (ZR)"
+| id | Lưới | Ghi chú |
+| --- | --- | --- |
+| `zr400` | khung 400ZR theo IA 400ZR (Hình 8/9/10: hàng × cột, vùng AM/OH/payload/FEC parity cột 10281–10970 …; cellBits phù hợp) | đa khung nếu có; bitFields OH chính; desc: 400GBASE-R → 400ZR (chuyển mã 257B, căn khung), CFEC (cấu trúc mã, tỉ lệ), DP-16QAM, tốc độ ký hiệu |
+| `zr800` | khung 800ZR / 100G ZR instance theo IA 800ZR (Hình 5, 10…) | FlexO-8e; oFEC (Hình 15–19); DP-16QAM |
+Không vẽ được chính xác → khung tóm lược + desc, ghi rõ.
+
+### Unit (TMUX), family `otn`
+| id | kind | rateKbps | accepts |
+| --- | --- | --- | --- |
+| `zr400` | otu (hoặc kind mới `line` nếu cần – báo orchestrator) | tốc độ đường dây 400ZR (sau FEC) theo IA | 1 × 400gbe (+ overhead = khung + FEC); ghi tốc độ ký hiệu GBd, điều chế |
+| `zr800` | như trên | tốc độ đường dây 800ZR theo IA | client theo IA 800ZR (800GbE? 2 × 400GbE? 8 × 100G ZR instance?) – chỉ thêm client có thật trong TMUX hoặc thêm unit client mới có nguồn (vd `800gbe` 800GBASE-R – tốc độ theo IA/802.3df nếu IA nêu) |
+| `800gbe` | client | 825 000 000 (64B/66B, quy ước như 400gbe); `lineKbps` 850 000 000 suy từ fclient IA 800ZR (× 544/514 × 20480/20479) – CHƯA XÁC MINH với IEEE 802.3df | — |
+
+### Trang mới `#line` (frontend): "Từ khung tới bước sóng"
+Chuỗi các bước có số liệu từ dữ liệu: client (400GBASE-R 425G PMA / 412,5G 64B/66B) → khung ZR (+OH, tỉ lệ) → FEC (CFEC/oFEC, tỉ lệ mã, tốc độ sau FEC)
+→ ký hiệu DP-16QAM (bit/ký hiệu = 4 × 2 phân cực) → tốc độ ký hiệu (GBd) → bước sóng (lưới DWDM, độ rộng kênh nếu IA nêu: 75 GHz/150 GHz…).
+Bảng so sánh 400ZR / 800ZR (+ cột "OTUCn/FlexO qua transponder" mô tả). Dữ liệu cho trang này đặt trong `data/transport-line.js` → `window.TLINE` (transport-expert soạn, có nguồn từng số).
+
+### Lặt vặt
+Đổi tên dễ nhầm trong palette Client Ethernet: "10 Gigabit Ethernet" (khung MAC, GFP-F) / "10GbE" (10GBASE-R 64B/66B) → tên rõ kiểu "10GbE (khung MAC, GFP-F)" và "10GBASE-R (64B/66B, 10,3125G)"; tương tự 1G/40G nếu cùng vấn đề.
 
 ## GD11 — OTN 200G–800G: OTUC5/OTUC8, ODUflex(BMP) 25/50/200/400GbE, ODUflex(IMP) — G.709 (06/2020) §17.11, §17.13, §20; Bảng 7-2/7-3/7-9, 17-16, 15-9
 

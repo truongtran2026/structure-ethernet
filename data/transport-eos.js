@@ -146,7 +146,7 @@ window.TLABS = window.TLABS || [];
 
   [["eth-10m-gfpf", "Ethernet 10 Mbit/s (GFP-F)", 10000, "10BASE-T"],
    ["eth-100m-gfpf", "Fast Ethernet 100 Mbit/s (GFP-F)", 100000, "100BASE-TX/FX"],
-   ["eth-1g-gfpf", "Gigabit Ethernet (GFP-F)", 1000000, "1000BASE-X/T"]].forEach(function (c, i) {
+   ["eth-1g-gfpf", "1GbE khung MAC (GFP-F)", 1000000, "1000BASE-X/T"]].forEach(function (c, i) {
     U({ id: c[0], name: c[1], kind: "client", level: 1 + i / 10, rateKbps: c[2],
       standard: "IEEE 802.3; ITU-T G.7041 §7.1 (GFP-F khung MAC)",
       summary: "Cổng " + c[3] + " " + nf(c[2]) + " kbit/s chỉ chở khung MAC qua GFP-F (không mang preamble/IFG).",
@@ -156,9 +156,9 @@ window.TLABS = window.TLABS || [];
 
   // GD5: Ethernet 10G/40G chỉ mang khung MAC qua GFP-F – đích là OTN (OPU2/OPU3 trực tiếp hoặc ODUflex(GFP)), xem data/transport-otn.js.
   // GFP_NOTE ở trên nói về VCG SDH nên không gắn vào đây; tỉ lệ 1526/1538 giữ nguyên.
-  [["eth-10g-gfpf", "10 Gigabit Ethernet (GFP-F)", 10000000, "10GBASE-R", 2,
+  [["eth-10g-gfpf", "10GbE khung MAC (GFP-F)", 10000000, "10GBASE-R", 2,
     "Đích OTN: GFP-F thẳng vào OPU2 (≈ 9 995 277 kbit/s, PT 0x05 – G.709 §17.4, G.Sup43 §6.2) hoặc vào ODUflex(GFP) 8 TS (8 × ODU2.ts, OPUflex ≈ 9 951 604 kbit/s; ±100 ppm: 9 950 609 – 9 952 599). Lưu ý khung jumbo 9618 B: cần ≈ 9 987 549 kbit/s (+100 ppm: 9 988 548) > OPUflex 8 TS nên ODUflex(GFP) 8 TS KHÔNG đủ 10GbE chạy kín line-rate khi khung lớn hơn ≈ 2,46 KB; GFP-F thẳng vào OPU2 (9 995 277) vẫn đủ (G.Sup43 §6.2). Khác client 10GbE CBR (10,3125 Gbit/s, cả luồng 64B/66B) chỉ vừa OPU2e. Qua SDH: C-4-64c chỉ 9 584 640 kbit/s, thiếu khi cổng chạy kín khung 1518 B (≈ 9 921 977) – lab SDH không dùng client này."],
-   ["eth-40g-gfpf", "40 Gigabit Ethernet (GFP-F)", 40000000, "40GBASE-R", 3,
+   ["eth-40g-gfpf", "40GbE khung MAC (GFP-F)", 40000000, "40GBASE-R", 3,
     "Đích OTN: GFP-F thẳng vào OPU3 (≈ 40 150 519 kbit/s, PT 0x05) hoặc vào ODUflex(GFP) 32 TS (32 × ODU3.ts, OPUflex ≈ 39 975 089 kbit/s) – không vào được OPU2. Khác client 40GbE CBR phải chuyển mã 1024B/1027B rồi GMP vào OPU3 (PT 0x07)."]].forEach(function (c) {
     U({ id: c[0], name: c[1], kind: "client", level: c[4], rateKbps: c[2],
       standard: "IEEE 802.3; ITU-T G.7041 §7.1 (GFP-F khung MAC); ITU-T G.709 (02/2012) §17.4",

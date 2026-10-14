@@ -251,3 +251,50 @@ Bất biến (script tự kiểm): client/server/frames tồn tại; `clientKbps
 `perFrame.min ≤ nom ≤ max`; `perFrame.nom = clientKbps × periodUs / 1000 / entityBits` (trừ BMP, GFP, PDH); biên ppm nằm trong
 `carry.min…max` (IMP: lệch < 2 khối); GMP: `CmMin ≤ cmNom ≤ CmMax`, `CmMin = floor(cmMin)`, `CmMax = ceil(cmMax)`, `m = 8M`,
 ô GMP × đa khung = P × M, sigma-delta (j × Cm) mod P < Cm cho đúng Cm vị trí dữ liệu.
+
+## 6. Giao diện đường truyền (GD12) — `data/transport-line.js`
+
+OIF 400ZR (IA 2.0) và 800ZR (IA 1.0): Ethernet đi thẳng vào khung đường truyền coherent, không qua ODU/OTU.
+File nạp độc lập (không đọc TMUX của file khác lúc nạp); lab `otn` (transport-otn.js) dùng `zr400`, `zr800`, `800gbe`.
+
+### Frame (TFRAMES), family `otn`, category "Giao diện đường truyền (ZR)"
+| id | grid | Ghi chú |
+| --- | --- | --- |
+| `zr400` | 256 × 1097, **cellBits 10** (= 256 × 10 970 bit) | ô 10 bit = đơn vị ghép xen 10b của AM/OH (IA Hình 11, 14). Hàng 1: AM ô 0–191 (16 lane `am0…am15`: `rect {c: i, w: 12, step: 16}`), PAD 192–383, OH 384–511 (4 instance `{c: 384 + k, w: 32, step: 4}`; chỉ OH #1 có bitFields), đệm 20 bit 512–513, tải 514–1027; hàng 2–256 tải ô 0–1027; cột ô 1028–1096 parity C-FEC (kind `fec`). `multiframe.frames = 4` (đa khung GMP); `perFrame` của OH #1 đổi byte 3–6 (GID/PID ↔ JC4·JC1, JC5·JC2, JC6·JC3). `rateKbps` = khung CÓ parity staircase |
+| `zr800` | 514 × 80, **cellBits 128** (= 41 120 khối 128 bit = 512 × 10 280 bit của IA) | lưới theo KHỐI ghép xen: cột c thuộc instance IID (c mod 8) + 1. Hàng 1 = 80 khối OH (`oh-i1…oh-i8`: `{c: iid − 1, w: 10, step: 8}`, bitFields 1280 bit AM/EOH/BOH, `perFrame` 8 khung BOH); hàng 2 cột 0–7 = khối tải đầu (PAD 5 bit + 123 bit); còn lại tải chia `tributary` theo instance (step 8). `rateKbps` = khung CHƯA có OFEC |
+
+Ô `cellBits` > 8 hợp lệ (đã có 66 ở FlexE). bitFields được phép vắt qua biên ô (tổng = số ô × cellBits).
+
+### Unit (TMUX), family `otn`
+| id | kind | rateKbps | lineKbps | accepts |
+| --- | --- | --- | --- | --- |
+| `800gbe` | client | 800 000 000 × 66/64 | 850 000 000 (suy từ fclient IA 800ZR × 544/514 × 20480/20479) | – |
+| `zr400` | `otu` | khung zr400 có parity = 478 750 000 × 28/29 × 119/128 × 5485/5488 | 478 750 000 (đường dây) | 1 × `400gbe`, `fit: "le"`, `carriedKbps` = 425 000 000 × 514/544 × 20479/20480, `overhead.kbps` = rate − tải (511/512 × khung không parity) |
+| `zr800` | `otu` | 2 × khung 400ZR không parity = 8 × 100 622 438,327 | 945 626 804,824 | 4 phương án thay nhau (không trộn): 8 × `100gbe`, 4 × `200gbe`, 2 × `400gbe`, 1 × `800gbe`; `fit: "le"`, `carriedKbps` = tốc độ sau bỏ FEC + AM |
+
+Quy ước ZR: `rateKbps` = tốc độ khung **vẽ** trong TFRAMES (validator §4.6 bắt bằng `frame.rateKbps`), `lineKbps` = tốc độ bit trên
+sợi sau mọi FEC/FAW/pilot (= 8 × tốc độ ký hiệu DP-16QAM). Không cần kind mới (`otu` = khung đường truyền mang client).
+
+### `window.TLINE` (trang `#line` "Từ khung tới bước sóng")
+```js
+window.TLINE = {
+  standard, intro,
+  chains: [{
+    id: "400zr" | "800zr", name, unit: "zr400", frame: "zr400", client: "400gbe", standard, summary,
+    steps: [{
+      id, kind: "client" | "adapt" | "frame" | "fec" | "dsp" | "symbol" | "optic",
+      label,                         // tên bước (VN)
+      kbps,                          // tốc độ SAU bước (kbit/s) – bước đầu là gốc
+      ratio: [num, den],             // kbps = kbps bước trước × num/den (mọi bước có kbps trừ bước đầu)
+      gbd, bitsPerSymbol,            // chỉ kind "symbol": gbd = kbps bước trước / bitsPerSymbol / 1e6
+      ghz,                           // chỉ kind "optic": độ rộng kênh DWDM chính (GHz)
+      unit?, frame?,                 // id TMUX/TFRAMES để nút "Xem"
+      formula, standard, note        // công thức tính lại được + § / Bảng / Hình của IA
+    }]
+  }],
+  compareCols: [{ id: "400zr" | "800zr" | "flexo", label }],
+  compare: [{ label, "400zr": "…", "800zr": "…", flexo: "…", source }]   // ô "CHƯA XÁC MINH" = chưa có văn bản G.709.3/.6
+};
+```
+Validator transport không đọc TLINE — kiểm bằng `_workspace/K1_transport-expert_tline-check.cjs` (chuỗi tỉ lệ, GBd, khớp
+IA 400ZR Bảng 16 và 800ZR Bảng 20, id tồn tại, compare đủ cột).

@@ -33,6 +33,18 @@
     return fmtNum(kbps, 3) + ' kbit/s';
   }
 
+  /**
+   * Tên đơn vị ô lưới theo cellBits: 1 → "bit", 8 → "byte", 66 → "khối 66B" (khối 64B/66B),
+   * ≥ 64 → "khối N bit" (vd khối ghép xen 128 bit), còn lại → "ô N bit" (vd ô 10 bit).
+   */
+  function cellWord(cellBits) {
+    var b = +cellBits || 8;
+    if (b === 1) return 'bit';
+    if (b === 8) return 'byte';
+    if (b === 66) return 'khối 66B';
+    return (b >= 64 ? 'khối ' : 'ô ') + b + ' bit';
+  }
+
   // ---------- khung 2 chiều ----------
   function rectCells(rect, cols) {
     var out = [], step = rect.step || 1;
@@ -997,7 +1009,19 @@
       return 'ghép ' + slotWord(MUX, unitId) + ' (' + slotOpts(MUX, unitId).map(function (s) { return nameOf(MUX, s.a.of); }).join(', ') + ')';
     }
     var a = MUX[unitId].accepts[c];
-    return a.count + '×' + nameOf(MUX, a.of);
+    return a.count + '×' + shortName(MUX, a.of);
+  }
+  /**
+   * Tên ngắn trong phạm vi một family: bỏ chú thích trong ngoặc nếu không đơn vị CÙNG family nào trùng tên ngắn
+   * ("100GBASE-R (100GbE, 64B/66B)" → "100GBASE-R" trong OTN dù FlexE có "100GBASE-R (FlexE)"). Dùng cho câu
+   * thông báo trong một lab (một family); nameOf vẫn phân biệt toàn cục (quiz, máy tính).
+   */
+  function shortName(MUX, id) {
+    var u = MUX[id];
+    if (!u) return id;
+    var full = String(u.name), short = stripNote(full);
+    if (short === full) return full;
+    return shortCount(MUX, (u.family || '') + '\u0001' + short) > 1 ? full : short;
   }
   function acceptsText(MUX, unitId) {
     return choices(MUX, unitId).map(function (c) { return choiceText(MUX, unitId, c); }).join(' hoặc ');
@@ -1017,7 +1041,10 @@
     var c = shortCache && shortCache.get(MUX);
     if (!c) {
       c = { by: {} };
-      Object.keys(MUX).forEach(function (k) { var s = stripNote(MUX[k].name); c.by[s] = (c.by[s] || 0) + 1; });
+      Object.keys(MUX).forEach(function (k) {
+        var s = stripNote(MUX[k].name), fs = (MUX[k].family || '') + '\u0001' + s; // khoá thứ hai: theo family (shortName)
+        c.by[s] = (c.by[s] || 0) + 1; c.by[fs] = (c.by[fs] || 0) + 1;
+      });
       if (shortCache) shortCache.set(MUX, c);
     }
     return c.by[short] || 0;
@@ -1263,8 +1290,9 @@
       if (b) {
         var alt = choices(MUX, b.u).filter(function (c) { return optReaches(MUX, b.u, c, X); })
           .map(function (c) { return choiceText(MUX, b.u, c); });
-        return (b === node ? '' : un + ' không còn chỗ cho ' + xn + ': ') + nameOf(MUX, b.u) + ' đang dùng phương án ' +
-          choiceText(MUX, b.u, b.opt) + '; ' + xn + ' cần ' + alt.join(' hoặc ') +
+        var xs = shortName(MUX, X);
+        return (b === node ? '' : un + ' không còn chỗ cho ' + xs + ': ') + shortName(MUX, b.u) + ' đang dùng phương án ' +
+          choiceText(MUX, b.u, b.opt) + '; ' + xs + ' cần ' + alt.join(' hoặc ') +
           ' — đổi phương án để thả.';
       }
       return un + ' đã đầy — không còn chỗ cho ' + xn + '.';
@@ -1626,7 +1654,7 @@
   var api = {
     slotWord: slotWord,
     KIND_LABEL: KIND_LABEL, PAYLOAD_KINDS: PAYLOAD_KINDS,
-    fmtNum: fmtNum, fmtRate: fmtRate, rectCells: rectCells, rectText: rectText,
+    fmtNum: fmtNum, fmtRate: fmtRate, cellWord: cellWord, rectCells: rectCells, rectText: rectText,
     buildFrame: buildFrame, ancestry: ancestry, displayMap: displayMap, displayCells: displayCells,
     columnRuns: columnRuns, mergePieces: mergePieces, regionKbps: regionKbps,
     perFrameEntry: perFrameEntry, effRegion: effRegion, perFrameCount: perFrameCount,
@@ -1636,7 +1664,7 @@
       newNode: newNode, newRoot: newRoot, getNode: getNode,
       slotUnit: slotUnit, setOption: setOption, instantiate: instantiate, remove: remove, place: place,
       fill: fill, maxCount: maxCount, capacityNow: capacityNow, counts: counts, account: account,
-      pathDown: pathDown, stepsUp: stepsUp, stepsUpVcg: stepsUpVcg, explainReject: explainReject, acceptsText: acceptsText, nameOf: nameOf, parentsOf: parentsOf,
+      pathDown: pathDown, stepsUp: stepsUp, stepsUpVcg: stepsUpVcg, explainReject: explainReject, acceptsText: acceptsText, nameOf: nameOf, shortName: shortName, parentsOf: parentsOf,
       // bể tributary slot (OTN)
       isTs: isTs, chosen: chosen, choices: choices, choiceText: choiceText, optObj: optObj, slotOpts: slotOpts, hasPool: hasPool,
       slotWord: slotWord, poolInfo: poolInfo, maxCountNested: maxCountNested, portsBinding: portsBinding, maxPorts: maxPorts, portsFull: portsFull, portsLeft: portsLeft, effCount: effCount, slotOptFor: slotOptFor, tsFree: tsFree, tsUsed: tsUsed, childRate: childRate,

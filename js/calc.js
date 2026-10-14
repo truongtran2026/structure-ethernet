@@ -541,12 +541,27 @@
     save();
   }
 
+  /** Bước "ký hiệu" của chuỗi TLINE có unit = id (trang #line) – để ghi GBd cạnh tốc độ đường dây. */
+  function lineSymbol(id) {
+    var TL = root.TLINE, hit = null;
+    ((TL && TL.chains) || []).forEach(function (c) {
+      if (hit || c.unit !== id) return;
+      hit = (c.steps || []).filter(function (s) { return s.kind === 'symbol' && s.gbd > 0; })[0] || null;
+      if (hit) hit = { gbd: hit.gbd, bitsPerSymbol: hit.bitsPerSymbol, chain: c.id };
+    });
+    return hit;
+  }
+
   function renderUnit() {
     var M = MUX(), info = unitInfo(M, root.TFRAMES || {}, cv.st.unit);
     if (!info) return '<p class="muted">Chọn một đơn vị.</p>';
     // lineKbps (nếu có) ≠ rateKbps: rateKbps là dòng 64B/66B mang vào OTN, lineKbps mới là tốc độ đường dây
-    var cards = (info.lineKbps ? stat('Tốc độ đường dây', esc(rate(info.lineKbps)), esc(n(info.lineKbps, 3)) + ' kbit/s') : '') +
-      stat(info.lineKbps ? 'Dòng 64B/66B mang vào OTN' : 'Tốc độ', esc(rate(info.kbps)), esc(n(info.kbps, 3)) + ' kbit/s') +
+    // khung đường truyền (kind otu có lineKbps, vd 400ZR/800ZR): rateKbps là tốc độ khung vẽ trong lưới, lineKbps sau mọi FEC/ký hiệu căn khung/pilot
+    var lineFrame = info.lineKbps && info.kind === 'otu';
+    var sym = lineSymbol(cv.st.unit);
+    var cards = (info.lineKbps ? stat('Tốc độ đường dây', esc(rate(info.lineKbps)), esc(n(info.lineKbps, 3)) + ' kbit/s' +
+        (sym ? ' · ' + esc(n(sym.gbd, 3)) + ' GBd × ' + sym.bitsPerSymbol + ' bit/ký hiệu' : '')) : '') +
+      stat(lineFrame ? 'Khung (như lưới khung)' : info.lineKbps ? 'Dòng 64B/66B' : 'Tốc độ', esc(rate(info.kbps)), esc(n(info.kbps, 3)) + ' kbit/s') +
       (info.bytes != null ? stat('Byte mỗi 125 µs', esc(n(info.bytes, 3)), '× 64 kbit/s = tốc độ') : '');
     if (info.frame) {
       var fb = info.frame.bits / 8;
@@ -557,7 +572,8 @@
     if (info.pool) cards += info.kind === 'flexe' ? stat('Khe lịch', esc(info.pool.n + ' khe'), esc(rate(info.pool.kbps)) + ' mỗi khe')
       : stat('Tributary slot', esc(info.pool.n + ' TS'), esc(rate(info.pool.kbps)) + ' mỗi TS');
     var html = '<div class="stats">' + cards + '</div>' +
-      (info.summary ? '<p class="note calc-note">' + esc(info.summary) + '</p>' : '');
+      (info.summary ? '<p class="note calc-note">' + esc(info.summary) + '</p>' : '') +
+      (sym ? '<p><a class="btn-ghost btn-link" href="#line/' + esc(sym.chain) + '">〰 Xem từng bước từ khung tới bước sóng</a></p>' : '');
     var ch = chains(M, root.TLABS || [], cv.st.unit);
     if (!ch.length) return html + '<p class="muted">Không có chuỗi ghép từ ' + esc(info.name) + ' lên khung đích nào của các phòng thí nghiệm' + (M[cv.st.unit].accepts && M[cv.st.unit].accepts.length ? ' (đây là đơn vị chứa — xem mục 2).' : '.') + '</p>';
     html += '<h3 class="calc-h3">Chuỗi ghép lên khung đích (' + ch.length + ')</h3>';

@@ -3,9 +3,9 @@
  *  - thanh bên trái dạng cây: IP / Ethernet · Truyền dẫn (PDH/SDH/OTN) · Phòng thí nghiệm ghép kênh;
  *    thu gọn/bung từng mảng/nhóm, LƯU trạng thái + mục đang xem (localStorage) để mở lại đúng như cũ;
  *  - ô tìm kiếm lọc toàn cây (tự bung nhóm có kết quả, không ghi đè trạng thái đã lưu);
- *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>, #quiz/<chủ đề>, #calc, #sim/<kịch bản>;
+ *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>, #quiz/<chủ đề>, #calc, #sim/<kịch bản>, #line/<chuỗi>;
  *  - giao diện sáng/tối, nút menu trên di động.
- * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab, window.QuizView, window.CalcView, window.MapSimView — mỗi view có init/show/hide.
+ * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab, window.QuizView, window.CalcView, window.MapSimView, window.LineView — mỗi view có init/show/hide.
  */
 (function () {
   'use strict';
@@ -19,7 +19,7 @@
     otn: { name: 'OTN', hint: 'Mạng truyền tải quang (OTUk/ODUk)', order: 3 },
     flexe: { name: 'FlexE', hint: 'Flexible Ethernet (OIF FlexE IA): instance 100G, khe lịch 5G', order: 4 }
   };
-  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc', sim: 'view-sim' };
+  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc', sim: 'view-sim', line: 'view-line' };
   var APP_NAME = 'Frame Structure';
 
   var nav = { domains: [], items: {}, route: null, query: '', store: { open: {}, last: null, scroll: 0 }, theme: 'auto' };
@@ -42,7 +42,7 @@
     var s = decodeURIComponent(String(h || '').replace(/^#/, ''));
     if (!s) return null;
     if (s === 'calc') return { view: 'calc', id: 'calc' };
-    var m = /^(t|lab|quiz|sim)\/(.+)$/.exec(s);
+    var m = /^(t|lab|quiz|sim|line)\/(.+)$/.exec(s);
     return m ? { view: m[1], id: m[2] } : { view: 'ip', id: s };
   }
   function hashOf(r) { if (r.view === 'calc') return '#calc'; return '#' + (r.view === 'ip' ? '' : r.view + '/') + encodeURIComponent(r.id).replace(/%2F/g, '/'); }
@@ -94,7 +94,7 @@
     if (!prev || keyOf(prev) !== keyOf(r)) window.scrollTo(0, 0);
   }
 
-  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab, quiz: window.QuizView, calc: window.CalcView, sim: window.MapSimView }[name]; }
+  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab, quiz: window.QuizView, calc: window.CalcView, sim: window.MapSimView, line: window.LineView }[name]; }
   function showContainer(view) {
     Object.keys(CONTAINER).forEach(function (k) {
       var el = document.getElementById(CONTAINER[k]);
@@ -171,6 +171,15 @@
         items: labs.map(function (l) {
           return addItem({ view: 'lab', id: l.id }, l.name || l.id, (l.family || '').toUpperCase(),
             [l.id, l.name, l.intro, l.family].concat(l.roots || [], l.palette || []).join(' '), l.intro);
+        }) });
+    }
+    // Từ khung tới bước sóng (TLINE)
+    var lines = [];
+    if (window.LineView) { try { lines = window.LineView.items() || []; } catch (e) { lines = []; } }
+    if (lines.length) {
+      nav.domains.push({ key: 'd:line', name: 'Từ khung tới bước sóng', icon: '〰', count: lines.length,
+        items: lines.map(function (x) {
+          return addItem({ view: 'line', id: x.id }, x.name, '', 'từ khung tới bước sóng giao diện đường truyền coherent fec gbd ký hiệu điều chế dwdm ghz ' + x.id + ' ' + x.name + ' ' + (x.hint || ''), x.hint || '');
         }) });
     }
     // Mô phỏng ánh xạ (TMAPS)
@@ -323,7 +332,7 @@
       nav.store.scroll = +saved.scroll || 0;
     }
     if (!window.IPView) { showFatal('Không nạp được <code>js/app.js</code>.'); return; }
-    ['IPView', 'TransView', 'MuxLab', 'QuizView', 'CalcView', 'MapSimView'].forEach(function (name) {
+    ['IPView', 'TransView', 'MuxLab', 'QuizView', 'CalcView', 'MapSimView', 'LineView'].forEach(function (name) {
       var v = window[name];
       if (!v || !v.init) return;
       try { v.init(); } catch (e) {
