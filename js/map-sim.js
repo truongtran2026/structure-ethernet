@@ -223,6 +223,15 @@
   // ---------- khung "đồ chơi" (chế độ Minh hoạ) ----------
   /** Kích thước khung đồ chơi theo phương pháp: [hàng, cột] vùng tải. */
   var TOY_DIM = { 'AMP': [4, 16], 'BMP': [4, 16], 'GMP': [4, 16], 'GFP-F': [4, 24], 'IMP': [5, 8], 'PDH-BIT': [4, 32] };
+  /** Các cỡ khung đồ chơi cho người dùng chọn ([hàng, cột]); cỡ mặc định là TOY_DIM. */
+  var TOY_DIMS = { 'AMP': [[4, 16], [4, 24], [4, 32]], 'BMP': [[4, 16], [4, 24], [4, 32]], 'GMP': [[4, 16], [4, 24], [4, 32]],
+    'GFP-F': [[4, 16], [4, 24], [4, 48], [9, 32]] };
+  /** Chuỗi "4x24" → { rows, cols } nếu nằm trong danh sách cho phép của phương pháp m, ngược lại null (dùng mặc định). */
+  function toyDimOpt(m, key) {
+    var mm = /^(\d+)x(\d+)$/.exec(String(key || '')), list = TOY_DIMS[m] || [];
+    if (!mm) return null;
+    return list.some(function (d) { return d[0] === +mm[1] && d[1] === +mm[2]; }) ? { rows: +mm[1], cols: +mm[2] } : null;
+  }
 
   /**
    * Khung nhỏ cùng luật: giữ OH/NJO/PJO/JC/FS ở vị trí tương đối, chỉ thu nhỏ số cột (và hàng nếu > 5).
@@ -231,10 +240,10 @@
    * Tốc độ client: giữ nguyên LƯỢNG LỆCH MỖI KHUNG như khung thật — ppm nhân ppmScale = (đơn vị thật / đơn vị đồ chơi mỗi khung),
    * nên số lần bù mỗi khung (và tỉ lệ chèn PDH, số Idle xoá mỗi khung IMP) giống khung thật.
    */
-  function prepToy(sc) {
+  function prepToy(sc, opt) {
     var R = prep(sc), m = R.method, fr = sc.frame || {};
-    var dim = TOY_DIM[m] || [4, 16];
-    var rows = R.rows <= 5 ? R.rows : dim[0], cols = Math.min(R.cols, dim[1]);
+    var dim = opt && opt.rows && opt.cols ? [+opt.rows, +opt.cols] : TOY_DIM[m] || [4, 16];
+    var rows = opt && opt.rows ? dim[0] : R.rows <= 5 ? R.rows : dim[0], cols = Math.min(R.cols, dim[1]);
     var col0 = R.col0, step = R.colStep, keep = Math.floor(cols / 2);
     function mc(c) {
       c = +c;
@@ -294,6 +303,7 @@
     }
     P.ppmScale = F;
     P.toy = { F: F, real: R, realRows: R.dRows, realCols: R.cols, realCap: R.cap, rows: rows, cols: cols };
+    P.rowMod = R.rows;                                          // số hàng của khung thật: nhãn hàng OH lặp theo chu kỳ này khi khung đồ chơi cao hơn
     P.errors = P.errors.filter(function (e) { return !/ngoài vùng GMP/.test(e); });
     return P;
   }
@@ -306,7 +316,8 @@
       // Annex D: Cm báo trong JC của khung n được ÁP DỤNG cho khung n+1. Khung đầu dùng Cm "báo từ trước" = phần nguyên của lượng client đến một khung.
       var a0 = P.cmNom; S.pend = Math.max(0, Math.min(P.Pw, Math.floor(a0 + 1e-9))); S.acc = a0 - S.pend; S.prevCm = null;
     }
-    if (P.method === 'GFP-F') { S.q = []; S.cur = null; S.budget = 0; S.nextL = 0; S.qBytes = 0; S.drops = 0; S.carried = 0; S.ethBytes = 0; S.parity = 0; S.idleBytes = 0; S.totBytes = 0; S.fid = 0; }
+    S.fh = []; S.dh = [];                                       // lịch sử % lấp vùng tải và số khung rớt của từng khung server (tối đa 256)
+    if (P.method === 'GFP-F') { S.q = []; S.cur = null; S.budget = 0; S.nextL = 0; S.qBytes = 0; S.drops = 0; S.carried = 0; S.ethBytes = 0; S.parity = 0; S.idleBytes = 0; S.totBytes = 0; S.fid = 0; S.pool = []; S.gw = 0; S.gt = null; S.gapDebt = 0; S.lastLoad = null; }
     if (P.method === 'IMP') {
       S.capAcc = 0; S.cliAcc = 0; S.q = []; S.target = P.impTarget || 8;
       for (var i = 0; i < S.target; i++) S.q.push({ t: T.BIDLE, pk: -1, del: false });
@@ -428,24 +439,71 @@
   }
 
   /**
-   * Khung Ethernet đến trong MỘT chu kỳ khung server: ngân sách byte trên dây = tải × tốc độ đường × chu kỳ (dao động ±15 %);
-   * mỗi khung tốn L + preamble/SFD + IFG; thời điểm đến t ∈ [0, 1] = lúc byte cuối của khung tới (store-and-forward).
+   * Khung Ethernet đến trong MỘT chu kỳ khung server (cửa sổ thời gian [gw, gw + 1), đơn vị = chu kỳ khung server).
+   * Gói đến THEO CỤM như Ethernet thật: một cụm 1…6 gói liền nhau ở tốc độ đường, rồi một khoảng rảnh ngẫu nhiên.
+   * Khoảng rảnh có "nợ bù" (gapDebt) nên trung bình dài hạn vẫn đúng bằng tải đặt, còn từng khung thì lúc đầy lúc rỗng.
+   * Tải > 100 %: gói dồn nhanh hơn tốc độ đường (quá tải), không có khoảng rảnh.
+   * Mỗi gói: { L, len (= L + header GFP), fid, t (lúc byte cuối tới, 0…1 trong cửa sổ — store-and-forward), dur (thời lượng chiếm băng, đơn vị chu kỳ), drop }.
    */
   function genGfpArr(S, o, P) {
-    var g = P.gfp, load = Math.max(0, Math.min(150, +o.load || 0)) / 100;
-    if (!load) { S.budget = 0; return []; }
-    // dao động ±15 % theo cặp đối xứng (u, 1 − u) để trung bình đúng bằng tải đặt
-    var uj = S.ju != null ? 1 - S.ju : S.rnd(); S.ju = S.ju != null ? null : uj;
-    var B0 = S.budget, add = load * P.wirePerFrame * ppmRatio(o, P) * (0.85 + 0.3 * uj);
-    var used = 0, arr = [], hdr = g.core + g.type + g.ext + g.fcs;
-    if (!S.nextL) S.nextL = drawSize(S, o, g);
-    while (B0 + add - used >= S.nextL + g.pre + g.ifg) {
-      used += S.nextL + g.pre + g.ifg;
-      arr.push({ L: S.nextL, len: S.nextL + hdr, fid: ++S.fid, t: Math.max(0, Math.min(1, (used - B0) / add)), drop: false });
-      S.nextL = drawSize(S, o, g);
+    var g = P.gfp, load = Math.max(0, Math.min(150, +o.load || 0)) / 100, w0 = S.gw || 0, w1 = w0 + 1, arr = [], keep = [];
+    S.gw = w1;
+    if (!S.pool) S.pool = [];
+    if (!load) { S.pool = []; S.gt = w1; S.gapDebt = 0; S.lastLoad = 0; return arr; }
+    if (S.lastLoad !== load) { S.gapDebt = 0; S.lastLoad = load; }
+    var Wf = P.wirePerFrame * ppmRatio(o, P), speed = Wf * Math.max(1, load), hdr = g.core + g.type + g.ext + g.fcs;
+    if (S.gt == null || S.gt < w0) S.gt = w0;
+    while (S.gt < w1) {
+      var k = 1 + Math.floor(S.rnd() * 6), cost = 0;
+      for (var i = 0; i < k; i++) {
+        var L = drawSize(S, o, g), c = L + g.pre + g.ifg;
+        S.gt += c / speed; cost += c;
+        S.pool.push({ L: L, len: L + hdr, fid: ++S.fid, tAbs: S.gt, dur: L / speed, drop: false });
+      }
+      if (load < 1) {
+        var want = cost / Wf * (1 / load - 1) + S.gapDebt, gap = want > 0 ? want * (0.2 + 1.6 * S.rnd()) : 0;
+        S.gapDebt = want - gap; S.gt += gap;
+      }
     }
-    S.budget = B0 + add - used;
+    S.pool.forEach(function (p) {
+      if (p.tAbs < w1) { p.t = Math.max(0, p.tAbs - w0); arr.push(p); } else keep.push(p);
+    });
+    S.pool = keep;
     return arr;
+  }
+
+  /**
+   * Bộ đệm khung Ethernet (byte). Khung đồ chơi nhỏ (3 × vùng tải) không chứa nổi một khung 1518 B, nên đồ chơi lấy thêm
+   * 2 khung dài nhất đang chọn — vẫn đủ nhỏ để quá tải 150 % thấy rớt sau vài chục khung.
+   */
+  function gfpBuf(P, o) {
+    if (!P.toy) return P.bufBytes || 256 * 1024;
+    var g = P.gfp, hdr = g.core + g.type + g.ext + g.fcs, big = 0;
+    gfpSizeMix(P, o).forEach(function (e) { big = Math.max(big, e.L + hdr); });
+    return Math.max(P.bufBytes, 2 * big);
+  }
+
+  /** Cỡ khung Ethernet kỳ vọng: [{ L, w }] (IMIX 7:4:1 hoặc cỡ cố định, kẹp theo minEth/maxEth). */
+  function gfpSizeMix(P, o) {
+    var g = P.gfp, sz = o.size, clamp = function (x) { return Math.max(g.minEth, Math.min(g.maxEth, Math.round(x))); };
+    if (sz === 'mix' || sz == null) return [{ L: clamp(64), w: 7 }, { L: clamp(594), w: 4 }, { L: clamp(1518), w: 1 }];
+    return [{ L: clamp(+sz), w: 1 }];
+  }
+  /**
+   * Tỉ lệ lấp vùng tải KỲ VỌNG (%) ở tải đặt o.load: tải × byte dây mỗi khung × (L + header GFP)/(L + preamble + IFG) / vùng tải, tối đa 100.
+   * Khung ngắn mất preamble + IFG (20 B) nhưng chỉ thêm header 8 B nên lấp ít hơn tải đặt; đó là giá trị y phải hội tụ về.
+   */
+  function gfpExpected(P, o) {
+    var g = P.gfp, mix = gfpSizeMix(P, o), num = 0, den = 0, hdr = g.core + g.type + g.ext + g.fcs;
+    mix.forEach(function (e) { num += e.w * (e.L + hdr); den += e.w * (e.L + g.pre + g.ifg); });
+    var load = Math.max(0, Math.min(150, +o.load || 0)) / 100;
+    return Math.min(100, load * P.wirePerFrame * ppmRatio(o, P) * (num / den) / P.order.length * 100);
+  }
+  /** Số đo tải: { last (khung gần nhất, %), avg (trung bình N khung gần nhất, %), n (số khung thực dùng) }. */
+  function loadStats(S, N) {
+    var fh = S.fh || [], n = Math.min(Math.max(1, N | 0), fh.length), sum = 0;
+    for (var i = fh.length - n; i < fh.length; i++) sum += fh[i];
+    return { last: fh.length ? fh[fh.length - 1] : 0, avg: n ? sum / n : 0, n: n };
   }
 
   /**
@@ -453,7 +511,7 @@
    * hàng đợi rỗng thì GFP Idle 4 byte. Đến lúc bộ đệm đầy → rớt khung. Khung đến của chu kỳ sau tính trước (nextArr) để vẽ băng chuyền.
    */
   function stepGfp(S, o) {
-    var P = S.P, g = P.gfp, bufMax = o.bufBytes || P.bufBytes || 256 * 1024;
+    var P = S.P, g = P.gfp, bufMax = o.bufBytes || gfpBuf(P, o);
     var arr = S.nextArr || genGfpArr(S, o, P);
     S.nextArr = genGfpArr(S, o, P);
     var q0 = S.qBytes + (S.cur && !S.cur.idle ? S.cur.len - S.cur.pos : 0);
@@ -482,9 +540,12 @@
     S.carried += carried; S.ethBytes += eth; S.idleBytes += idle; S.totBytes += N;
     S.cumSent += eth;
     var q1 = S.qBytes + (S.cur && !S.cur.idle ? S.cur.len - S.cur.pos : 0);
+    S.fh.push((N - idle) / N * 100); S.dh.push(dropN);
+    if (S.fh.length > 256) { S.fh.shift(); S.dh.shift(); }
+    var nextStart = S.gw - 1, pool = S.pool.slice(0, 4).map(function (p) { return { L: p.L, fid: p.fid, dur: p.dur, t: p.tAbs - nextStart, drop: false }; });
     var qList = (S.cur && !S.cur.idle ? [{ fid: S.cur.fid, len: S.cur.len - S.cur.pos }] : []).concat(S.q.slice(0, 24).map(function (x) { return { fid: x.fid, len: x.len }; }));
     return { cells: cells, fids: fids, units: eth, frames: carried, arrived: arrived, dropped: dropN, idle: idle, idlePct: idle / N * 100,
-      queueBytes: q1, queueFrames: S.q.length, drops: S.drops, q0: q0, q1: q1, qList: qList, arr: arr, nextArr: S.nextArr, bufMax: bufMax,
+      queueBytes: q1, queueFrames: S.q.length, drops: S.drops, q0: q0, q1: q1, qList: qList, arr: arr, nextArr: S.nextArr, pool: pool, bufMax: bufMax, fillPct: (N - idle) / N * 100,
       hist: Math.round(eth / N * 100) };
   }
 
@@ -544,6 +605,8 @@
     for (var k = 0; k < nOut; k++) { cells[P.order[k]] = out[k].t; pks[P.order[k]] = out[k].pk; }
     var dataBlocks = 0; for (k = 0; k < out.length; k++) if (out[k].t === T.BDATA) dataBlocks++;
     S.cumSent += cap - ins;
+    S.fh.push(cap ? dataBlocks / cap * 100 : 0); S.dh.push(0);
+    if (S.fh.length > 256) { S.fh.shift(); S.dh.shift(); }
     return { cells: cells, pks: pks, units: cap - ins, blocks: cap, data: dataBlocks, ins: ins, del: del, buffer: S.q.length, buf0: buf0,
       arrived: arr.length, arr: arr, nextArr: S.nextArr, qSnap: S.q.slice(0, 40).map(function (x) { return { t: x.t, pk: x.pk }; }), hist: ins - del };
   }
@@ -623,7 +686,7 @@
 
   var api = { T: T, TYPE_INFO: TYPE_INFO, rng: rng, listOf: listOf, prep: prep, prepToy: prepToy, create: create, step: step, countTypes: countTypes,
     blockStarts: blockStarts, blockAtByte: blockAtByte, gmpDataCount: gmpDataCount, gmpStuffPositions: gmpStuffPositions, gmpRange: gmpRange, ppmRatio: ppmRatio, methodOf: methodOf,
-    describe: describe, logKind: logKind, fmtN: fmtN, unitName: unitName };
+    describe: describe, logKind: logKind, fmtN: fmtN, unitName: unitName, gfpExpected: gfpExpected, loadStats: loadStats, toyDimOpt: toyDimOpt, TOY_DIMS: TOY_DIMS };
   root.MapSim = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
@@ -738,6 +801,7 @@
     s.dur = DURS.map(function (d) { return d[0]; }).indexOf(+s.dur) >= 0 ? +s.dur : 1500;
     s.mode = s.mode === 'real' ? 'real' : 'toy';
     s.cmpPpm = +s.cmpPpm || 20;
+    s.avgN = [8, 32, 128].indexOf(+s.avgN) >= 0 ? +s.avgN : 32;
     return s;
   }
   /** Tham số người dùng của kịch bản (tách theo chế độ: Minh hoạ có mặc định lệch ppm để thấy bù ngay). */
@@ -886,7 +950,23 @@
         (ps ? slider('ppmS', m === 'BMP' ? 'Lệch clock (client = server, ppm)' : 'Lệch clock server (ppm)', -ps, ps, 1, p.ppmS) : '') +
         (m === 'GFP-F' || m === 'IMP' ? slider('load', m === 'GFP-F' ? 'Tải Ethernet (%; > 100 = quá tải)' : 'Tải Ethernet (%)', 0, m === 'GFP-F' ? 150 : 100, 1, p.load) +
           '<label class="sim-field"><span>Cỡ khung Ethernet</span><select data-sin="size">' + sizeOptions(p.size, toy) + '</select></label>' : '') +
-      '</div>' + (toy && P.ppmScale > 1 && m !== 'GFP-F' && !(P.locked && isJust(m)) ? '<p class="muted calc-small" data-sim="ppmfx"></p>' : '') + '</section>';
+        (toy ? toyDimHtml(P) : '') +
+      '</div>' + (toy ? toyNoteHtml(P) : '') + (toy && P.ppmScale > 1 && m !== 'GFP-F' && !(P.locked && isJust(m)) ? '<p class="muted calc-small" data-sim="ppmfx"></p>' : '') + '</section>';
+  }
+
+  /** Ô chọn cỡ khung đồ chơi + chú thích tỉ lệ so với khung thật (AMP/BMP/GMP/GFP-F, chế độ Minh hoạ). */
+  function toyDimHtml(P) {
+    var list = TOY_DIMS[P.method];
+    if (!list || !P.toy) return '';
+    var cur = P.rows + 'x' + P.cols;
+    return '<label class="sim-field"><span>Cỡ khung đồ chơi</span><select data-sin="toydim">' + list.map(function (d) {
+      var v = d[0] + 'x' + d[1];
+      return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + d[0] + ' × ' + d[1] + ' (' + d[0] * d[1] + ' ' + unitName(P) + ')</option>';
+    }).join('') + '</select></label>';
+  }
+  function toyNoteHtml(P) {
+    if (!TOY_DIMS[P.method] || !P.toy) return '';
+    return '<p class="muted calc-small" data-sim="toynote">1 khung đồ chơi = ' + fmtN(P.cap, 0) + ' B; khung thật = ' + fmtN(P.toy.realCap, 0) + ' B (×' + fmtN(P.toy.realCap / P.cap, 1) + ')</p>';
   }
 
   function zoomBtn() { return '<button type="button" class="btn-ghost sim-zoombtn" data-sact="zoom" title="Mở khối mô phỏng to toàn cửa sổ (Esc để thu nhỏ)">⛶ Phóng to</button>'; }
@@ -915,10 +995,11 @@
         '<div class="sim-logbox sim-logbox--wide"><h3>Nhật ký sự kiện</h3><ol class="sim-log" data-sim="log"></ol></div>' +
       '</section>';
     }
+    html += loadCardHtml(m);
     html += ohColsBox(m, !!(P.noJust && P.block66));
     html += '<section class="card sim-card" aria-labelledby="sim-cnt-t"><div class="section-title"><h2 id="sim-cnt-t">Bộ đếm</h2></div>' +
         '<div class="stats" data-sim="stats"></div>' +
-        '<div class="sim-timeline"><span class="muted calc-small" data-sim="tlabel"></span><canvas class="sim-hist" data-sim="hist" role="img" aria-label="Dòng thời gian các khung gần nhất"></canvas></div>' +
+        (m === 'GFP-F' ? '' : '<div class="sim-timeline"><span class="muted calc-small" data-sim="tlabel"></span><canvas class="sim-hist" data-sim="hist" role="img" aria-label="Dòng thời gian các khung gần nhất"></canvas></div>') +
       '</section>' +
       '<section class="card sim-card" aria-labelledby="sim-steps-t"><div class="section-title"><h2 id="sim-steps-t">Từng bước (theo chuẩn)</h2></div>' +
         (sc.steps && sc.steps.length ? '<ol class="sim-steps">' + sc.steps.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ol>' : '<p class="muted">' + esc(hintOf(P)) + '</p>') +
@@ -928,6 +1009,26 @@
     readColors();
     renderDetail(sv.realP);
     updatePpmFx();
+  }
+
+  /**
+   * Thẻ "Tải của từng khung server" (GFP-F có biểu đồ cột; IMP chỉ có số đo): tải khung này, tải trung bình N khung, tải đặt.
+   * Mục đích: tải % là trung bình dài hạn, còn từng khung lúc đầy lúc rỗng vì Ethernet đến theo gói.
+   */
+  function loadCardHtml(m) {
+    if (m !== 'GFP-F' && m !== 'IMP') return '';
+    var gfp = m === 'GFP-F';
+    return '<section class="card sim-card sim-loadcard" aria-labelledby="sim-load-t"><div class="section-title"><h2 id="sim-load-t">' + (gfp ? 'Tải của từng khung server' : 'Tải khối của từng khung server') + '</h2>' +
+      '<label class="sim-field sim-avgn"><span>Trung bình trên</span><select data-sin="avgN">' + [8, 32, 128].map(function (v) {
+        return '<option value="' + v + '"' + (sv.st.avgN === v ? ' selected' : '') + '>' + v + ' khung gần nhất</option>'; }).join('') + '</select></label></div>' +
+      '<div class="stats sim-meter" data-sim="meterv" aria-live="off"></div>' +
+      '<p class="sim-loadnote">' + (gfp ? 'Tải % là trung bình dài hạn; Ethernet đến theo gói nên từng khung lúc đầy lúc rỗng — khác AMP/GMP nơi client đổ đều.' :
+        'Tải % là trung bình dài hạn; khối gói đến theo cụm nên số khối dữ liệu mỗi khung dao động quanh mức đặt — khác AMP/GMP nơi client đổ đều.') + '</p>' +
+      (gfp ? '<div class="sim-timeline"><span class="muted calc-small" data-sim="tlabel"></span><canvas class="sim-hist" data-sim="hist" role="img" aria-label="Biểu đồ cột: phần trăm vùng tải được lấp của từng khung server gần nhất"></canvas>' +
+        '<ul class="sim-legend"><li><span class="sim-sw" style="background:var(--sim-data)"></span> byte GFP (header + dữ liệu)</li>' +
+        '<li><span class="sim-sw" style="background:var(--sim-gidle)"></span> GFP Idle</li><li><span class="sim-sw" style="background:var(--sim-bad)"></span> có khung bị rớt</li>' +
+        '<li><span class="sim-sw" style="background:var(--sim-jdata)"></span> đường đứt: mức kỳ vọng ở tải đặt</li><li><span class="sim-sw" style="background:var(--sim-jstuff)"></span> đường cam: trung bình trượt</li></ul></div>' : '') +
+      '</section>';
   }
 
   /** Hộp "Cột 15–16 (OPU OH) tuỳ kiểu ánh xạ": 4 dòng, tô dòng của phương pháp đang xem (m = '' → không tô). */
@@ -1048,8 +1149,8 @@
   // =====================================================================
   // Làn mô phỏng (chế độ Minh hoạ + so sánh): trạng thái + chuỗi ô theo thứ tự truyền
   // =====================================================================
-  function makeLane(sc) {
-    var P = prepToy(sc), fr = sc.frame || {};
+  function makeLane(sc, dimOpt) {
+    var P = prepToy(sc, dimOpt), fr = sc.frame || {};
     var L = { sc: sc, P: P, ohCols: [] };
     if (P.method !== 'IMP' && Array.isArray(fr.ohCols)) L.ohCols = fr.ohCols.map(Number).filter(function (c) { return c < P.col0; }).sort(function (a, b) { return a - b; });
     // vị trí trong thứ tự lấp (để tính từ GMP j của ô)
@@ -1101,7 +1202,7 @@
     var jcRows = P.just && P.just.jc ? listOf(P.just.jc.rows, P.rows) : [];
     function push(it) { items.push(it); byPos[it.y * nx + it.x] = it; }
     function ohItem(y, k) {
-      var r = (y % P.rows) + 1, inf = ohCellInfo(sc, r, ohc[k]), it = { x: k, y: y, t: T.OH, id: -1, fid: -1, lab: inf.abbr || '', oh: 1 };
+      var r = (y % (P.rowMod || P.rows)) + 1, inf = ohCellInfo(sc, r, ohc[k]), it = { x: k, y: y, t: T.OH, id: -1, fid: -1, lab: inf.abbr || '', oh: 1 };
       if (inf.kind === 'jc') {
         var jj = sc.just.jc;
         it.t = T.JC; it.lab = m === 'PDH-BIT' ? 'Cj' : 'JC'; it.val = jcStr;
@@ -1123,7 +1224,7 @@
       push(it);
     }
     function gridItem(y, gc) {
-      var idx = y * P.cols + gc, t = res.cells[idx], c = P.col0 + gc, r = (y % P.rows) + 1;
+      var idx = y * P.cols + gc, t = res.cells[idx], c = P.col0 + gc, r = (y % (P.rowMod || P.rows)) + 1;
       var it = { x: ohc.length + gc, y: y, t: t, id: -1, fid: -1, lab: '', cell: idx };
       if (res.fids) it.fid = res.fids[idx];
       else if (res.pks) it.fid = res.pks[idx];
@@ -1222,17 +1323,19 @@
       var list = [], k;
       (r.arr || []).forEach(function (a) { list.push({ a: a, T: m === 'IMP' ? a.at : a.t }); });
       (r.nextArr || []).forEach(function (a) { list.push({ a: a, T: 1 + (m === 'IMP' ? a.at : a.t) }); });
+      (r.pool || []).forEach(function (a) { list.push({ a: a, T: 1 + a.t }); });   // gói đang đến dở (dài hơn vài khung đồ chơi)
       if (m === 'GFP-F') {
+        // Mỗi gói là một khối: độ dài ∝ thời gian chiếm băng (≈ cỡ khung), khoảng trống giữa các khối = thời gian rảnh của client
         var pxPer = w / 1.9, bpx = pxPer / Math.max(1, P.wirePerFrame);
         // vạch băng chuyền chạy theo thời gian
         drawBelt(ctx, x0, y, w, h, (t / 40) % 14);
         for (k = 0; k < list.length; k++) {
-          var a = list[k].a, rel = list[k].T - p, wd = Math.max(5, a.L * bpx);
+          var a = list[k].a, rel = list[k].T - p, wd = Math.max(5, a.dur != null ? a.dur * pxPer : a.L * bpx);
           if (rel < 0) {
             if (a.drop && rel > -0.5) { ctx.globalAlpha = 1 + rel * 2; ctx.fillStyle = C.bad; ctx.fillRect(ent - Math.min(wd, 30), y + 3 - rel * 60, Math.min(wd, 30), h - 6); ctx.globalAlpha = 1; }
             continue;
           }
-          if (rel > 1.95) continue;
+          if (rel * pxPer - wd > w + 2) continue;
           xx = ent - rel * pxPer;
           ctx.fillStyle = a.drop && rel < 0.15 ? C.bad : fidColor(a.fid); ctx.fillRect(xx - wd + 1, y + 3, wd - 2, h - 6);
           ctx.fillStyle = C[T.GFPH]; ctx.fillRect(xx - 3, y + 3, 2, h - 6);
@@ -1281,7 +1384,7 @@
 
   /** Bộ đệm FIFO: ống nằm ngang, cửa ra bên phải; thanh mức + ngưỡng. */
   function drawFifo(ctx, L, o, p, head) {
-    var C = sv.colors, P = L.P, r = L.cur, m = P.method, x = o.fifoX, y = o.tubeY, w = o.fifoW, h = o.tubeH, cap = P.fifoCap;
+    var C = sv.colors, P = L.P, r = L.cur, m = P.method, x = o.fifoX, y = o.tubeY, w = o.fifoW, h = o.tubeH, cap = m === 'GFP-F' && r.bufMax ? r.bufMax : P.fifoCap;
     var lvl = fifoLevel(L, p), full = lvl >= cap - 0.5 || (m === 'GFP-F' && r.dropped && p > 0.5);
     ctx.fillStyle = C.surface; rrect(ctx, x, y, w, h, 4); ctx.fill();
     ctx.save(); rrect(ctx, x, y, w, h, 4); ctx.clip();
@@ -1673,9 +1776,57 @@
       (sv.P.method === 'IMP' ? '' : ' (cột ' + (sv.P.col0 + z.c0) + '–' + (sv.P.col0 + z.c0 + z.len - 1) + ')') + ' — mỗi ô = 1 ' + unit;
   }
 
+  /**
+   * GFP-F: mỗi cột = % vùng tải được lấp của một khung server (xanh = byte GFP, xám = Idle); khung có rớt tô đỏ ở đỉnh cột.
+   * Đường đứt = mức kỳ vọng ở tải đặt; đường cam = trung bình trượt N khung (N chọn ở thẻ).
+   */
+  function drawLoadChart(cv) {
+    var S = sv.S, C = sv.colors, dpr = root.devicePixelRatio || 1, cssW = Math.max(240, cv.parentNode.clientWidth || 600), h = 128;
+    cv.style.height = h + 'px'; cv.width = Math.round(cssW * dpr); cv.height = Math.round(h * dpr);
+    var ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var padL = 36, padR = 6, padT = 14, padB = 4, plotW = cssW - padL - padR, plotH = h - padT - padB;
+    var cols = Math.max(8, Math.min(48, Math.floor(plotW / 7))), bw = plotW / cols, fh = S.fh, dh = S.dh, N = sv.st.avgN || 32;
+    var cnt = Math.min(cols, fh.length), start = fh.length - cnt;
+    var yOf = function (pct) { return padT + plotH * (1 - pct / 100); };
+    ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    [0, 50, 100].forEach(function (v) {
+      ctx.fillStyle = C.muted; ctx.fillText(v + ' %', padL - 5, yOf(v));
+      ctx.fillStyle = C.grid; ctx.fillRect(padL, Math.round(yOf(v)) - (v === 100 ? 0 : 0.5), plotW, 1);
+    });
+    var i, j, x;
+    for (i = 0; i < cnt; i++) {
+      j = start + i; x = padL + (cols - cnt + i) * bw;
+      ctx.fillStyle = C[T.GIDLE]; ctx.fillRect(x + 1, padT, Math.max(1, bw - 2), plotH);
+      var hh = plotH * Math.max(0, Math.min(100, fh[j])) / 100;
+      ctx.fillStyle = C[T.DATA]; ctx.fillRect(x + 1, padT + plotH - hh, Math.max(1, bw - 2), hh);
+      if (dh[j] > 0) {                                   // có khung rớt: dải đỏ phía trên cột + viền đỏ
+        ctx.fillStyle = C.bad; ctx.fillRect(x + 1, 1, Math.max(1, bw - 2), padT - 3);
+        ctx.strokeStyle = C.bad; ctx.lineWidth = 1.5; ctx.strokeRect(x + 1.5, padT + 0.5, Math.max(1, bw - 3), plotH - 1);
+      }
+    }
+    ctx.textBaseline = 'alphabetic';
+    // mức kỳ vọng ở tải đặt (đường đứt)
+    var p = params(), k = gfpExpected(sv.P, p);
+    ctx.strokeStyle = C[T.JDATA]; ctx.lineWidth = 1.6; ctx.setLineDash([5, 3]);
+    ctx.beginPath(); ctx.moveTo(padL, yOf(k)); ctx.lineTo(padL + plotW, yOf(k)); ctx.stroke(); ctx.setLineDash([]);
+    // trung bình trượt N khung
+    if (cnt) {
+      ctx.strokeStyle = C[T.JSTUFF]; ctx.lineWidth = 2.2; ctx.beginPath();
+      for (i = 0; i < cnt; i++) {
+        j = start + i; var lo = Math.max(0, j - N + 1), sum = 0, q;
+        for (q = lo; q <= j; q++) sum += fh[q];
+        x = padL + (cols - cnt + i + 0.5) * bw;
+        if (i) ctx.lineTo(x, yOf(sum / (j - lo + 1))); else ctx.moveTo(x, yOf(sum / (j - lo + 1)));
+      }
+      ctx.stroke();
+    }
+    $('#view-sim [data-sim="tlabel"]').textContent = 'Mỗi cột là một khung server (' + cnt + ' khung gần nhất): phần xanh = byte GFP, phần xám = Idle, dải đỏ ở đỉnh = có khung Ethernet bị rớt. Đường đứt = mức kỳ vọng ' + fmtN(k, 1) + ' % ở tải đặt ' + fmtN(+p.load || 0, 0) + ' %; đường cam = trung bình trượt ' + N + ' khung.';
+  }
+
   function drawHist() {
     var cv = $('#view-sim [data-sim="hist"]');
     if (!cv || !sv.S) return;
+    if (sv.P.method === 'GFP-F') { drawLoadChart(cv); return; }
     var hst = sv.S.hist, cssW = Math.max(240, cv.parentNode.clientWidth || 600), h = 46, dpr = root.devicePixelRatio || 1;
     cv.style.height = h + 'px'; cv.width = Math.round(cssW * dpr); cv.height = Math.round(h * dpr);
     var ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1739,10 +1890,32 @@
         stat('Bộ đệm', esc(n(res.buffer, 0)) + ' khối', 'mục tiêu ' + S.target);
     }
     var st = $('#view-sim [data-sim="stats"]'); if (st) st.innerHTML = h;
+    renderLoad(res);
     var fn = $('#view-sim [data-sim="frameno"]');
     if (fn) fn.textContent = (P.mf > 1 ? 'đa khung #' : 'khung #') + S.k + (P.periodUs ? ' · chu kỳ thật ' + n(P.periodUs, 3) + ' µs' : '');
     var gc = $('#view-sim [data-sim="gridcap"]');
     if (gc) gc.textContent = n(m === 'IMP' ? P.blocksExact : P.cap, m === 'IMP' && !P.toy ? 2 : 0) + ' ' + u + ' tải mỗi khung' + (P.toy ? ' (đồ chơi)' : '');
+  }
+
+  /** Kết quả khung vừa chạy (Minh hoạ: làn đầu; Thực tế: sv.last). */
+  function lastRes() { return sv.mode === 'real' || sv.page !== 'one' ? sv.last : sv.lanes[0] && sv.lanes[0].cur; }
+  /** Ba số đo tải (GFP-F, IMP): khung này, trung bình N khung gần nhất, tải đặt (kèm mức kỳ vọng với GFP-F). */
+  function renderLoad(res) {
+    var el = $('#view-sim [data-sim="meterv"]');
+    if (!el || !sv.S || !res) return;
+    var P = sv.P, m = P.method, N = sv.st.avgN || 32, ls = loadStats(sv.S, N), p = params(), cap = P.order.length, h;
+    var load = fmtN(+p.load || 0, 0), f1 = function (x) { return fmtN(x, 1) + ' %'; };
+    if (m === 'GFP-F') {
+      var k = gfpExpected(P, p), d = ls.avg - k;
+      h = stat('Tải khung này', f1(ls.last), fmtN(cap - res.idle, 0) + ' B GFP + ' + fmtN(res.idle, 0) + ' B Idle trên ' + fmtN(cap, 0) + ' B') +
+        stat('Tải trung bình ' + ls.n + ' khung gần nhất', f1(ls.avg), ls.n < N ? 'mới có ' + ls.n + '/' + N + ' khung' : 'kỳ vọng ' + f1(k) + ' · lệch ' + (d >= 0 ? '+' : '−') + fmtN(Math.abs(d), 1) + ' điểm %') +
+        stat('Tải đặt', load + ' %', 'của tốc độ đường client → kỳ vọng lấp ' + f1(k) + ' vùng tải (khung ngắn mất preamble + IFG)');
+    } else {
+      h = stat('Tải khung này', f1(ls.last), fmtN(res.data, 0) + ' khối gói / ' + fmtN(res.blocks, 0) + ' khối') +
+        stat('Tải trung bình ' + ls.n + ' khung gần nhất', f1(ls.avg), ls.n < N ? 'mới có ' + ls.n + '/' + N + ' khung' : 'khối gói / khối server') +
+        stat('Tải đặt', load + ' %', 'tải của client; khối gói còn xen Idle khi bù tốc độ');
+    }
+    el.innerHTML = h;
   }
 
   /** Ô OH (JC, NJO, Cm…) — vài phần tử DOM bên trái lưới (chế độ Thực tế). */
@@ -1874,10 +2047,13 @@
     if (k === 'zoom') { sv.zoom = +el.value / 1000; paintReal(); return; }
     if (k === 'cmpPpm') { sv.st.cmpPpm = +el.value; var oc = $('#view-sim [data-sval="cmpPpm"]'); if (oc) oc.textContent = fmtSigned(k, sv.st.cmpPpm); sSet(); return; }
     var p = params();
+    if (k === 'avgN') { sv.st.avgN = +el.value; sSet(); renderLoad(lastRes()); drawHist(); return; }
+    if (k === 'toydim') { if (p.toyDim !== el.value) { p.toyDim = el.value; sSet(); show(sv.id); } return; }
     if (k === 'size') p.size = el.value === 'mix' ? 'mix' : +el.value;
     else { p[k] = +el.value; var o = $('#view-sim [data-sval="' + k + '"]'); if (o) o.textContent = fmtSigned(k, p[k]); }
     sSet();
     updatePpmFx();
+    if (sv.S && sv.P && (sv.P.method === 'GFP-F' || sv.P.method === 'IMP')) { renderLoad(lastRes()); drawHist(); }
     if (isReal() && !sv.timer) tickReal(); // đang dừng: chạy một khung để thấy ngay tác dụng
   }
 
@@ -1977,7 +2153,7 @@
     sv.st = sv.st || loadSt();
     if (id === 'compare' && compareSet()) {
       sv.page = 'compare'; sv.id = 'compare'; sv.sc = null;
-      sv.lanes = compareSet().map(makeLane);
+      sv.lanes = compareSet().map(function (x) { return makeLane(x); });
       sv.P = sv.lanes[0].P; sv.S = sv.lanes[0].S;
       buildCompare();
       resetToy();
@@ -1995,7 +2171,7 @@
       sv.lanes = []; sv.P = sv.realP;
       build(); resetReal();
     } else {
-      sv.lanes = [makeLane(sc)]; sv.P = sv.lanes[0].P; sv.S = sv.lanes[0].S;
+      sv.lanes = [makeLane(sc, toyDimOpt(methodOf(sc), params().toyDim))]; sv.P = sv.lanes[0].P; sv.S = sv.lanes[0].S;
       build(); resetToy();
       if (!reducedMotion()) setRunning(true);
     }

@@ -1154,3 +1154,12 @@ html.sim-zoom-lock, html.sim-zoom-lock body { overflow: hidden; }
   .brand-text { font-size: .95rem; }
   .btn-ghost { padding: 6px 9px; }
 }
+
+/* M1: thẻ tải theo từng khung (GFP-F / IMP) và ô chọn cỡ khung đồ chơi */
+.sim-loadcard .section-title { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; justify-content: space-between; }
+.sim-avgn { flex: 0 1 auto; }
+.sim-meter { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.sim-loadnote { margin: 0; border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 6px 10px; border-radius: 8px; font-size: .86rem; line-height: 1.4; }
+.sim-loadcard .sim-timeline { min-width: 0; }
+.sim-loadcard .sim-legend li { display: inline-flex; gap: 4px; align-items: center; }
+@media (max-width: 640px) { .sim-meter { grid-template-columns: minmax(0, 1fr); } }
