@@ -35,6 +35,10 @@
   function storeGet(k) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
   function storeSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* bỏ qua */ } }
   function n(x, d) { return T().fmtNum(x, d); }
+  /** Số cột chuẩn của cột lưới đầu tiên (trường `colBase` của khung, mặc định 1). */
+  function cb() { return (tv.frame && tv.frame.colBase) || 1; }
+  /** Cột lưới (0-based) → số cột chuẩn hiển thị. */
+  function cn(c0) { return c0 + cb(); }
   /** Khung tính theo bit (cellBits ≠ 8, vd E2/E3/E4) → luôn ghi bit. */
   function bitMode() { return !!(tv.fm && tv.fm.cellBits !== 8); }
   function bytesTxt(b) { return !bitMode() && Number.isInteger(b) ? n(b, 0) + ' byte' : n(b * 8, 0) + ' bit'; }
@@ -126,6 +130,7 @@
       opuNoteHtml(tv.frame) +
       '<section class="card tg-card" aria-label="Lưới ' + unitWord() + '">' +
         '<div class="section-title"><h2>Lưới ' + unitWord() + (tv.state.mf != null ? ' · khung ' + tv.state.mf : '') + '</h2><span class="muted" id="tg-hint"></span></div>' +
+        (cb() > 1 ? '<p class="muted calc-small tg-colbase">Cột đánh số theo khung OTUk (lưới bắt đầu ở cột ' + cb() + ')</p>' : '') +
         '<div class="tg-scroll" id="tg-scroll"></div>' + renderLegend() +
       '</section>' +
       '<section class="card" aria-labelledby="tt-title">' +
@@ -306,14 +311,14 @@
       var col = i + 2;
       if (d.band) {
         ruler += '<button type="button" class="tg-rc tg-rc--band" style="grid-row:1;grid-column:' + col + '" data-tband="' + d.c0 + '"' +
-          ' title="Cột ' + (d.c0 + 1) + '–' + (d.c1 + 1) + (d.period
+          ' title="Cột ' + cn(d.c0) + '–' + cn(d.c1) + (d.period
             ? ' (' + (d.c1 - d.c0 + 1) + ' cột lặp lại đúng mẫu ' + d.period + ' cột ngay trước — ghép xen, ' + ((d.c1 - d.c0 + 1) / d.period) + ' lần nữa)'
             : ' (' + (d.c1 - d.c0 + 1) + ' cột giống nhau)') + ' — bấm để bung">' +
-          (d.c0 + 1) + '–' + (d.c1 + 1) + '</button>';
+          cn(d.c0) + '–' + cn(d.c1) + '</button>';
       } else if (d.runStart != null && d.runStart === d.c0 && comp) {
-        ruler += '<button type="button" class="tg-rc tg-rc--fold" style="grid-row:1;grid-column:' + col + '" data-tunband="' + d.c0 + '" title="Nén lại dải bắt đầu ở cột ' + (d.c0 + 1) + '">⊟</button>';
-      } else if ((d.c0 + 1) % every === 0 || d.c0 === 0) {
-        ruler += '<span class="tg-rc" style="grid-row:1;grid-column:' + col + '">' + (d.c0 + 1) + '</span>';
+        ruler += '<button type="button" class="tg-rc tg-rc--fold" style="grid-row:1;grid-column:' + col + '" data-tunband="' + d.c0 + '" title="Nén lại dải bắt đầu ở cột ' + cn(d.c0) + '">⊟</button>';
+      } else if (cn(d.c0) % every === 0 || d.c0 === 0) {
+        ruler += '<span class="tg-rc" style="grid-row:1;grid-column:' + col + '">' + cn(d.c0) + '</span>';
       }
     });
     var rowsH = '';
@@ -334,8 +339,8 @@
       var c0 = dcols[p.dc].c0, c1 = dcols[p.dc + p.w - 1].c1;
       var tip = (collapsed ? 'Nhóm ' : '') + ef.abbr + (ef.name !== ef.abbr ? ' — ' + ef.name : '') +
         (pf ? (tv.state.mf == null ? ' · nghĩa đổi theo khung trong đa khung' : ' · khung ' + tv.state.mf) : '') +
-        ' · ' + T().rectText(node.region.rect) + ' · ' + bytesTxt(node.bytes) + ' · ' + TV.fmtRate(node.kbps) +
-        (bandIn ? ' · khối này gồm cột ' + (c0 + 1) + '–' + (c1 + 1) + ' (đã nén)' : '') + (collapsed ? ' — bấm để bung' : '');
+        ' · ' + T().rectText(node.region.rect, cb()) + ' · ' + bytesTxt(node.bytes) + ' · ' + TV.fmtRate(node.kbps) +
+        (bandIn ? ' · khối này gồm cột ' + cn(c0) + '–' + cn(c1) + ' (đã nén)' : '') + (collapsed ? ' — bấm để bung' : '');
       return '<button type="button" class="tp ' + kindCls(node) + (collapsed ? ' is-collapsed' : '') + (pf ? ' has-pf' : '') + (bandIn ? ' has-band' : '') + (wpx > 360 ? ' is-wide' : '') +
         (tv.state.selected === node.id ? ' is-sel' : '') + '" style="grid-row:' + (p.r + 2) + ' / span ' + p.h + ';grid-column:' + (p.dc + 2) + ' / span ' + p.w + '"' +
         ' data-rg="' + esc(node.id) + '" data-anc="' + esc(anc) + '"' + (collapsed ? ' data-texpand="1"' : '') + ' title="' + esc(tip) + '" tabindex="-1">' +
@@ -385,7 +390,7 @@
           '<span class="chip">' + esc(T().KIND_LABEL[x.kind] || x.kind) + '</span>' +
           (x.region.repeat ? '<span class="badge badge--range">' + esc(x.region.repeat) + '</span>' : '') +
         '</span>' +
-        '<span class="row-meta">' + esc(T().rectText(x.region.rect) + ' · ' + T().fmtRate(x.kbps)) + '</span>' +
+        '<span class="row-meta">' + esc(T().rectText(x.region.rect, cb()) + ' · ' + T().fmtRate(x.kbps)) + '</span>' +
       '</div>' +
       (open ? '<div class="node-body" role="group">' + x.children.map(function (i) { return treeNode(tv.fm.list[i], level + 1); }).join('') + '</div>' : '') +
       '</div>';
@@ -444,7 +449,7 @@
         (rg.perFrame ? ' · ' + (mf == null ? 'nghĩa đổi theo khung' : 'khung ' + mf) : '') + '</span>' +
       '<h2>' + esc(e.abbr) + (e.name !== e.abbr ? ' <span class="abbr">— ' + esc(e.name) + '</span>' : '') + '</h2>' +
       dl([
-        ['Vị trí', esc(T().rectText(rg.rect))],
+        ['Vị trí', esc(T().rectText(rg.rect, cb()))],
         [bitMode() ? 'Số bit' : 'Số byte', esc(bytesTxt(x.bytes) + ' mỗi khung (' + x.cells + ' ô)')],
         ['Tốc độ riêng', esc(T().fmtRate(x.kbps)) + ' <span class="muted">= ' + esc(x.cells + ' × ' + fm.cellBits + ' bit × ' + n(1e6 / tv.frame.periodUs, 2) + '/s') + '</span>'],
         rg.repeat ? ['Lặp ở STM-N', esc(rg.repeat)] : null,

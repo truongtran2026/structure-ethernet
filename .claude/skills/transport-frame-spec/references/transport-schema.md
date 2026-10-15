@@ -27,6 +27,7 @@ window.TLABS   = window.TLABS   || [];   // các phòng thí nghiệm ghép kên
   grid: { rows: 9, cols: 270, cellBits: 8 },   // ô = 1 byte (cellBits 8); PDH có thể dùng cellBits 1
   periodUs: 125,                       // chu kỳ khung (µs)
   rateKbps: 155520,                    // validator: rows*cols*cellBits*1000/periodUs
+  colBase: 15,                         // (tuỳ chọn, mặc định 1) số cột CHUẨN của cột lưới đầu (khung chỉ vẽ phần OPU: lưới cột 1 = cột 15 của OTUk); UI cộng (colBase−1) khi hiển thị
   multiframe: { frames: 4, note: "…" },       // (tuỳ chọn) đa khung
   unit: "stm-1",                       // (tuỳ chọn) id trong TMUX tương ứng, để lab mở được khung
   opuNote: "…",                        // (tuỳ chọn, chuỗi VN 1–2 câu) khung OTN có vùng OPU OH: nói rõ cột 15–16 vẽ theo ánh xạ nào và các ánh xạ khác bố trí khác (AMP/BMP, GMP, GFP-F, ghép ODU)

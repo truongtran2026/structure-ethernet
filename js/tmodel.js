@@ -54,11 +54,11 @@
   }
 
   /** Mô tả vị trí rect (1-based như ITU-T). */
-  function rectText(rect) {
+  function rectText(rect, colBase) {
     if (!rect) return '';
-    var step = rect.step || 1;
+    var step = rect.step || 1, off = (colBase || 1) - 1;   // colBase: số cột chuẩn của cột lưới đầu
     var rows = rect.h === 1 ? 'hàng ' + (rect.r + 1) : 'hàng ' + (rect.r + 1) + '–' + (rect.r + rect.h);
-    var c0 = rect.c + 1, cl = rect.c + (rect.w - 1) * step + 1, cols;
+    var c0 = rect.c + 1 + off, cl = rect.c + (rect.w - 1) * step + 1 + off, cols;
     if (rect.w === 1) cols = 'cột ' + c0;
     else if (step === 1) cols = 'cột ' + c0 + '–' + cl;
     else cols = 'cột ' + c0 + ', ' + (c0 + step) + (rect.w > 2 ? ', … ' + cl : '') + ' (' + rect.w + ' cột, bước ' + step + ')';

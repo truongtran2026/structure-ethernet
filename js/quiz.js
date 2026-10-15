@@ -432,8 +432,8 @@
             var cells = TV.rectCells(rg.rect, f.grid.cols);
             var cell = pickOne(cells, rng), r = Math.floor(cell / f.grid.cols), c = cell % f.grid.cols;
             var d = textDistractors(lab, [leafLabels], rng);
-            var q = { prompt: 'Trong khung ' + f.name + ' (' + f.grid.rows + ' hàng × ' + f.grid.cols + ' cột), ' + unitWord + ' ở hàng ' + (r + 1) + ', cột ' + (c + 1) + ' thuộc vùng nào?',
-              explain: lab + ': ' + (rg.desc || '') + ' (' + TV.rectText(rg.rect) + ')', open: { kind: 't', frame: f.id, region: rg.id, label: f.name },
+            var q = { prompt: 'Trong khung ' + f.name + ' (' + f.grid.rows + ' hàng × ' + f.grid.cols + ' cột), ' + unitWord + ' ở hàng ' + (r + 1) + ', cột ' + (c + (f.colBase || 1)) + ' thuộc vùng nào?' + (f.colBase > 1 ? ' (cột đánh số theo khung OTUk, lưới bắt đầu ở cột ' + f.colBase + ')' : ''),
+              explain: lab + ': ' + (rg.desc || '') + ' (' + TV.rectText(rg.rect, f.colBase) + ')', open: { kind: 't', frame: f.id, region: rg.id, label: f.name },
               alias: [rg.abbr, rg.name],
               check: { frame: f.id, r: r, c: c } };
             return assemble(q, lab, d, rng);
