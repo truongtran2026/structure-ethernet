@@ -106,7 +106,7 @@
 
   // ---------- dựng cây dữ liệu ----------
   function addItem(route, label, meta, search, tip) {
-    var it = { route: route, label: label, meta: meta || '', search: String(search || '').toLowerCase(), tip: tip || '' };
+    var it = { route: route, label: label, meta: meta || '', search: normQ(search), tip: tip || '' };
     nav.items[keyOf(route)] = it;
     return it;
   }
@@ -130,7 +130,11 @@
             if (sn.children) { hay.push(sn.group); walk(sn.children); return; }
             hay.push(sn.header, sn.label);
             var h = heads[sn.header];
-            if (h) hay.push(h.name, h.short);
+            if (h) {
+              hay.push(h.name, h.short);
+              // tên field/group để tìm được "route distinguisher", "route target"…
+              (function fields(fs) { (fs || []).forEach(function (f) { if (f) { hay.push(f.name, f.abbr); fields(f.children); } }); })(h.fields);
+            }
           });
         })(st.tree);
         byCat[c].items.push(addItem({ view: 'ip', id: st.id }, st.name || st.id, bytes, hay.join(' \u0001 '),
@@ -210,7 +214,10 @@
   // ---------- vẽ cây ----------
   function isOpen(key) { return nav.store.open[key] !== false; } // mặc định mở
 
-  function matches(it, q) { return !q || it.search.indexOf(q) >= 0 || it.label.toLowerCase().indexOf(q) >= 0; }
+  /** Chuẩn hoá chuỗi tìm: chữ thường, gạch nối/gạch dưới/khoảng trắng coi như một dấu cách ("route-target" = "route target"). */
+  function normQ(s) { return String(s || '').toLowerCase().replace(/[\s\-_]+/g, ' '); }
+
+  function matches(it, q) { return !q || it.search.indexOf(q) >= 0 || normQ(it.label).indexOf(q) >= 0; }
 
   /** Vẽ một nút nhóm (mảng / họ / category). Trả về '' nếu không còn mục nào sau khi lọc. */
   function renderGroup(node, depth, q) {
@@ -241,7 +248,7 @@
   }
 
   function renderNav() {
-    var q = nav.query.trim().toLowerCase();
+    var q = normQ(nav.query).trim();
     var html = nav.domains.map(function (d) { return renderGroup(d, 0, q); }).join('');
     if (!html) html = '<p class="muted nav-empty">' + (nav.domains.length ? 'Không có kết quả cho “' + esc(nav.query) + '”.' : 'Chưa có dữ liệu.') + '</p>';
     $('#nav').innerHTML = html;
