@@ -27,7 +27,7 @@ Thứ tự nạp trong `index.html`: `data/headers-*.js` → `data/stacks.js` �
   id: "gre",                       // trùng với key trong window.HEADERS, kebab-case
   name: "GRE Header",              // tên chuẩn (tiếng Anh)
   short: "GRE",                    // nhãn ngắn cho thanh frame map
-  layer: "tunnel",                 // phy | l2 | l2_5 | l3 | l4 | tunnel | payload | trailer
+  layer: "tunnel",                 // phy | l2 | l2_5 | l3 | l4 | l7 | tunnel | payload | trailer
   standard: "RFC 2784, RFC 2890",  // nguồn chuẩn, có số mục nếu biết
   summary: "…",                    // 1 câu tiếng Việt: header này làm gì
   detail: "…",                     // 2–5 câu tiếng Việt: hoạt động, lưu ý khi học
@@ -85,6 +85,7 @@ Khi StackNode có `enable`/`varBytes` khớp đúng một biến thể, UI coi �
   name: "Tag Control Information (TCI)",
   desc: "…",                 // tiếng Việt: nhóm này gộp những gì
   optional: "C = 1",         // (tuỳ chọn) cả nhóm là optional
+  choice: "rd-type",         // (tuỳ chọn) cần `optional`; các node cùng choice trong 1 header loại trừ nhau, luôn bật đúng 1
   children: [ /* Node[] */ ]
 }
 ```
@@ -163,10 +164,11 @@ chỉ có `link` + `passenger` là đúng — không bịa delivery/encap.
 4. `id` field/group duy nhất trong header; `id` stack duy nhất.
 5. Field có đúng một trong hai: `bits` (int > 0) hoặc `varBytes`.
 6. `desc`/`summary` không rỗng; `set`/`enable`/`varBytes` của StackNode trỏ đến id có thật.
-7. `layer` thuộc danh sách hợp lệ.
+7. `layer` thuộc danh sách hợp lệ (l7 = ứng dụng, vd BGP; không bị coi là payload).
 8. Header có field optional/varBytes (trừ `payload`) phải có `variants`. Mỗi variant: `id` duy nhất,
    `enable` chỉ chứa node optional, `varBytes` trỏ field varBytes và nằm trong [min, max],
    `set` trỏ field có thật, `bytes` = kích thước tự tính.
+   `choice`: chuỗi, chỉ trên node có `optional`, mỗi tên ≥ 2 node; mỗi variant `enable` đúng 1 node mỗi choice.
 9. Mọi StackNode header có `role` hợp lệ (tự có hoặc kế thừa từ group cha).
 
 Chạy: `node .claude/skills/protocol-header-spec/scripts/validate-data.mjs .`

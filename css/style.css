@@ -26,6 +26,7 @@
   --l2_5-bg: #d5f2f0;    --l2_5-bd: #14918a;    --l2_5-fg: #0a403d;
   --l3-bg: #dcf3dc;      --l3-bd: #2f9445;      --l3-fg: #123f1b;
   --l4-bg: #fdebc8;      --l4-bd: #c98410;      --l4-fg: #4f3200;
+  --l7-bg: #fadcf1;      --l7-bd: #b8329c;      --l7-fg: #521043;
   --tunnel-bg: #ece1fb;  --tunnel-bd: #8250d8;  --tunnel-fg: #36156e;
   --payload-bg: #eeebe6; --payload-bd: #9a8f80; --payload-fg: #3b342b;
   --trailer-bg: #fbe0e3; --trailer-bd: #cc3f55; --trailer-fg: #5c0f1c;
@@ -46,6 +47,7 @@
     --l2_5-bg: #113b3a;    --l2_5-bd: #3fc9bf;    --l2_5-fg: #d2f7f4;
     --l3-bg: #173a20;      --l3-bd: #58c46f;      --l3-fg: #d8f5dd;
     --l4-bg: #3d2e0e;      --l4-bd: #e6a93a;      --l4-fg: #fdecc6;
+    --l7-bg: #45173b;      --l7-bd: #ee7ad6;      --l7-fg: #ffe0f6;
     --tunnel-bg: #2f1f52;  --tunnel-bd: #a983f0;  --tunnel-fg: #ece2ff;
     --payload-bg: #302c27; --payload-bd: #b0a493; --payload-fg: #efe9e0;
     --trailer-bg: #46191f; --trailer-bd: #f06b7f; --trailer-fg: #ffdfe4;
@@ -63,6 +65,7 @@
   --l2_5-bg: #113b3a;    --l2_5-bd: #3fc9bf;    --l2_5-fg: #d2f7f4;
   --l3-bg: #173a20;      --l3-bd: #58c46f;      --l3-fg: #d8f5dd;
   --l4-bg: #3d2e0e;      --l4-bd: #e6a93a;      --l4-fg: #fdecc6;
+  --l7-bg: #45173b;      --l7-bd: #ee7ad6;      --l7-fg: #ffe0f6;
   --tunnel-bg: #2f1f52;  --tunnel-bd: #a983f0;  --tunnel-fg: #ece2ff;
   --payload-bg: #302c27; --payload-bd: #b0a493; --payload-fg: #efe9e0;
   --trailer-bg: #46191f; --trailer-bd: #f06b7f; --trailer-fg: #ffdfe4;
@@ -76,6 +79,7 @@
 .layer-l2_5    { --lb: var(--l2_5-bg);    --ld: var(--l2_5-bd);    --lf: var(--l2_5-fg); }
 .layer-l3      { --lb: var(--l3-bg);      --ld: var(--l3-bd);      --lf: var(--l3-fg); }
 .layer-l4      { --lb: var(--l4-bg);      --ld: var(--l4-bd);      --lf: var(--l4-fg); }
+.layer-l7      { --lb: var(--l7-bg);      --ld: var(--l7-bd);      --lf: var(--l7-fg); }
 .layer-tunnel  { --lb: var(--tunnel-bg);  --ld: var(--tunnel-bd);  --lf: var(--tunnel-fg); }
 .layer-payload { --lb: var(--payload-bg); --ld: var(--payload-bd); --lf: var(--payload-fg); }
 .layer-trailer { --lb: var(--trailer-bg); --ld: var(--trailer-bd); --lf: var(--trailer-fg); }
@@ -298,6 +302,11 @@ label:has(> .sr-only), button:has(> .sr-only) { position: relative; }
 .opt[aria-pressed="true"] { color: var(--add); border-color: color-mix(in srgb, var(--add) 40%, var(--border)); }
 .opt[aria-pressed="true"] .opt-sw { background: var(--add); }
 .opt[aria-pressed="true"] .opt-sw::after { transform: translateX(12px); }
+/* lựa chọn loại trừ (choice): nút radio, luôn đúng một lựa chọn bật */
+.opt-radio { width: 14px; height: 14px; margin-right: 2px; border-radius: 50%; border: 2px solid var(--border-strong); background: var(--surface); position: relative; box-sizing: border-box; }
+.opt--choice[aria-checked="true"] { color: var(--add); border-color: color-mix(in srgb, var(--add) 40%, var(--border)); cursor: default; }
+.opt--choice[aria-checked="true"] .opt-radio { border-color: var(--add); }
+.opt--choice[aria-checked="true"] .opt-radio::after { content: ""; position: absolute; inset: 2px; border-radius: 50%; background: var(--add); }
 
 /* ===== Sơ đồ bit ===== */
 .bm-wrap { overflow-x: auto; padding-bottom: 2px; }

@@ -8,7 +8,7 @@
   'use strict';
 
   var LAYER_LABEL = {
-    phy: 'Vật lý', l2: 'Lớp 2', l2_5: 'Lớp 2.5', l3: 'Lớp 3', l4: 'Lớp 4',
+    phy: 'Vật lý', l2: 'Lớp 2', l2_5: 'Lớp 2.5', l3: 'Lớp 3', l4: 'Lớp 4', l7: 'Lớp 7 – ứng dụng',
     tunnel: 'Tunnel', payload: 'Payload', trailer: 'Trailer'
   };
   var LEVELS = [
@@ -579,7 +579,25 @@
       '</div>';
   }
 
+  /** Các node optional cùng choice với n trong header của nó (gồm n). */
+  function choiceSiblings(n) {
+    var hn = app.model.index[n.headerPath];
+    return collectOptional((hn && hn.children) || [], []).filter(function (c) { return c.choice === n.choice; });
+  }
+
+  /** Công tắc kiểu radio cho node thuộc nhóm loại trừ `choice`: luôn đúng một lựa chọn bật. */
+  function choiceToggle(n) {
+    var names = choiceSiblings(n).map(function (c) { return c.optional; }).join(' / ');
+    var title = 'Chọn một trong: ' + names + ' (luôn đúng một lựa chọn). ' +
+      (n.enabled ? 'Đang chọn; bấm lựa chọn khác để đổi.' : 'Bấm để chọn, lựa chọn đang bật tự tắt.');
+    return '<button type="button" class="opt opt--choice" role="radio" data-action="opt" data-hp="' + attr(n.headerPath) + '" data-id="' + attr(n.id) +
+      '" aria-checked="' + n.enabled + '"' + (n.enabled ? ' aria-disabled="true"' : '') + ' tabindex="-1" title="' + attr(title) + '">' +
+      '<span class="opt-cond">' + esc(n.optional) + '</span><span class="opt-radio" aria-hidden="true"></span>' +
+      '<span class="sr-only">' + (n.enabled ? 'Đang chọn' : 'Chưa chọn') + '</span></button>';
+  }
+
   function optToggle(n) {
+    if (n.choice) return choiceToggle(n);
     return '<button type="button" class="opt" data-action="opt" data-hp="' + attr(n.headerPath) + '" data-id="' + attr(n.id) +
       '" aria-pressed="' + n.enabled + '" tabindex="-1" title="Trường tuỳ chọn, có mặt khi: ' + attr(n.optional) + '">' +
       '<span class="opt-cond">' + esc(n.optional) + '</span><span class="opt-sw" aria-hidden="true"></span>' +
@@ -839,9 +857,14 @@
 
   function setOptional(hp, id) {
     var node = app.model.index[hp + '/' + id];
-    if (!node) return;
-    app.state.enabled[hp] = app.state.enabled[hp] || {};
-    app.state.enabled[hp][id] = !node.enabled;
+    var hn = app.model.index[hp];
+    if (!node || !hn || !hn.header) return;
+    // map đầy đủ trạng thái hiện hành → toggleEnabled lo luật choice (bật một = tắt các node cùng choice)
+    var cur = {};
+    collectOptional(hn.children || [], []).forEach(function (c) { cur[c.id] = !!c.enabled; });
+    var next = EthViz.toggleEnabled(hn.header, cur, id);
+    if (!next) return; // tắt node đang bật duy nhất của choice → bỏ qua
+    app.state.enabled[hp] = next;
     saveState();
     render();
   }

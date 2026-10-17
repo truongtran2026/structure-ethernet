@@ -7,7 +7,7 @@
 (function (root) {
   'use strict';
 
-  var LAYERS = ['phy', 'l2', 'l2_5', 'l3', 'l4', 'tunnel', 'payload', 'trailer'];
+  var LAYERS = ['phy', 'l2', 'l2_5', 'l3', 'l4', 'l7', 'tunnel', 'payload', 'trailer'];
 
   /** Vai trò đóng gói (data-schema mục 4b) — thứ tự hiển thị cố định. */
   var ROLES = [
@@ -66,6 +66,49 @@
     return out;
   }
 
+  /**
+   * Nhóm loại trừ `choice` trong một header: { "<tên choice>": [id node optional theo thứ tự khai báo] }.
+   * Các node cùng choice luôn có đúng 1 node bật.
+   */
+  function choiceGroups(headerDef) {
+    var out = {};
+    (function walk(list) {
+      (list || []).forEach(function (d) {
+        if (d.choice && d.optional) (out[d.choice] = out[d.choice] || []).push(d.id);
+        if (d.children) walk(d.children);
+      });
+    })(headerDef && headerDef.fields);
+    return out;
+  }
+
+  /**
+   * Chuẩn hoá map enabled theo choice (sửa tại chỗ và trả về chính map đó):
+   * không node nào bật → bật node đầu; nhiều node bật → giữ node bật đầu tiên.
+   */
+  function normalizeChoices(headerDef, enabled) {
+    var groups = choiceGroups(headerDef);
+    Object.keys(groups).forEach(function (name) {
+      var ids = groups[name];
+      var keep = ids.filter(function (id) { return !!enabled[id]; })[0] || ids[0];
+      ids.forEach(function (id) { enabled[id] = id === keep; });
+    });
+    return enabled;
+  }
+
+  /**
+   * Map enabled mới khi người dùng bật/tắt node `id` (đã chuẩn hoá choice).
+   * Bật node trong choice → tắt các node cùng choice; tắt node đang bật duy nhất của choice → bỏ qua (null).
+   */
+  function toggleEnabled(headerDef, enabledMap, id) {
+    var next = Object.assign({}, enabledMap);
+    var groups = choiceGroups(headerDef);
+    var name = Object.keys(groups).filter(function (k) { return groups[k].indexOf(id) >= 0; })[0];
+    if (!name) { next[id] = !next[id]; return next; }
+    if (next[id]) return null;
+    groups[name].forEach(function (x) { next[x] = x === id; });
+    return next;
+  }
+
   function clampVar(def, n) {
     var vb = def.varBytes || {};
     n = Math.round(Number(n) || 0);
@@ -85,6 +128,7 @@
     var vb = (variant && variant.varBytes) || {};
     var enabled = {}, varBytes = {};
     c.optionals.forEach(function (id) { enabled[id] = enable.indexOf(id) >= 0; });
+    normalizeChoices(headerDef, enabled);
     c.vars.forEach(function (d) {
       var n = has(vb, d.id) ? vb[d.id] : (d.varBytes.default != null ? d.varBytes.default : (d.varBytes.min || 0));
       varBytes[d.id] = clampVar(d, n);
@@ -111,6 +155,7 @@
     c.optionals.forEach(function (id) {
       enabled[id] = has(en, id) ? !!en[id] : (sn.enable || []).indexOf(id) >= 0;
     });
+    normalizeChoices(h, enabled);
     c.vars.forEach(function (d) { varBytes[d.id] = resolveVarBytes(d, sn, varState); });
     return { enabled: enabled, varBytes: varBytes };
   }
@@ -137,6 +182,7 @@
         abbr: def.abbr || null,
         depth: depth,
         optional: optional,
+        choice: optional && def.choice ? String(def.choice) : null,
         enabled: enabled,
         present: present,
         reserved: !!def.reserved,
@@ -351,10 +397,8 @@
       var ctx = {
         headerPath: path, sn: sn, set: mergedSet, pos: 0, index: index,
         varState: varStateAll[path] || null,
-        isEnabled: function (id) {
-          if (has(en, id)) return !!en[id];
-          return (sn.enable || []).indexOf(id) >= 0;
-        }
+        // eff.enabled đã gộp state > StackNode và chuẩn hoá choice (đúng 1 node bật mỗi choice)
+        isEnabled: function (id) { return !!eff.enabled[id]; }
       };
       node.children = buildFieldNodes(h.fields, ctx, true, 0, path);
       deriveControlFlags(node.children);
@@ -575,6 +619,9 @@
     layoutBits: layoutBits,
     countHeaders: countHeaders,
     variantState: variantState,
+    choiceGroups: choiceGroups,
+    normalizeChoices: normalizeChoices,
+    toggleEnabled: toggleEnabled,
     matchVariant: matchVariant
   };
   root.EthViz = api;

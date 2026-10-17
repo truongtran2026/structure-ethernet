@@ -8,7 +8,7 @@ import vm from "node:vm";
 
 const root = path.resolve(process.argv[2] || ".");
 const dataDir = path.join(root, "data");
-const LAYERS = ["phy", "l2", "l2_5", "l3", "l4", "tunnel", "payload", "trailer"];
+const LAYERS = ["phy", "l2", "l2_5", "l3", "l4", "l7", "tunnel", "payload", "trailer"];
 const errors = [];
 const warns = [];
 const err = (m) => errors.push(m);
@@ -57,11 +57,17 @@ for (const [key, h] of Object.entries(HEADERS)) {
   const ids = new Set();
   let fixedBits = 0, optBits = 0, varMax = 0;
   const optionalIds = new Set();
+  const choices = {};
   walk(h.fields, (n, opt) => {
     if (!n.id) err(`${where}: node "${n.name}" thiếu id`);
     else if (ids.has(n.id)) err(`${where}: id trùng "${n.id}"`);
     else ids.add(n.id);
     if (n.optional) optionalIds.add(n.id);
+    if (n.choice !== undefined) {
+      if (typeof n.choice !== "string" || !n.choice) err(`${where}: node "${n.id}" choice phải là chuỗi`);
+      else if (!n.optional) err(`${where}: node "${n.id}" có choice nhưng không optional`);
+      else (choices[n.choice] ||= []).push(n.id);
+    }
     if (!n.name) err(`${where}: node "${n.id}" thiếu name`);
     if (!n.desc) err(`${where}: node "${n.id}" thiếu desc`);
     if (n.children) {
@@ -81,6 +87,8 @@ for (const [key, h] of Object.entries(HEADERS)) {
       varMax += v.max || 0;
     }
   });
+  for (const [c, list] of Object.entries(choices))
+    if (list.length < 2) err(`${where}: choice "${c}" chỉ có ${list.length} node (cần ≥ 2)`);
   h.__ids = ids;
   h.__optional = optionalIds;
   if (fixedBits !== (h.fixedBytes ?? 0) * 8)
@@ -104,6 +112,10 @@ for (const [key, h] of Object.entries(HEADERS)) {
     const on = new Set(v.enable || []);
     for (const id of on) if (!optionalIds.has(id)) err(`${vw}: enable "${id}" không phải node optional`);
     for (const id of Object.keys(v.set || {})) if (!ids.has(id)) err(`${vw}: set.${id} không có trong header`);
+    for (const [c, list] of Object.entries(choices)) {
+      const k = list.filter((id) => on.has(id)).length;
+      if (k !== 1) err(`${vw}: choice "${c}" phải enable đúng 1 node, đang ${k}`);
+    }
     let bits = 0;
     const sum = (nodes, present) => {
       for (const n of nodes) {

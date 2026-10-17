@@ -299,11 +299,60 @@ window.STACKS = window.STACKS || [];
           note: "2 nhãn × 4 byte, đọc từ ngoài vào trong.",
           children: [
             { header: "mpls-label", label: "Transport label (outer)", role: "delivery", set: { label: "24001", tc: "0", s: "0", ttl: "63" }, note: "Nhãn LDP/SR tới loopback PE đích; S = 0 vì còn nhãn phía sau." },
-            { header: "mpls-label", label: "VPN label (inner)", role: "encap", set: { label: "30", tc: "0", s: "1", ttl: "63" }, note: "Nhãn VPN do MP-BGP (VPNv4) cấp; PE đích dùng để chọn VRF. Nhãn đáy nên S = 1." },
+            { header: "mpls-label", label: "VPN label (inner)", role: "encap", set: { label: "30", tc: "0", s: "1", ttl: "63" }, note: "Nhãn VPN do MP-BGP (VPNv4) cấp; PE đích dùng để biết gói thuộc VRF/khách nào (tuỳ kiểu cấp nhãn: theo VRF thì tra VRF; theo prefix/CE thì biết ngay cổng ra; RFC 4364 §4.3.2). Nhãn đáy nên S = 1. Giá trị 30 do chính PE đích quảng bá trong trường Label của NLRI VPNv4 (xem stack bgp-vpnv4-update); RD và Route Target chỉ có trong bản tin BGP, không nằm trong gói dữ liệu." },
           ],
         },
         { header: "ipv4", label: "IPv4 của khách hàng", role: "passenger", set: { protocol: "253", src: "172.16.1.10", dst: "172.16.2.20", ttl: "63" }, note: "Gói IP khách hàng (địa chỉ riêng, có thể trùng giữa các VRF)." },
         payload(),
+        fcs(),
+      ],
+    },
+    {
+      id: "bgp-vpnv4-update",
+      name: "MP-BGP VPNv4 UPDATE (control plane)",
+      category: "MPLS & VPN",
+      compareTo: "eth2-ipv4-tcp",
+      summary: "Bản tin BGP UPDATE giữa hai PE (hoặc PE ↔ Route Reflector) qua TCP 179 quảng bá tuyến VPNv4 172.16.2.0/24 kèm RD, Route Target và nhãn VPN — đây là gói control plane, không phải gói của khách.",
+      detail:
+        "So với Ethernet II + IPv4 + TCP, phần dữ liệu TCP là một bản tin BGP: header 19 byte (Type 2 = UPDATE), phần cố định của UPDATE, rồi các path attribute. " +
+        "Tuyến VPNv4 không nằm ở trường NLRI cuối UPDATE (chỉ dành cho IPv4 unicast) mà trong MP_REACH_NLRI với AFI 1 / SAFI 128: Next Hop = RD 0 + loopback PE2, " +
+        "NLRI = Label 30 + RD 65000:100 + prefix 172.16.2.0/24. Route Target 65000:100 đi trong EXTENDED_COMMUNITIES. " +
+        "Ba thứ hay nhầm: RD làm prefix khách duy nhất trong BGP; RT quyết định VRF nào nhập tuyến; nhãn VPN là con số duy nhất trong ba thứ xuất hiện lại trong gói dữ liệu (nhãn trong của stack mpls-l3vpn). " +
+        "Ví dụ: PE2 (10.0.0.2, nối site 172.16.2.0/24) gửi tới PE1 (10.0.0.1) qua iBGP AS 65000 nên AS_PATH rỗng, có LOCAL_PREF 100; MP_REACH_NLRI đặt đầu danh sách thuộc tính theo RFC 7606 §5.1. " +
+        "Không có thuộc tính NEXT_HOP (Type 3) vì next hop đã nằm trong MP_REACH_NLRI; UPDATE chỉ có NLRI trong MP_REACH 'SHOULD NOT' mang NEXT_HOP (RFC 4760 §3).",
+      roleNote: "Không có tunnel: Ethernet là chặng link, toàn bộ IPv4 + TCP + BGP là gói của chính router PE (passenger) — chỉ là gói control plane chứ không phải gói khách.",
+      tree: [
+        ethII("Ethernet II header", "0x0800", "MAC của PE2 và router kề nó (đổi ở mỗi hop; trong lõi MPLS gói BGP thường còn mang nhãn transport tới loopback PE1, bỏ qua ở đây cho gọn).", "0x0800 = IPv4."),
+        { role: "passenger", header: "ipv4", set: { dscp: "48", protocol: "6", src: "10.0.0.2", dst: "10.0.0.1", ttl: "255", "total-length": "124" }, note: "Loopback PE2 → loopback PE1 (phiên iBGP dựng giữa loopback). DSCP 48 (CS6) — mức ưu tiên thường dùng cho giao thức điều khiển. TTL 255 là thói quen của hãng (vd. Cisco) cho iBGP, không phải quy định của chuẩn. Total Length = 20 + 20 + 84." },
+        { role: "passenger", header: "tcp", set: { "src-port": "50123", "dst-port": "179", psh: "1", "ack-flag": "1" }, note: "Cổng đích 179 = BGP (bên chủ động mở phiên dùng cổng nguồn động). TCP lo tin cậy nên BGP không tự gửi lại bản tin." },
+        {
+          added: true,
+          group: "BGP UPDATE message",
+          role: "passenger",
+          note: "84 byte: header 19 + phần cố định UPDATE 4 + path attributes 61.",
+          children: [
+            { header: "bgp-header", set: { length: "84", type: "2" }, note: "Marker toàn 0xFF; Length 84 byte; Type 2 = UPDATE." },
+            { header: "bgp-update", varBytes: { "withdrawn-routes": 0 }, set: { "withdrawn-len": "0", "total-path-attr-len": "61" }, note: "Không rút tuyến IPv4 unicast; 61 byte path attribute theo sau; NLRI IPv4 unicast cuối bản tin rỗng." },
+            {
+              group: "Path attributes",
+              note: "61 byte = MP_REACH_NLRI 36 + ORIGIN 4 + AS_PATH 3 + LOCAL_PREF 7 + EXTENDED_COMMUNITIES 11.",
+              children: [
+                {
+                  group: "MP_REACH_NLRI (Type 14)",
+                  note: "Thuộc tính mang tuyến VPNv4: 4 byte Flags/Type/Length + 17 byte AFI…Reserved + 15 byte NLRI = 36 byte (Attribute Length = 32).",
+                  children: [
+                    { header: "bgp-mp-reach", set: { "attr-len": "32", afi: "1", safi: "128", "nh-len": "12", "nh-rd": "0:0", "nh-ip": "10.0.0.2", reserved: "0" }, note: "Flags 0x90 (optional, non-transitive, Extended Length). Next Hop = RD 0 + loopback PE2: PE1 tìm nhãn transport tới 10.0.0.2 (nhãn ngoài 24001 trong mpls-l3vpn)." },
+                    { header: "bgp-vpnv4-nlri", enable: ["rd-t0"], varBytes: { prefix: 3 }, set: { length: "112", label: "30", rsv: "000", s: "1", "rd-type": "0", "rd0-admin": "65000", "rd0-num": "100", prefix: "172.16.2" }, note: "Length 112 bit = 24 + 64 + 24. Label 30 = nhãn VPN mà PE1 sẽ đẩy làm nhãn trong khi gửi gói tới 172.16.2.0/24. RD 65000:100 (Type 0) + prefix 3 byte." },
+                  ],
+                },
+                { header: "bgp-attr-origin", set: { "attr-len": "1", origin: "0" }, note: "Flags 0x40; ORIGIN = 0 (IGP) vì tuyến được khai báo bằng lệnh network trong address-family ipv4 vrf (hành vi hãng); tuyến redistribute thường là 2 (INCOMPLETE)." },
+                { header: "bgp-attr-as-path", varBytes: { segments: 0 }, set: { "attr-len": "0" }, note: "Flags 0x40; AS_PATH rỗng vì iBGP trong AS 65000 và tuyến khách không đi qua AS nào khác." },
+                { header: "bgp-attr-local-pref", set: { "attr-len": "4", "local-pref": "100" }, note: "Flags 0x40; LOCAL_PREF 100 (mặc định), chỉ có trong iBGP." },
+                { header: "bgp-attr-ext-comm", enable: ["rt-t0"], set: { "attr-len": "8", "ec-type": "0x00", "ec-subtype": "0x02", "rt0-global": "65000", "rt0-local": "100" }, note: "Flags 0xC0; RT 65000:100 (Type 0x00, Sub-type 0x02). PE1 nhập tuyến vào mọi VRF có route-target import 65000:100." },
+              ],
+            },
+          ],
+        },
         fcs(),
       ],
     },

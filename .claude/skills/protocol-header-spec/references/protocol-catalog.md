@@ -35,6 +35,14 @@ Thêm giao thức mới: thêm dòng vào bảng trước, rồi mới viết d�
 | headers-l3l4.js | `tcp` | TCP | 20 | 60 | RFC 9293 |
 | headers-l3l4.js | `udp` | UDP | 8 | | RFC 768 |
 | headers-l3l4.js | `payload` | Payload / Data | 0 (varBytes) | | — |
+| headers-bgp.js | `bgp-header` | BGP message header: Marker 128 (toàn 1) + Length 16 + Type 8 | 19 | | RFC 4271 §4.1 |
+| headers-bgp.js | `bgp-update` | UPDATE: Withdrawn Routes Length 16 + Withdrawn Routes (varBytes) + Total Path Attribute Length 16 | 4 | | RFC 4271 §4.3 |
+| headers-bgp.js | `bgp-attr-origin` | Path attribute ORIGIN (Flags 8, Type 1, Length 8, Value 8) | 4 | | RFC 4271 §4.3, §5.1.1 |
+| headers-bgp.js | `bgp-attr-as-path` | Path attribute AS_PATH (rỗng với iBGP; segment varBytes) | 3 | | RFC 4271 §5.1.2, RFC 6793 |
+| headers-bgp.js | `bgp-attr-local-pref` | Path attribute LOCAL_PREF (Type 5, 32 bit) | 7 | | RFC 4271 §5.1.5 |
+| headers-bgp.js | `bgp-mp-reach` | MP_REACH_NLRI (Type 14, Extended Length): AFI 16, SAFI 8, Next Hop Length 8, Next Hop (RD 0 + IPv4 = 12 B), Reserved 8 | 21 | | RFC 4760 §3, RFC 4364 §4.3.2 |
+| headers-bgp.js | `bgp-vpnv4-nlri` | NLRI VPN-IPv4: Length 8 + Label 24 (Label 20, Rsrv 3, BoS 1) + RD 64 (Type 16 + Value 48 tách 3 nhóm optional loại trừ nhau theo Type 0/1/2 — luôn bật đúng 1) + Prefix (varBytes 0–4) | 6 (thực tế 12–16 qua variants) | | RFC 4364 §4.1–4.3.4, RFC 8277 §2.2 |
+| headers-bgp.js | `bgp-attr-ext-comm` | EXTENDED_COMMUNITIES (Type 16) chứa 1 Route Target: Type 8 + Sub-type 8 (0x02) + Value 48 (3 nhóm optional loại trừ nhau theo Type 0x00/0x01/0x02 — luôn bật đúng 1) | 5 (thực tế 11 qua variants) | | RFC 4360 §2–5, RFC 5668 §2 |
 
 Ghi chú: `payload` chỉ có một field `data` dạng `varBytes`. IPv4/TCP options là field `options`
 dạng `varBytes` (min 0, max 40). GRE optional: group `checksum-group` (Checksum 16 + Reserved1 16,
@@ -56,6 +64,7 @@ dạng `varBytes` (min 0, max 40). GRE optional: group `checksum-group` (Checksu
 | MPLS & VPN | `mpls-ipv4` | Ethernet{eth-mac, ethertype=0x8847} · mpls-label(S=1) · ipv4 · payload · fcs |
 | MPLS & VPN | `mpls-l3vpn` | Ethernet{…0x8847} · Label stack{transport label S=0, VPN label S=1} · ipv4 · payload · fcs |
 | MPLS & VPN | `mpls-l2vpn` | Ethernet{…0x8847} · Label stack{transport, PW label S=1} · pw-cw · Inner Ethernet{eth-mac, vlan-8021q, ethertype, ipv4, payload} · fcs. Gộp VPWS + VPLS (cùng khuôn dạng trên dây; khác control plane ghi trong `detail`) |
+| MPLS & VPN | `bgp-vpnv4-update` | Control plane (không phải gói dữ liệu): Ethernet{eth-mac, ethertype 0x0800} · ipv4(proto=6) · tcp(dport 179) · bgp-header(Type 2) · bgp-update · Path attributes{bgp-mp-reach{…, bgp-vpnv4-nlri} (đầu tiên, RFC 7606 §5.1), bgp-attr-origin, bgp-attr-as-path, bgp-attr-local-pref, bgp-attr-ext-comm} · fcs. compareTo `eth2-ipv4-tcp`. Nhãn trong NLRI = nhãn VPN của `mpls-l3vpn` |
 | Tunnel & Overlay | `gre-ipv4` | Ethernet · Outer IPv4(proto=47) · gre(proto=0x0800) · Inner IPv4 · payload · fcs |
 | (đã bỏ) | `gre-key-seq` | Trùng với biến thể "Key + Sequence" của `gre` trong `gre-ipv4` — không tạo stack riêng cho biến thể của một header |
 | Tunnel & Overlay | `gre-ipsec-transport` | Ethernet · IPv4(proto=50) · group "ESP – vùng xác thực"{esp, group "Vùng mã hoá"{gre, Inner IPv4, payload, esp-trailer(NH=47)}} · esp-icv · fcs. compareTo `gre-ipv4`. Mặc định AES-GCM-128: IV 8, ICV 16, căn 4 byte |

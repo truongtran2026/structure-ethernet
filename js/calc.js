@@ -269,8 +269,15 @@
     var padFrame = function (b) { return link.length ? Math.max(minFrame, b) : b; };
     var out = { stack: stack.id, P: eff.payloadBytes, mtu: mtu, linkBytes: linkBytes, packetBytes: packet, frameBytes: eff.frameBytes,
       overheadInMtu: packet - eff.payloadBytes, fits: packet <= mtu, fragments: [], ip: null, innerIp: null, df: !!opts.df };
-    out.maxPayload = Math.max(0, mtu - out.overheadInMtu);
     out.zone = ethZone(EL, eff.frameBytes);
+    out.hints = [];
+    // Stack không có header lớp payload (vd. bản tin điều khiển BGP: l7 không phải payload) →
+    // không có gì để tính payload tối đa / MSS / phân mảnh; chỉ trả kích thước.
+    if (!eff.headers.some(function (h) { return h.layer === 'payload'; })) {
+      out.noPayload = true; out.maxPayload = null; out.action = 'control';
+      return out;
+    }
+    out.maxPayload = Math.max(0, mtu - out.overheadInMtu);
     // IP đầu tiên trong phần MTU (quyết định phân mảnh) và IP cuối (gói của người dùng → MSS)
     var firstIp = -1, lastIp = -1, payIdx = -1;
     inMtu.forEach(function (h, i) { if (isIp(h)) { if (firstIp < 0) firstIp = i; lastIp = i; } if (h.layer === 'payload') payIdx = i; });
@@ -690,6 +697,7 @@
     var r;
     try { r = stackEff(root.EthViz, st, cv.st.P, root.HEADERS, S); } catch (e) { return '<div class="alert alert--error">' + esc(e.message) + '</div>'; }
     if (!r) return '';
+    if (!r.headers.some(function (h) { return h.layer === 'payload'; })) return renderNoPayload(r);
     if (!r.payloadFields) return '<p class="muted">Stack này không có phần payload độ dài thay đổi.</p>';
     var pm = null;
     try { pm = pathMtu(root.EthViz, st, cv.st.P, cv.st.mtu, { df: cv.st.df }, root.HEADERS, S, EL()); } catch (e) { pm = null; }
@@ -701,13 +709,27 @@
       (pm && pm.action !== 'ok' && pm.action !== 'no-link'
         ? stat('Hiệu suất thực', pm.action === 'fragment' ? esc(pct(pm.effPct)) : '0%', pm.action === 'fragment' ? 'qua ' + pm.fragments.length + ' mảnh (' + esc(n(pm.totalFrameBytes, 0)) + ' B khung)' : 'gói bị rớt')
         : stat('Hiệu suất tải', esc(pct(r.effPct)), 'payload / frame')) + '</div>';
-    html += '<div class="calc-stackbar" role="img" aria-label="Các header theo byte">' + r.headers.filter(function (h) { return !h.wire && h.bytes > 0; }).map(function (h) {
+    html += stackBar(r);
+    return html;
+  }
+
+  /** Thanh header theo byte + chú thích (dùng chung cho stack có/không payload). */
+  function stackBar(r) {
+    return '<div class="calc-stackbar" role="img" aria-label="Các header theo byte">' + r.headers.filter(function (h) { return !h.wire && h.bytes > 0; }).map(function (h) {
       return '<span class="layer-' + esc(h.layer) + '" style="width:' + (h.bytes / r.frameBytes * 100) + '%" title="' + esc(h.name + ': ' + h.bytes + ' B') + '"></span>';
     }).join('') + '</div>' +
       '<p class="muted calc-small">' + r.headers.filter(function (h) { return h.bytes > 0; }).map(function (h) {
         return '<span class="calc-hdr"><span class="swatch layer-' + esc(h.layer) + '"></span> ' + esc(h.short) + ' ' + esc(n(h.bytes, 0)) + ' B' + (h.wire ? ' (dây)' : '') + '</span>';
       }).join(' · ') + '</p>';
-    return html;
+  }
+
+  /** Stack không có header lớp payload (gói điều khiển): chỉ kích thước, không MTU/MSS/phân mảnh. */
+  function renderNoPayload(r) {
+    return '<div class="calc-zone calc-zone--info"><b>Gói điều khiển, không có phần payload để tính MTU/MSS.</b> ' +
+      'Mọi byte là header (kể cả bản tin ứng dụng như BGP), nên ô Payload P, payload tối đa, MSS và phân mảnh không áp dụng.</div>' +
+      '<div class="stats">' +
+      stat('Kích thước frame', esc(n(r.frameBytes, 0)) + ' B', r.wireBytes ? '+ ' + esc(n(r.wireBytes, 0)) + ' B chỉ trên dây (preamble/SFD)' : 'không tính preamble/SFD') +
+      stat('Header', esc(n(r.overheadBytes, 0)) + ' B', 'toàn bộ frame') + '</div>' + stackBar(r);
   }
 
   /** Mục MTU đường đi: kết luận (đi được / phân mảnh / rớt), MTU tối đa + MSS gợi ý, vùng kích thước khung, bảng mảnh. */
