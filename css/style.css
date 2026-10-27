@@ -1172,3 +1172,163 @@ html.sim-zoom-lock, html.sim-zoom-lock body { overflow: hidden; }
 .sim-loadcard .sim-timeline { min-width: 0; }
 .sim-loadcard .sim-legend li { display: inline-flex; gap: 4px; align-items: center; }
 @media (max-width: 640px) { .sim-meter { grid-template-columns: minmax(0, 1fr); } }
+
+/* ===== Đấu nối (js/conn-view.js) ===== */
+#view-conn { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cstat-v { font-size: 1.02rem; line-height: 1.3; overflow-wrap: anywhere; }
+.ctoolbar { row-gap: 8px; }
+.cvars { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.cvar-note { margin: 0; }
+.cfigs { display: flex; flex-wrap: wrap; gap: 16px; }
+.cfig { flex: 1 1 260px; min-width: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.cfig figcaption { font-size: .9rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.cfig-side { color: var(--muted); font-size: .8rem; width: 100%; }
+.cfig-note { margin: 0; font-size: .8rem; }
+.cface { width: 100%; height: auto; max-height: 300px; display: block; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.corient { margin-top: 12px; font-size: .88rem; border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 6px 10px; border-radius: 8px; }
+.corient p { margin: 2px 0; }
+.corient .muted { font-size: .82rem; }
+/* mặt cắm */
+.cf-flange { fill: color-mix(in srgb, var(--muted) 22%, var(--surface)); stroke: var(--border-strong); }
+.cf-hole { fill: var(--surface-2); stroke: var(--border-strong); }
+.cf-shell { fill: color-mix(in srgb, var(--muted) 38%, var(--surface)); stroke: var(--text); stroke-opacity: .55; stroke-linejoin: round; }
+.cf-ins { fill: color-mix(in srgb, var(--text) 82%, var(--surface)); stroke: var(--text); stroke-opacity: .4; }
+.cf-plate { fill: color-mix(in srgb, var(--muted) 16%, var(--surface)); stroke: var(--border-strong); }
+.cf-ring { fill: none; stroke: var(--text); stroke-opacity: .5; stroke-dasharray: 3 2; }
+.cf-cell { fill: color-mix(in srgb, var(--muted) 30%, var(--surface)); stroke: var(--border-strong); }
+.cf-split { stroke: var(--surface); stroke-width: 2; }
+.cf-key { fill: var(--surface); stroke: var(--text); stroke-opacity: .6; stroke-dasharray: 3 2; }
+.cf-key--ins { fill: color-mix(in srgb, var(--text) 78%, var(--surface)); stroke-dasharray: none; stroke-opacity: .4; }
+.cf-keyl { fill: var(--muted); text-anchor: middle; dominant-baseline: central; font-family: var(--sans); }
+.cf-flange, .cf-hole, .cf-shell, .cf-ins, .cf-plate, .cf-ring, .cf-cell, .cf-split, .cf-key,
+.cp-body, .cp-hole, .cp-slot, .cp-slotl { vector-effect: non-scaling-stroke; stroke-width: 1.2px; }
+/* chân: màu theo nhóm (biến --lb/--ld/--lf của layer-*) */
+.cpin { cursor: pointer; outline: none; }
+.cp-body { fill: var(--lb); stroke: var(--ld); stroke-width: 1.6px; }
+.cp-hole { fill: none; stroke: #111; stroke-width: 1.6px; }
+.cp-slot { fill: #111; fill-opacity: .25; stroke: none; }
+.cp-slotl { stroke: var(--lf); stroke-opacity: .5; }
+.cp-shellpin { stroke-dasharray: 2 1.5; }
+.cp-txt { fill: var(--lf); font-family: var(--sans); font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.cpin.is-nc .cp-body { fill-opacity: .45; stroke-dasharray: 2 2; }
+.cpin.is-var .cp-body { stroke-width: 2.4px; }
+.cpin:hover .cp-body, .cpin.is-hl .cp-body, .cpin:focus-visible .cp-body { stroke: var(--hl); stroke-width: 3.5px; }
+.cpin.is-sel .cp-body { stroke: var(--sel); stroke-width: 3.5px; }
+/* chú giải */
+.clegend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+.clg { display: inline-flex; align-items: center; gap: 6px; }
+.clg i { width: 14px; height: 14px; border-radius: 4px; background: var(--lb); border: 1.5px solid var(--ld); }
+.clg--nc i { border-style: dashed; opacity: .6; }
+.clg svg { width: 18px; height: 18px; }
+.clg--shape .cp-body { fill: var(--surface-2); stroke: var(--text); }
+.clg--shape .cp-hole { stroke: var(--text); }
+.clg--bridge svg { width: 26px; height: 12px; }
+.cc-mini { display: inline-grid; place-items: center; min-width: 22px; height: 16px; border-radius: 3px; border: 1.5px solid var(--text); font-size: .7rem; font-weight: 700; color: var(--text); background: var(--surface); }
+/* bảng */
+.ctable td { font-size: .86rem; }
+.ctable .crow { cursor: pointer; }
+.ctable .crow:hover td, .ctable .crow.is-hl td { background: color-mix(in srgb, var(--hl) 26%, var(--surface)); }
+.ctable .crow.is-sel td { background: var(--accent-soft); }
+.ctable .crow.is-nc td { color: var(--muted); }
+.cpin-no { white-space: nowrap; }
+.cpsw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; background: var(--lb); border: 1.5px solid var(--ld); vertical-align: -1px; }
+.cwsw { display: inline-block; width: 18px; height: 10px; border-radius: 3px; margin-right: 6px; border: 1px solid color-mix(in srgb, var(--text) 45%, transparent); vertical-align: -1px; }
+.csub { font-size: .78rem; margin-top: 2px; }
+.carrow { color: var(--muted); padding-left: 0 !important; padding-right: 0 !important; }
+.cdir { white-space: nowrap; font-weight: 600; color: color-mix(in srgb, var(--ld, var(--muted)) 55%, var(--text)); }
+.cdir span { display: inline-block; min-width: 1em; text-align: center; }
+.cdir--in { --ld: var(--l3-bd); } .cdir--out { --ld: var(--l2-bd); }
+.cdir--io, .cdir--diff { --ld: var(--tunnel-bd); } .cdir--pwr { --ld: var(--trailer-bd); }
+.cdir--gnd, .cdir--shield, .cdir--nc { color: var(--muted); }
+.clinks { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.clinks a { display: inline-block; min-height: 24px; line-height: 24px; }
+/* trang cáp */
+.cbadges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.cvendor { font-size: .78rem; padding: 2px 10px; }
+.cwarn ul { margin-top: 4px; }
+.cends { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.cend { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: .9rem; min-width: 0; }
+.cend > div { min-width: 0; overflow-wrap: anywhere; }
+.cend-l { flex: 0 0 auto; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-weight: 700; }
+.cdiagram { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.cwire-svg { width: 100%; height: auto; display: block; max-height: 760px; }
+.cend-tag { fill: var(--accent); font: 700 18px var(--sans); }
+.cw-edge { fill: none; stroke: var(--text); stroke-opacity: .45; stroke-width: 5.5; stroke-linecap: round; }
+.cw-main { fill: none; stroke: var(--ld); stroke-width: 3.5; stroke-linecap: round; }
+.cw-stripe { fill: none; stroke-width: 3.5; stroke-dasharray: 7 7; }
+.cw-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; }
+.cwire, .cbridge, .ccomp { cursor: pointer; }
+.cwire.is-hl .cw-edge, .cbridge.is-hl .cb-main, .ccomp.is-hl .cc-line { stroke: var(--hl); stroke-opacity: 1; stroke-width: 8; }
+.cwire.is-sel .cw-edge, .cbridge.is-sel .cb-main, .ccomp.is-sel .cc-line { stroke: var(--sel); stroke-opacity: 1; stroke-width: 8; }
+.cb-main { fill: none; stroke: var(--role-encap); stroke-width: 3; stroke-dasharray: 6 4; stroke-linecap: round; }
+.cc-line { fill: none; stroke: var(--text); stroke-width: 2; }
+.cc-box { fill: var(--surface); stroke: var(--text); stroke-width: 1.5; }
+.cc-txt { fill: var(--text); font: 700 11px var(--sans); text-anchor: middle; dominant-baseline: central; }
+.crow--bridge td, .crow--comp td { font-size: .84rem; }
+.cwarn-t { color: var(--warn); }
+/* công cụ Chuyển đổi */
+.cconv-form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.cconv-sel { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 600; color: var(--muted); }
+.cconv-sel select { width: 100%; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-weight: 400; }
+.cconv-swap { flex: 0 0 auto; min-height: 38px; }
+.cresults { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cresult { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
+.cresult a { display: inline-block; min-height: 24px; line-height: 24px; }
+.csub-h { font-size: .95rem; margin: 16px 0 6px; }
+.cic { margin: 8px 0 0; padding-left: 20px; font-size: .88rem; }
+@media (max-width: 560px) {
+  .cfig { flex-basis: 100%; }
+  .ctable td, .ctable th { padding: 4px 6px; }
+}
+.cfig--wide { flex-basis: 100%; }
+.cfig--wide .cface { max-height: 220px; }
+/* Đấu nối — phối cảnh cắm (hình nghiêng) + hình nhỏ "bạn đang đứng ở đây" */
+.cpv-wrap { overflow-x: auto; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.cpv-svg { display: block; width: 100%; min-width: 560px; height: auto; max-height: 520px; }
+.cpv-note { margin: 8px 0 0; font-size: .84rem; }
+.cpv-body { fill: color-mix(in srgb, var(--muted) 46%, var(--surface)); stroke: var(--text); stroke-opacity: .5; stroke-width: 1.2; stroke-linejoin: round; }
+.cpv-top { fill: color-mix(in srgb, var(--muted) 24%, var(--surface)); stroke: var(--text); stroke-opacity: .5; stroke-width: 1.2; stroke-linejoin: round; }
+.cpv-boot { fill: color-mix(in srgb, var(--text) 62%, var(--surface)); stroke: var(--text); stroke-opacity: .5; stroke-width: 1; }
+.cpv-cable-o { fill: none; stroke: var(--text); stroke-opacity: .55; stroke-width: 15; stroke-linecap: round; }
+.cpv-cable { fill: none; stroke: color-mix(in srgb, var(--text) 70%, var(--surface)); stroke-width: 12; stroke-linecap: round; }
+.cmini .cpv-cable-o { stroke-width: 7; } .cmini .cpv-cable { stroke-width: 5; }
+.cpv-dev { fill: color-mix(in srgb, var(--accent) 10%, var(--surface)); stroke: var(--border-strong); stroke-width: 1.2; }
+.cpv-devtop { fill: color-mix(in srgb, var(--accent) 6%, var(--surface)); stroke: var(--border-strong); stroke-width: 1.2; stroke-linejoin: round; }
+.cpv-wall { fill: color-mix(in srgb, var(--accent) 18%, var(--surface)); stroke: var(--border-strong); stroke-width: 1.2; stroke-linejoin: round; }
+.cpv-latch { fill: color-mix(in srgb, var(--warn) 55%, var(--surface)); stroke: var(--text); stroke-opacity: .6; stroke-width: 1.2; stroke-linejoin: round; }
+.cpv-pt { fill: var(--lf); font-family: var(--sans); font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.cpv-guide { fill: none; stroke-linejoin: round; stroke: var(--hl); stroke-width: 2; stroke-dasharray: 5 4; opacity: 0; pointer-events: none; }
+.cpv-guide.is-first { opacity: .95; stroke: var(--accent); }
+.cpv-guide.is-hl, .cpv-guide.is-sel { opacity: 1; stroke: var(--sel); stroke-width: 2.5; }
+.cpv-guide.is-hl { stroke: color-mix(in srgb, var(--hl) 80%, var(--text)); }
+.cpv-lbl, .cpv-cap, .cpv-eye-l, .cpv-eye-s, .cmini-t { font-family: var(--sans); paint-order: stroke; stroke: var(--surface-2); stroke-width: 3.5px; stroke-linejoin: round; }
+.cpv-lbl { fill: var(--text); font-weight: 600; }
+.cpv-lbl--g { fill: var(--accent); }
+.cpv-lbl--in { fill: var(--add); font-weight: 700; }
+.cpv-lbl--k { fill: var(--muted); font-weight: 600; }
+.cpv-cap { fill: var(--text); font-weight: 700; }
+.cpv-cap--s { fill: var(--muted); font-weight: 400; }
+.cpv-insert { fill: none; stroke: var(--add); stroke-width: 4; stroke-linecap: round; }
+.cpv-ah-in { fill: var(--add); }
+.cpv-ah-sight { fill: var(--muted); }
+.cpv-sight { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.cpv-callout path { fill: none; stroke: var(--muted); stroke-width: 1; }
+.cpv-dot { fill: var(--muted); }
+.cpv-eye { cursor: pointer; outline: none; }
+.cpv-eye-hit { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; stroke-opacity: .5; }
+.cpv-eye-w { fill: #fff; stroke: var(--text); stroke-width: 1.5; }
+.cpv-eye-i { fill: var(--accent); }
+.cpv-eye-p { fill: #111; }
+.cpv-eye-l { fill: var(--accent); font-weight: 700; }
+.cpv-eye-s { fill: var(--muted); }
+.cpv-eye:hover .cpv-eye-hit, .cpv-eye:focus-visible .cpv-eye-hit { fill: var(--accent-soft); stroke-opacity: 1; stroke-width: 3; }
+.cpv-eye:hover .cpv-eye-l, .cpv-eye:focus-visible .cpv-eye-l { text-decoration: underline; }
+.cmini { width: 112px; height: auto; flex: 0 0 auto; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; order: 9; margin-left: auto; }
+.cmini .cpv-body, .cmini .cpv-top, .cmini .cpv-dev, .cmini .cpv-devtop, .cmini .cpv-wall, .cmini .cpv-boot { stroke-width: 1; }
+.cmini-face { fill: color-mix(in srgb, var(--text) 80%, var(--surface)); stroke: var(--text); stroke-width: 1; }
+.cmini-sight { stroke-width: 1.2; stroke-dasharray: 3 2; stroke: var(--accent); }
+.cmini-t { fill: var(--accent); font-size: 9.5px; font-weight: 700; stroke-width: 2.5px; }
+.cmini .cpv-eye-w { stroke-width: 1; }
+.cwhere { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+.cwhere-i { display: inline-flex; align-items: center; gap: 6px; }
+.cwhere-i .cmini { order: 0; margin-left: 0; }

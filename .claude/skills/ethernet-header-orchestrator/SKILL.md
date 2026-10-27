@@ -26,10 +26,15 @@ với cùng agentType; mặc định dùng Agent.
 | `protocol-reviewer` (chỉ đọc) | protocol-header-spec | danh sách phát hiện → `_workspace/03_protocol-reviewer_findings.md` |
 | `qa-inspector` | cả hai | `_workspace/04_qa-inspector_report.md` |
 | `transport-expert` | transport-frame-spec | `data/transport-*.js` (TFRAMES, TMUX, TLABS) |
+| `connector-expert` | connector-pinout-spec | `data/conn-*.js` (CONN_BODIES, CONN_PINOUTS, CONN_CABLES) + `validate-connectors.mjs` |
 
 Mảng Truyền dẫn (PDH/SDH/OTN) chạy cùng quy trình bước 1–6 nhưng thay protocol-expert bằng
 `transport-expert`, validator bằng `validate-transport.mjs`, hợp đồng bằng `transport-schema.md` +
 `transport-catalog.md` (có lộ trình giai đoạn). protocol-reviewer kiểm cả hai mảng.
+
+Mảng Đấu nối (sơ đồ chân, cáp chế thụ động) cũng chạy bước 1–6: `connector-expert` + validator
+`.claude/skills/connector-pinout-spec/scripts/validate-connectors.mjs` + hợp đồng `connector-schema.md` /
+`connector-catalog.md`; reviewer đối chiếu TIA-232/574/561/568, ITU-T V.35/G.703, IEEE 802.3, USB-IF và tài liệu hãng.
 
 ### Chọn model theo loại việc (tối ưu token)
 
@@ -39,7 +44,7 @@ Frontmatter của agent là mặc định. Orchestrator truyền `model` (và `e
 
 | Loại việc | Agent | model | effort |
 | --- | --- | --- | --- |
-| Viết dữ liệu cho giao thức/loại frame MỚI | protocol-expert / transport-expert | opus | medium |
+| Viết dữ liệu cho giao thức/loại frame/đầu nối MỚI | protocol-expert / transport-expert / connector-expert | opus | medium |
 | Sửa dữ liệu theo danh sách lỗi đã ghi rõ "đúng phải là…" | protocol-expert | sonnet | low |
 | Thay đổi cơ học trên dữ liệu (thêm cờ, đổi tên id, đồng bộ giá trị) | protocol-expert | sonnet | low |
 | Kiểm duyệt nội dung giao thức | protocol-reviewer | opus | high |

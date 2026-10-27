@@ -1,14 +1,14 @@
 # Frame Structure (frame-structure.vercel.app)
 
 Ứng dụng web tĩnh (mở `index.html` bằng nhấp đúp) giúp học cấu trúc khung: mảng IP/Ethernet (VLAN, QinQ,
-PBB, MPLS, L2VPN/L3VPN, GRE, IPsec, VXLAN, PPPoE…) và mảng Truyền dẫn (PDH, SDH, OTN) kèm lab ghép kênh,
-thu gọn/bung theo từng cấp tới từng bit/byte.
+PBB, MPLS, L2VPN/L3VPN, GRE, IPsec, VXLAN, PPPoE…) và mảng Truyền dẫn (PDH, SDH, OTN) kèm lab ghép kênh, mảng Đấu nối (sơ đồ chân đầu nối điện,
+cáp/đầu chuyển thụ động), thu gọn/bung theo từng cấp tới từng bit/byte.
 
 ## Harness: Frame Structure
 
 **Mục tiêu:** dữ liệu khung chính xác theo chuẩn (RFC/IEEE/ITU-T) + giao diện học tập thu gọn/bung theo cấp.
 
-**Điều kiện gọi:** mọi yêu cầu xây, mở rộng, sửa dữ liệu hoặc giao diện của ứng dụng này (cả mảng IP lẫn Truyền dẫn) → dùng skill
+**Điều kiện gọi:** mọi yêu cầu xây, mở rộng, sửa dữ liệu hoặc giao diện của ứng dụng này (cả mảng IP, Truyền dẫn lẫn Đấu nối) → dùng skill
 `ethernet-header-orchestrator`. Câu hỏi kiến thức đơn thuần có thể trả lời trực tiếp.
 
 **Lịch sử thay đổi:**
@@ -41,3 +41,4 @@ thu gọn/bung theo từng cấp tới từng bit/byte.
 | 2026-10-14 | GD13 rà soát: QA toàn trang (3 cỡ màn × sáng/tối), sửa tràn ngang/tương phản/topbar/Việt hoá; bảng thuật ngữ header-visualizer-ui/references/glossary.md; TMAPS kịch bản BMP 400GBASE-R → OPUflex (schema: BMP không `just` khi có `block66`); mô phỏng GMP Cm áp cho khung kế tiếp; palette ODUflex(IMP,30–80) | header-visualizer-ui (glossary), transport-frame-spec (schema), data, UI | Hoàn thiện sau lộ trình GD1–GD12 |
 | 2026-10-14 | vercel.json: Cache-Control no-cache cho mọi file; index.html gắn ?v=<phiên bản> cho css/js/data (đổi khi deploy nếu cần ép tải lại) | deploy | Người dùng không thấy bản mới do trình duyệt giữ JS/CSS cũ |
 | 2026-10-17 | MP-BGP VPNv4 UPDATE: data/headers-bgp.js (8 header bgp-*), stack bgp-vpnv4-update (RD/RT/nhãn VPN, control plane); schema: layer `l7`, group `choice` (nhóm optional loại trừ, validator bắt variant enable đúng 1); UI radio cho choice, #calc báo "gói điều khiển" khi không có payload | protocol-header-spec (schema, validator, catalog), data, UI | Người dùng hỏi RD/RT/nhãn VPN thể hiện ở đâu |
+| 2026-10-27 | Mảng Đấu nối: agent connector-expert, skill connector-pinout-spec (schema Body/Pinout/Cable, quy ước hướng nhìn, validator); data/conn-serial/telecom/usb.js (15 body, 22 pinout, 23 cáp thụ động); js/conn-view.js (mặt cắm đực/cái, phía hàn, phối cảnh cắm, sơ đồ dây, công cụ Chuyển đổi); bài học: hình USB lật gương không validator nào bắt được → reviewer render hình chuẩn | Toàn bộ (agents, orchestrator, reviewer, data, UI) | Người dùng cần tra sơ đồ chân/cáp chế (nối tiếp, viễn thông, USB; Video để sau) |

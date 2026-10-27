@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Frame Structure — Cấu trúc khung</title>
   <meta name="color-scheme" content="light dark">
-  <link rel="stylesheet" href="css/style.css?v=20261017">
+  <link rel="stylesheet" href="css/style.css?v=20261027c">
   <script>
     // Ghi nhận file script không nạp được / lỗi cú pháp để app hiện thông báo thay vì trắng trang.
     window.__ethvizLoad = { failed: [], errors: [], optional: [] };
@@ -28,7 +28,7 @@
     <button type="button" id="menu-btn" class="icon-btn menu-btn" aria-controls="sidebar" aria-expanded="false" title="Danh mục khung">☰</button>
     <a class="brand" href="#" aria-label="Trang đầu">
       <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-      <span class="brand-text"><span class="brand-name">Frame Structure<span class="brand-sub"> — Cấu trúc khung</span></span><small>IP/Ethernet · Truyền dẫn PDH/SDH/OTN · từng bit, từng byte</small></span>
+      <span class="brand-text"><span class="brand-name">Frame Structure<span class="brand-sub"> — Cấu trúc khung</span></span><small>IP/Ethernet · Truyền dẫn PDH/SDH/OTN · Đấu nối · từng bit, từng byte</small></span>
     </a>
     <button type="button" id="theme-btn" class="btn-ghost theme-btn">◐ Tự động</button>
     <!-- Chỉ có ý nghĩa khi chạy trên Vercel (middleware.js); mở bằng file:// thì ẩn. -->
@@ -43,7 +43,7 @@
     <aside id="sidebar" class="sidebar" aria-label="Danh mục khung">
       <label class="search">
         <span class="sr-only">Tìm loại khung</span>
-        <input id="search" type="search" placeholder="Tìm: VLAN, MPLS, GRE, STM-1, VC-12…" autocomplete="off">
+        <input id="search" type="search" placeholder="Tìm: VLAN, MPLS, STM-1, VC-12, DB9, TXD…" autocomplete="off">
       </label>
       <nav id="nav" class="nav" aria-label="Cây danh mục"></nav>
     </aside>
@@ -65,6 +65,7 @@
       <div id="view-sim" class="view" hidden></div>
       <div id="view-calc" class="view" hidden></div>
       <div id="view-line" class="view" hidden></div>
+      <div id="view-conn" class="view" hidden></div>
     </main>
 
     <aside id="detail" class="detail" aria-label="Chi tiết" aria-live="polite"></aside>
@@ -86,9 +87,13 @@
   <script src="data/transport-flexe.js?v=20261015b" data-optional></script>
   <script src="data/transport-mapping.js?v=20261015b"></script>
   <script src="data/transport-line.js?v=20261015b" data-optional></script>
+  <!-- Mảng Đấu nối: thiếu cả ba file thì mảng tự ẩn -->
+  <script src="data/conn-serial.js?v=20261027" data-optional></script>
+  <script src="data/conn-telecom.js?v=20261027" data-optional></script>
+  <script src="data/conn-usb.js?v=20261027" data-optional></script>
   <script src="js/model.js?v=20261017"></script>
   <script src="js/tmodel.js?v=20261015b"></script>
-  <script src="js/nav.js?v=20261017"></script>
+  <script src="js/nav.js?v=20261027"></script>
   <script src="js/app.js?v=20261017"></script>
   <script src="js/transport-view.js?v=20261015b"></script>
   <script src="js/mux-lab.js?v=20261015b"></script>
@@ -96,5 +101,6 @@
   <script src="js/calc.js?v=20261017"></script>
   <script src="js/map-sim.js?v=20261015b"></script>
   <script src="js/line-view.js?v=20261015b"></script>
+  <script src="js/conn-view.js?v=20261027c"></script>
 </body>
 </html>

@@ -3,9 +3,10 @@
  *  - thanh bên trái dạng cây: IP / Ethernet · Truyền dẫn (PDH/SDH/OTN) · Phòng thí nghiệm ghép kênh;
  *    thu gọn/bung từng mảng/nhóm, LƯU trạng thái + mục đang xem (localStorage) để mở lại đúng như cũ;
  *  - ô tìm kiếm lọc toàn cây (tự bung nhóm có kết quả, không ghi đè trạng thái đã lưu);
- *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>, #quiz/<chủ đề>, #calc, #sim/<kịch bản>, #line/<chuỗi>;
+ *  - định tuyến hash: #<stackId> (mảng IP, giữ tương thích), #t/<frameId>, #lab/<labId>, #quiz/<chủ đề>, #calc, #sim/<kịch bản>, #line/<chuỗi>,
+ *    #conn/<pinout|cable|convert>;
  *  - giao diện sáng/tối, nút menu trên di động.
- * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab, window.QuizView, window.CalcView, window.MapSimView, window.LineView — mỗi view có init/show/hide.
+ * Các mảng đăng ký view: window.IPView, window.TransView, window.MuxLab, window.QuizView, window.CalcView, window.MapSimView, window.LineView, window.ConnView — mỗi view có init/show/hide.
  */
 (function () {
   'use strict';
@@ -19,7 +20,7 @@
     otn: { name: 'OTN', hint: 'Mạng truyền tải quang (OTUk/ODUk)', order: 3 },
     flexe: { name: 'FlexE', hint: 'Flexible Ethernet (OIF FlexE IA): instance 100G, khe lịch 5G', order: 4 }
   };
-  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc', sim: 'view-sim', line: 'view-line' };
+  var CONTAINER = { ip: 'view-ip', t: 'view-t', lab: 'view-lab', quiz: 'view-quiz', calc: 'view-calc', sim: 'view-sim', line: 'view-line', conn: 'view-conn' };
   var APP_NAME = 'Frame Structure';
 
   var nav = { domains: [], items: {}, route: null, query: '', store: { open: {}, last: null, scroll: 0 }, theme: 'auto' };
@@ -42,7 +43,7 @@
     var s = decodeURIComponent(String(h || '').replace(/^#/, ''));
     if (!s) return null;
     if (s === 'calc') return { view: 'calc', id: 'calc' };
-    var m = /^(t|lab|quiz|sim|line)\/(.+)$/.exec(s);
+    var m = /^(t|lab|quiz|sim|line|conn)\/(.+)$/.exec(s);
     return m ? { view: m[1], id: m[2] } : { view: 'ip', id: s };
   }
   function hashOf(r) { if (r.view === 'calc') return '#calc'; return '#' + (r.view === 'ip' ? '' : r.view + '/') + encodeURIComponent(r.id).replace(/%2F/g, '/'); }
@@ -94,7 +95,7 @@
     if (!prev || keyOf(prev) !== keyOf(r)) window.scrollTo(0, 0);
   }
 
-  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab, quiz: window.QuizView, calc: window.CalcView, sim: window.MapSimView, line: window.LineView }[name]; }
+  function viewOf(name) { return { ip: window.IPView, t: window.TransView, lab: window.MuxLab, quiz: window.QuizView, calc: window.CalcView, sim: window.MapSimView, line: window.LineView, conn: window.ConnView }[name]; }
   function showContainer(view) {
     Object.keys(CONTAINER).forEach(function (k) {
       var el = document.getElementById(CONTAINER[k]);
@@ -195,6 +196,21 @@
           return addItem({ view: 'sim', id: x.id }, x.name, x.method, 'mô phỏng ánh xạ mapping ' + x.method + ' ' + x.id + ' ' + x.name + ' ' + (x.hint || ''), x.hint || '');
         }) });
     }
+    // Đấu nối (CONN_*): mục Chuyển đổi đứng đầu, rồi họ → Sơ đồ chân / Cáp & chuyển đổi
+    var cm = null;
+    if (window.ConnView) { try { cm = window.ConnView.navModel(); } catch (e) { cm = null; } }
+    if (cm && cm.families.length) {
+      var cGroups = cm.families.map(function (f) {
+        var sub = [];
+        if (f.pinouts.length) sub.push({ key: 'c:conn:' + f.key + ':p', name: 'Sơ đồ chân', items: f.pinouts.map(function (x) {
+          return addItem({ view: 'conn', id: x.id }, x.name, x.meta, x.search, x.tip); }) });
+        if (f.cables.length) sub.push({ key: 'c:conn:' + f.key + ':c', name: 'Cáp & chuyển đổi', items: f.cables.map(function (x) {
+          return addItem({ view: 'conn', id: x.id }, x.name, x.meta, x.search, x.tip); }) });
+        return { key: 'f:conn:' + f.key, name: f.name, groups: sub };
+      });
+      nav.domains.push({ key: 'd:conn', name: 'Đấu nối', icon: '⇄', count: cm.count, groups: cGroups,
+        items: [addItem({ view: 'conn', id: 'convert' }, cm.convert.name, '', cm.convert.search, cm.convert.tip)] });
+    }
     // Ôn tập (chủ đề có câu hỏi) + Máy tính tốc độ
     var topics = [];
     if (window.QuizView) { try { topics = window.QuizView.items() || []; } catch (e) { topics = []; } }
@@ -222,11 +238,12 @@
   /** Vẽ một nút nhóm (mảng / họ / category). Trả về '' nếu không còn mục nào sau khi lọc. */
   function renderGroup(node, depth, q) {
     var inner = '';
-    if (node.groups) inner = node.groups.map(function (g) { return renderGroup(g, depth + 1, q); }).join('');
+    // mục trực tiếp đứng trước nhóm con (vd. "Chuyển đổi" đầu mảng Đấu nối)
     if (node.items) {
       var lis = node.items.filter(function (it) { return matches(it, q); }).map(renderItem).join('');
       if (lis) inner += '<ul class="tn-list">' + lis + '</ul>';
     }
+    if (node.groups) inner += node.groups.map(function (g) { return renderGroup(g, depth + 1, q); }).join('');
     if (!inner) return '';
     var open = q ? true : isOpen(node.key);
     var id = 'tn-' + node.key.replace(/[^\w-]+/g, '_');
@@ -339,7 +356,7 @@
       nav.store.scroll = +saved.scroll || 0;
     }
     if (!window.IPView) { showFatal('Không nạp được <code>js/app.js</code>.'); return; }
-    ['IPView', 'TransView', 'MuxLab', 'QuizView', 'CalcView', 'MapSimView', 'LineView'].forEach(function (name) {
+    ['IPView', 'TransView', 'MuxLab', 'QuizView', 'CalcView', 'MapSimView', 'LineView', 'ConnView'].forEach(function (name) {
       var v = window[name];
       if (!v || !v.init) return;
       try { v.init(); } catch (e) {
