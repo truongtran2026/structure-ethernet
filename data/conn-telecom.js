@@ -219,7 +219,10 @@
         { name: "Cặp 1 (xanh dương)", pins: ["4", "5"] }, { name: "Cặp 4 (nâu)", pins: ["7", "8"] },
         { name: "Vỏ", pins: ["S"] }
       ],
-      variants: ETH_VARIANTS
+      variants: ETH_VARIANTS,
+      noLoop:
+        "Không cần nút riêng: nút loop Ethernet nối theo SỐ CHÂN, không theo màu, nên dùng chung với T568B — " +
+        "eth-loop-100 (1↔3, 2↔6) cho 10/100 và eth-loop-1000 (thêm 4↔7, 5↔8) cho 1000BASE-T trở lên. Bấm nút bằng T568A thì đổi màu dây, chân giữ nguyên."
     },
     "eth-gig-cross-b": {
       id: "eth-gig-cross-b",
@@ -241,7 +244,10 @@
         { name: "Cặp 4 (nâu)", pins: ["4", "5"] }, { name: "Cặp 1 (xanh dương)", pins: ["7", "8"] },
         { name: "Vỏ", pins: ["S"] }
       ],
-      variants: ETH_VARIANTS
+      variants: ETH_VARIANTS,
+      noLoop:
+        "Đây là thứ tự màu của đầu thứ hai một sợi cáp chéo, không phải một kiểu cổng: cổng cắm ở đầu này vẫn là cổng Ethernet thường — " +
+        "thử bằng eth-loop-100 / eth-loop-1000 (nối theo số chân). Muốn thử chính sợi cáp chéo thì dùng máy test cáp (wiremap phải báo 1→3, 2→6, 3→1, 6→2, 4→7, 5→8, 7→4, 8→5)."
     },
     "e1-rj48c": {
       id: "e1-rj48c",
@@ -335,7 +341,11 @@
       groups: [
         { name: "Đường 1 (RJ11)", pins: ["3", "4"] }, { name: "Đường 2 (RJ14)", pins: ["2", "5"] },
         { name: "Đường 3 (RJ25)", pins: ["1", "6"] }
-      ]
+      ],
+      noLoop:
+        "Thoại analog 2 dây: tiếng nói hai chiều đi chung một cặp tip/ring (bộ hybrid trong máy và tổng đài tách hai chiều), không có cặp phát và cặp thu tách riêng để vòng lại. " +
+        "Chập tip với ring (3↔4) chỉ giống \"nhấc máy\" với tổng đài (có dòng vòng, tổng đài cấp âm mời quay số) — không kiểm thêm được gì. " +
+        "Cách thử: đo điện áp nghỉ ~48 V DC giữa 3 và 4, cắm máy điện thoại/butt set nghe âm mời quay số, hoặc máy test đường dây."
     }
   });
 
@@ -418,6 +428,74 @@
       warnings: ["Màu đầu b khác cả T568A lẫn T568B — đánh dấu cáp để khỏi bị dùng nhầm làm cáp thẳng."]
     },
     {
+      id: "eth-loop-100",
+      name: "Nút loopback Ethernet 10/100 (1↔3, 2↔6)",
+      family: "telecom",
+      kind: "loopback",
+      a: { pinout: "eth-t568b", gender: "male", label: "Phích 8P8C cắm vào cổng mạng" },
+      wires: [
+        { a: "1", a2: "3", note: "TD+ → RD+ (trắng-cam → trắng-xanh lá nếu bấm T568B)" },
+        { a: "2", a2: "6", note: "TD− → RD− (cam → xanh lá)" }
+      ],
+      use: "Kiểm cổng 10BASE-T/100BASE-TX: cổng 'thấy' chính mình ở đầu kia, link phải lên; hay dùng để dò cổng trên patch panel/ổ tường (đèn switch sáng ở cổng nào).",
+      loopFor: ["10BASE-T", "100BASE-TX", "Cổng MDI hay MDI-X đều được (nút nối cặp 1-2 với 3-6, vai trò tự khớp)"],
+      test:
+        "Cắm nút, xem đèn link cổng và lệnh: Cisco `show interfaces fa0/1` (hoặc `show interfaces status`) — \"up\", tốc độ 10/100; Linux `ethtool eth0` → \"Link detected: yes\". " +
+        "Không lên: đứt cặp, bấm sai cặp, hoặc cổng chỉ cho phép 1000. " +
+        "CẢNH BÁO trên switch: cổng nhận lại chính khung mình phát → Cisco gửi keepalive Ethernet (loopback detection) và có thể đưa cổng về err-disabled (lý do \"loopback\"); " +
+        "BPDU Guard/loop-detect của hãng khác cũng chặn cổng. Đó là dấu hiệu cổng VẪN TỐT (nó phát và thu được); sau khi thử phải rút nút và `shutdown`/`no shutdown` để gỡ err-disable. " +
+        "Không cắm vào cổng thuộc VLAN đang chạy dịch vụ khi switch tắt loop-detect — có thể gây bão broadcast. " +
+        "PoE: PSE chuẩn 802.3af/at/bt KHÔNG cấp nguồn vì nút chập 1-2 sang 3-6 (Mode A) — không có chữ ký 25 kΩ. " +
+        "KHÔNG cắm vào cổng/injector PoE THỤ ĐỘNG kiểu Mode A (1,2 = +; 3,6 = −, cấp thẳng không dò): dây 1↔3, 2↔6 chập + với −.",
+      standard: "Thực hành phổ biến (Ethernet loopback plug); chân theo IEEE 802.3 Cl.14/25 (MDI), màu theo TIA-568.2-D",
+      vendor: false,
+      detail:
+        "Tự kiểm: cặp phát 1-2 (MDI) quay về cặp thu 3-6, + về + (1→3), − về − (2→6). Ở cổng MDI-X, 3-6 là phát, 1-2 là thu — cùng nút vẫn đúng chiều. " +
+        "Cặp 4-5, 7-8 để trống (10/100 không dùng). Bấm bằng một đoạn cặp xoắn ngắn: dây trắng từ chân 1 gập về chân 3, dây màu từ chân 2 gập về chân 6 — " +
+        "TD+ và TD− đi chung một cặp xoắn như trong cáp thật. " +
+        "Cùng hình dạng nhưng KHÁC nút loop E1 RJ48C (1↔4, 2↔5) và nút console Cisco (3↔6, 1↔8, 2↔7) — dán nhãn nút. " +
+        "Cổng chỉ hỗ trợ Gigabit trở lên (không lùi được 100M) cần eth-loop-1000.",
+      warnings: [
+        "Switch có thể err-disable cổng hoặc (nếu tắt bảo vệ) tạo vòng lặp mạng — thử ngoài giờ hoặc trên cổng không dùng.",
+        "Không dùng nút này cho cổng E1/T1 hay console — sơ đồ khác."
+      ]
+    },
+    {
+      id: "eth-loop-1000",
+      name: "Nút loopback Ethernet Gigabit (1↔3, 2↔6, 4↔7, 5↔8)",
+      family: "telecom",
+      kind: "loopback",
+      a: { pinout: "eth-t568b", gender: "male", label: "Phích 8P8C cắm vào cổng mạng" },
+      wires: [
+        { a: "1", a2: "3", note: "BI_DA+ ↔ BI_DB+" },
+        { a: "2", a2: "6", note: "BI_DA− ↔ BI_DB−" },
+        { a: "4", a2: "7", note: "BI_DC+ ↔ BI_DD+" },
+        { a: "5", a2: "8", note: "BI_DC− ↔ BI_DD−" }
+      ],
+      use: "Kiểm cổng 1000BASE-T (và 2.5G/5G/10GBASE-T): cả 4 cặp, cặp A về B, cặp C về D — như cáp chéo Gigabit gập đôi về chính cổng.",
+      loopFor: ["1000BASE-T", "2.5GBASE-T / 5GBASE-T / 10GBASE-T (cùng 4 cặp, cùng phép chéo A↔B, C↔D — chưa xác minh link lên)", "Cũng chạy được 10/100 (chỉ dùng cặp 1-2, 3-6)"],
+      test:
+        "Cắm nút, xem link và tốc độ: Cisco `show interfaces gi0/1` / `show interfaces status`, Linux `ethtool eth0` (\"Speed: 1000Mb/s\", \"Link detected: yes\"). " +
+        "Kết quả hay gặp: lên 1000; hoặc chỉ lên 100 (PHY tự hạ tốc khi không bắt tay Gigabit được); hoặc không lên — tuỳ PHY. " +
+        "Lý do: ở 1000BASE-T hai đầu phải tự đàm phán ai là master (phát xung nhịp), ai là slave (802.3 Cl.40.5, dựa trên seed ngẫu nhiên) — " +
+        "ở đây đầu kia là CHÍNH NÓ, cùng mọi tham số, nên kết quả tuỳ cách PHY xử lý; ép cổng speed 1000 cố định thường không giúp được vì 1000BASE-T vẫn cần Auto-Negotiation. " +
+        "Cảnh báo như nút 10/100: switch có thể err-disable cổng do loopback/loop-detect (vẫn là dấu hiệu cổng phát–thu được), rút nút rồi `shutdown`/`no shutdown`. " +
+        "PoE: PSE không cấp nguồn — nút chập 1-2 sang 3-6 và 4-5 sang 7-8, không có chữ ký 25 kΩ. " +
+        "KHÔNG cắm vào cổng/injector PoE THỤ ĐỘNG (cấp thẳng không dò): 1↔3, 2↔6 (và 4↔7, 5↔8) chập + với −.",
+      standard: "Thực hành phổ biến (Gigabit loopback plug); phép chéo theo IEEE 802.3 Cl.40.8 (A↔B, C↔D); 2.5G/5G/10GBASE-T: IEEE 802.3 Cl.126/55",
+      vendor: false,
+      detail:
+        "Tự kiểm: mỗi cặp ở 1000BASE-T vừa phát vừa thu (dir diff), nên ở đây không có 'out → in' theo chân mà là cặp ↔ cặp: A (1-2) ↔ B (3-6), C (4-5) ↔ D (7-8), + với +, − với −. " +
+        "Đó chính là cáp chéo Gigabit (eth-crossover-1000) gập đôi. Nối 4↔5 hay 7↔8 trong cùng cặp là SAI (chập một cặp). " +
+        "Dùng được cho 10/100 vì bao trùm nút eth-loop-100. " +
+        "CẦN KIỂM: (1) link có lên ở 1000 hay chỉ 100/không lên tuỳ PHY (master/slave tự đàm phán với chính nó) — chưa có nguồn chuẩn khẳng định; " +
+        "(2) 2.5G/5G/10GBASE-T: cùng phép chéo cặp, nhưng việc link-training (Cl.55/126, có PMA training với đầu xa) hoàn tất khi đầu xa là chính nó chưa xác minh.",
+      warnings: [
+        "Không suy ra cổng hỏng chỉ vì nút này không lên 1000: thử lại với nút eth-loop-100 hoặc với một thiết bị thật.",
+        "Switch có thể err-disable cổng do phát hiện vòng lặp."
+      ]
+    },
+    {
       id: "e1-rj48c-cross",
       name: "Cáp chéo E1 RJ48C (1↔4, 2↔5)",
       family: "telecom",
@@ -449,9 +527,21 @@
         { a: "5", a2: "2", note: "TX tip → RX tip" }
       ],
       use: "Kiểm cổng E1/T1 của router: cắm vào, cổng phải lên (không LOS) và nhận lại chính khung mình phát.",
-      standard: "Thực hành phổ biến (Cisco T1/E1 loopback plug)",
-      vendor: false,
-      detail: "Một phích 8P8C, hai đoạn dây ngắn: 1↔4 và 2↔5. Đặt clock source internal khi test, vì không có đầu xa cấp clock.",
+      loopFor: ["E1 2048 kbit/s, 120 Ω cân bằng (G.703)", "T1/DS1 1544 kbit/s, 100 Ω (cùng chân RJ48C)", "Cả phía CPE lẫn phía NT (cặp 1-2 ↔ 4-5 đối xứng)"],
+      test:
+        "Cisco: `controller e1 0/0` → `clock source internal`; cắm nút; `show controllers e1 0/0` phải hết \"Receiver has loss of signal\" / \"loss of frame\" và báo \"No alarms detected\"; " +
+        "đèn LOS (hoặc AL) trên cổng tắt, đèn CD/SYNC sáng. Kênh serial HDLC đi kèm phải lên \"line protocol is up (looped)\". " +
+        "Quy trình Cisco (tech note 14165): `channel-group 0 timeslots 1-31`, interface serial `encapsulation hdlc` + đặt IP, `clear counters`, " +
+        "extended ping tới chính IP đó (repeat 50, size 1500, data pattern lần lượt 0x0000, 0x0001, 0x0101, 0x1111, 0x5555, 0xffff), rồi `show interfaces serial` — không có CRC/input error. " +
+        "Hoặc máy đo E1 / lệnh BERT của card (cú pháp `bert pattern …` CHƯA XÁC MINH theo từng dòng card) — số bit lỗi phải bằng 0. " +
+        "Còn LOS = đứt dây/cặp sai; có tín hiệu mà LOF = lệch khung (framing CRC4/no-CRC4 không ảnh hưởng vì cùng một cổng).",
+      standard: "Cisco E1 Hard Plug Loopback Test (tech note 14165); T1: tech note 5708",
+      vendor: true,
+      detail:
+        "Một phích 8P8C, hai đoạn dây ngắn: 1↔4 và 2↔5. Đặt clock source internal khi test, vì không có đầu xa cấp clock. " +
+        "Tự kiểm: TX ring 4 (out) → RX ring 1 (in); TX tip 5 (out) → RX tip 2 (in) — ring–ring, tip–tip. " +
+        "Cùng nút dùng cho T1 (RJ48C chung chân). KHÁC nút loop Ethernet (1↔3, 2↔6): cắm nút Ethernet vào cổng E1 thì TX 4-5 bỏ trống, cổng vẫn LOS. " +
+        "CẦN KIỂM: cú pháp lệnh BERT khác theo dòng router/card (VWIC, NIM) — đọc tài liệu cụ thể.",
       warnings: ["Không cắm nhầm nút loopback E1 vào cổng Ethernet PoE."]
     },
     {
@@ -467,7 +557,14 @@
       use: "Kiểm cổng E1 75 Ω hoặc vòng lặp tại DDF: một đoạn cáp đồng trục ngắn nối thẳng BNC TX sang BNC RX.",
       standard: "ITU-T G.703 (11/2001) §9 (giao diện); thực hành vòng lặp tại DDF",
       vendor: false,
-      detail: "Thường là một sợi coax 75 Ω ngắn hai đầu BNC đực, hoặc thanh nối U trên DDF. Đặt clock internal khi test.",
+      loopFor: ["E1 2048 kbit/s, 75 Ω không cân bằng (G.703)"],
+      test:
+        "Đặt clock internal cho cổng, nối coax TX → RX: đèn LOS tắt, cổng/luồng báo không cảnh báo (Cisco `show controllers e1`: \"No alarms detected\"); " +
+        "chạy BERT (lệnh của thiết bị hoặc máy đo E1) — 0 bit lỗi. Vòng tại DDF (thanh U) thì kiểm được cả đoạn cáp từ thiết bị tới DDF; " +
+        "vòng ngay ở mặt thiết bị thì chỉ kiểm cổng. Thử từng nửa để khoanh vùng lỗi.",
+      detail:
+        "Thường là một sợi coax 75 Ω ngắn hai đầu BNC đực, hoặc thanh nối U trên DDF. Đặt clock internal khi test. " +
+        "Tự kiểm: lõi TX (out) → lõi RX (in); vỏ TX – vỏ RX (đất – đất).",
       warnings: ["Dùng cáp 75 Ω (RG-59, RG-179…), không dùng cáp 50 Ω RG-58."]
     },
     {

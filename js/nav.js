@@ -206,6 +206,8 @@
           return addItem({ view: 'conn', id: x.id }, x.name, x.meta, x.search, x.tip); }) });
         if (f.cables.length) sub.push({ key: 'c:conn:' + f.key + ':c', name: 'Cáp & chuyển đổi', items: f.cables.map(function (x) {
           return addItem({ view: 'conn', id: x.id }, x.name, x.meta, x.search, x.tip); }) });
+        if (f.loops && f.loops.length) sub.push({ key: 'c:conn:' + f.key + ':l', name: 'Nút loopback (kiểm tra cổng)', items: f.loops.map(function (x) {
+          return addItem({ view: 'conn', id: x.id }, x.name, x.meta, x.search, x.tip); }) });
         return { key: 'f:conn:' + f.key, name: f.name, groups: sub };
       });
       nav.domains.push({ key: 'd:conn', name: 'Đấu nối', icon: '⇄', count: cm.count, groups: cGroups,

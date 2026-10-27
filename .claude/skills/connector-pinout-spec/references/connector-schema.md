@@ -74,6 +74,8 @@ Quy ước nhìn (UI dựa vào đây, **không được sai**):
   groups: [ { name: "Dữ liệu", pins: ["2","3"] }, … ],   // (tuỳ chọn) nhóm để tô màu: dữ liệu, điều khiển, nguồn, đất
   variants: [ { id, name, note, pins: { "4": { signal: "…", desc: "…" } } } ]  // (tuỳ chọn) biến thể gán chân
                                                                               // (vd. PoE Mode A/B, Gigabit vs 100M)
+  noLoop: "…"                         // (v3) BẮT BUỘC khi không có Cable kind "loopback" nào dùng pinout này:
+                                      // lý do không loop thụ động được (vd. USB cần thiết bị; RS-485 2 dây bán song công)
 }
 ```
 
@@ -118,7 +120,9 @@ chỉ khi Body có `face.pins` chứa `"S"`.
 5. Cable: `a.pinout`/`b.pinout` tồn tại; mọi `wires[].a` là chân của pinout a, `wires[].b` là chân của pinout b;
    `bridges[].pins` là chân của đầu `end`; `kind = "loopback"` thì không có `b` và wires dùng `{a, a2}` (hai chân cùng đầu)
    hoặc chỉ dùng bridges; `kind = "balun"` phải có `components`.
-6. Cảnh báo (không chặn): chân `gnd` của hai đầu cáp không được nối với nhau; chân `pwr` nối sang chân không phải `pwr`;
+6. (v3) Mỗi Pinout phải có ≥ 1 Cable `kind: "loopback"` (a.pinout = id) HOẶC `noLoop` (lỗi nếu thiếu cả hai).
+   Cable loopback có thể ghi `loopFor: ["10/100", …]` (tốc độ/chế độ áp dụng) và `test: "…"` (cách thử, kết quả mong đợi).
+7. Cảnh báo (không chặn): chân `gnd` của hai đầu cáp không được nối với nhau; chân `pwr` nối sang chân không phải `pwr`;
    Cable thiếu `use`.
 
 ## 5. Ghi chú nội dung

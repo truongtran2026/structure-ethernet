@@ -164,6 +164,24 @@
     return pin ? { end: end, pin: pin } : null;
   }
 
+  /** Nút loopback (Cable kind "loopback") của một pinout. */
+  function loopbacksOf(pinoutId) {
+    return db().C.filter(function (c) { return c.kind === 'loopback' && c.a.pinout === pinoutId; });
+  }
+  /** Tóm tắt nối vòng: "1↔3, 2↔6" (dây a↔a2, rồi cầu nối "4↔6↔1↔9"). */
+  function loopSummary(c) {
+    var parts = (c.wires || []).filter(function (w) { return w.a != null && w.a2 != null; }).map(function (w) { return w.a + '↔' + w.a2; });
+    (c.bridges || []).forEach(function (br) { if ((br.pins || []).length > 1) parts.push(br.pins.join('↔')); });
+    return parts.join(', ');
+  }
+  /** Pinout KHÁC cùng thân đầu nối (cắm vừa nhau nhưng gán chân khác) → loopback của chúng khác. */
+  function sameBodyPinouts(p) {
+    return pinoutList().filter(function (o) { return o.id !== p.id && o.body === p.body && o.id !== 'convert'; });
+  }
+  function loopForChips(c) {
+    return (c.loopFor || []).map(function (x) { return '<span class="chip cloop-for">' + esc(x) + '</span>'; }).join(' ');
+  }
+
   function cablesFor(pinoutId) {
     return db().C.filter(function (c) { return c.a.pinout === pinoutId || (c.b && c.b.pinout === pinoutId); });
   }
@@ -191,6 +209,7 @@
   }
   function pinoutSearch(p) {
     var b = bodyOf(p), hay = [p.id, p.name, p.summary, p.standard, p.role, (FAMILY[p.family] || {}).name, 'sơ đồ chân pinout'].concat(bodyWords(b));
+    if (loopbacksOf(p.id).length || p.noLoop) hay.push('loop loopback test cổng kiểm tra cổng', p.noLoop);
     (p.pins || []).forEach(function (x) { hay.push(x.signal, x.name, x.v24, x.color); });
     (p.variants || []).forEach(function (v) {
       hay.push(v.name, v.note);
@@ -200,6 +219,7 @@
   }
   function cableSearch(c) {
     var hay = [c.id, c.name, c.use, c.standard, c.detail, (KIND[c.kind] || {}).name, c.kind, 'cáp chuyển đổi cable adapter', c.vendor ? 'theo hãng vendor' : ''];
+    if (c.kind === 'loopback') hay.push('loop loopback nút thử vòng test cổng kiểm tra cổng', c.test, (c.loopFor || []).join(' '));
     ['a', 'b'].forEach(function (e) {
       if (!c[e]) return;
       var p = pinoutById(c[e].pinout);
@@ -216,7 +236,7 @@
     var d = db(), pins = pinoutList(), fams = {}, seen = {};
     if (!pins.length && !d.C.length) return null;
     function fam(k) {
-      return fams[k] || (fams[k] = { key: k, name: (FAMILY[k] || { name: k }).name, order: (FAMILY[k] || { order: 9 }).order, pinouts: [], cables: [] });
+      return fams[k] || (fams[k] = { key: k, name: (FAMILY[k] || { name: k }).name, order: (FAMILY[k] || { order: 9 }).order, pinouts: [], cables: [], loops: [] });
     }
     pins.forEach(function (p) {
       if (p.id === 'convert' || seen[p.id]) return;
@@ -228,8 +248,10 @@
     d.C.forEach(function (c) {
       if (c.id === 'convert' || seen[c.id]) return; // id trùng pinout: bỏ (validator phải bắt)
       seen[c.id] = 'cable';
-      fam(c.family || 'khác').cables.push({ id: c.id, name: c.name || c.id, meta: (KIND[c.kind] || { short: c.kind || '' }).short,
-        search: cableSearch(c), tip: c.use || '' });
+      var isLoop = c.kind === 'loopback';
+      fam(c.family || 'khác')[isLoop ? 'loops' : 'cables'].push({ id: c.id, name: c.name || c.id,
+        meta: isLoop ? (c.loopFor || []).join(' · ') || 'loopback' : (KIND[c.kind] || { short: c.kind || '' }).short,
+        search: cableSearch(c), tip: (isLoop && loopSummary(c) ? 'Nối ' + loopSummary(c) + (c.use ? ' · ' : '') : '') + (c.use || '') });
     });
     var list = Object.keys(fams).map(function (k) { return fams[k]; }).sort(function (x, y) { return x.order - y.order; });
     return {
@@ -907,6 +929,7 @@
     if (!b || !b.face) {
       return h + '<div class="alert alert--error"><strong>Thiếu thân đầu nối.</strong> Pinout tham chiếu body “' + esc(p.body) + '” không có trong dữ liệu.</div>' + pinTable(p, pins, gmap, vid);
     }
+    h += loopBox(p, b);
     h += toolbar(p, vid);
     var pg2 = perspGenders(b, p);
     if (side === 'persp') {
@@ -935,6 +958,46 @@
     h += explain(p.detail, p.standard, b);
     h += usedBy(p);
     return h;
+  }
+
+  /** loopFor rút gọn cho dòng "cùng đầu": tối đa 2 mục, mỗi mục ≤ 28 ký tự (đủ ở tooltip). */
+  function shortFor(list) {
+    var t = list.slice(0, 2).map(function (x) { x = String(x); return x.length > 28 ? x.slice(0, 27).trim() + '…' : x; }).join(', ');
+    return t + (list.length > 2 ? ' +' + (list.length - 2) : '');
+  }
+  /** Hộp "Kiểm tra cổng (loopback)" đầu trang sơ đồ chân. */
+  function loopBox(p, b) {
+    var loops = loopbacksOf(p.id), body = '';
+    if (loops.length) {
+      body += '<ul class="cresults cloops">' + loops.map(function (c) {
+        return '<li class="cresult cloop-i"><a href="#conn/' + esc(encodeURIComponent(c.id)) + '"><b>' + esc(c.name || c.id) + '</b></a> ' + loopForChips(c) +
+          '<div class="cloop-sum" title="Chân nối với nhau trong nút loopback">Nối: <b>' + esc(loopSummary(c) || '–') + '</b></div>' +
+          (c.test ? '<details class="cloop-det"><summary>Cách thử</summary><div class="csub muted">' + esc(c.test) + '</div></details>' : '') + '</li>';
+      }).join('') + '</ul>';
+    } else if (p.noLoop) {
+      body += '<div class="alert alert--info cloop-no"><strong>Không loopback thụ động được:</strong> ' + esc(p.noLoop) + '</div>';
+    } else {
+      body += '<p class="muted">Chưa có nút loopback nào trong dữ liệu cho sơ đồ chân này.</p>';
+    }
+    var sib = sameBodyPinouts(p).filter(function (o) { return loopbacksOf(o.id).length; });
+    if (sib.length) {
+      body += '<div class="cloop-diff"><strong>Cùng đầu ' + esc(b ? (b.aka && b.aka[0]) || b.name : p.body) + ' nhưng cách gán chân khác:</strong> loopback khác nhau, đừng dùng lẫn.<ul class="clinks">' +
+        sib.map(function (o) {
+          return '<li><a href="#conn/' + esc(encodeURIComponent(o.id)) + '">' + esc(o.name || o.id) + '</a>: ' + loopbacksOf(o.id).map(function (c) {
+            return '<a href="#conn/' + esc(encodeURIComponent(c.id)) + '"><b>' + esc(loopSummary(c) || '–') + '</b></a>' + ((c.loopFor || []).length ? ' <span class="muted" title="' + esc(c.loopFor.join(' · ')) + '">(' + esc(shortFor(c.loopFor)) + ')</span>' : '');
+          }).join('; ') + '</li>';
+        }).join('') + '</ul></div>';
+    }
+    return '<section class="card cloop" aria-labelledby="cloop-t"><div class="section-title"><h2 id="cloop-t">Kiểm tra cổng (loopback)</h2><span class="muted">' +
+      (loops.length ? loops.length + ' nút' : 'không có') + '</span></div>' + body + '</section>';
+  }
+  /** Khung loopFor + "Cách thử" nổi bật trên trang cáp loopback. */
+  function loopCableBox(c) {
+    if (c.kind !== 'loopback') return '';
+    return '<section class="card cloop" aria-labelledby="cloopc-t"><div class="section-title"><h2 id="cloopc-t">Kiểm tra cổng</h2><span class="muted">nút loopback</span></div>' +
+      '<div class="cloop-sum">Nối: <b>' + esc(loopSummary(c) || '–') + '</b></div>' +
+      ((c.loopFor || []).length ? '<p class="cloop-fors"><span class="toolbar-label">Dùng cho</span> ' + loopForChips(c) + '</p>' : '') +
+      (c.test ? '<div class="cloop-test"><strong>Cách thử:</strong> ' + esc(c.test) + '</div>' : '') + '</section>';
   }
 
   function stat(label, value, sub) {
@@ -1012,7 +1075,7 @@
       (body && body.standard ? '<p class="muted">Thân đầu nối: ' + esc(body.standard) + '</p>' : '') + '</details>';
   }
   function usedBy(p) {
-    var list = cablesFor(p.id);
+    var list = cablesFor(p.id).filter(function (c) { return c.kind !== 'loopback'; }); // loopback đã ở hộp "Kiểm tra cổng"
     var body = list.length ? '<ul class="clinks">' + list.map(function (c) {
       return '<li><a href="#conn/' + esc(encodeURIComponent(c.id)) + '">' + esc(c.name || c.id) + '</a> <span class="chip">' + esc((KIND[c.kind] || { short: c.kind }).short) + '</span>' +
         (c.vendor ? ' <span class="badge badge--unv">theo hãng</span>' : '') + (c.use ? '<div class="muted csub">' + esc(c.use) + '</div>' : '') + '</li>';
@@ -1069,11 +1132,22 @@
       var srcPin = A.pm[String(w.a)], dstPin = c.b ? B.pm[String(w.b)] : null;
       var col = parseColor(srcPin && srcPin.color) || parseColor(dstPin && dstPin.color), lc = layerOf(srcPin, A.gmap);
       var keys = esc(wk + ' ' + ka + ' ' + kb);
+      var lbl = '';
+      if (!c.b) { // nút loopback: nhãn tín hiệu ngay trên dây (TX→RX)
+        var dstPin2 = A.pm[String(w.a2)];
+        // chân không dùng (nc) ở chế độ này thì ghi số chân thay vì "(không dùng)"
+        var sg = function (pn, id) { return pn && pn.signal && pn.dir !== 'nc' ? pn.signal : String(id); };
+        var s1 = sg(srcPin, w.a), s2 = sg(dstPin2, w.a2);
+        if (s1 && s2) {
+          var lw = (s1.length + s2.length + 1) * 5.4 + 8, lx = (p1.x + p2.x) / 2, lyy = 0.125 * (p1.y + p2.y) + 0.75 * ly;
+          lbl = '<g class="cw-lblg" aria-hidden="true">' + rect(lx - lw / 2, lyy - 8, lw, 15, 3, 'cw-lblbg') + '<text class="cw-lbl" x="' + r2(lx) + '" y="' + r2(lyy) + '">' + esc(s1 + '→' + s2) + '</text></g>';
+        }
+      }
       wires += '<g class="cwire layer-' + lc + '" data-k="' + keys + '" data-h="' + wk + '">' +
         '<path class="cw-edge" d="' + d + '"/>' +
         '<path class="cw-main"' + (col ? ' style="stroke:' + col.base + '"' : '') + ' d="' + d + '"/>' +
         (col && col.stripe ? '<path class="cw-stripe" style="stroke:' + col.stripe + '" d="' + d + '"/>' : '') +
-        '<path class="cw-hit" d="' + d + '"><title>' + esc(pinLabel(A, String(w.a)) + ' → ' + (c.b ? 'B ' + pinLabel(B, String(w.b)) : pinLabel(A, String(w.a2))) + (w.note ? ' · ' + w.note : '')) + '</title></path></g>';
+        '<path class="cw-hit" d="' + d + '"><title>' + esc(pinLabel(A, String(w.a)) + ' → ' + (c.b ? 'B ' + pinLabel(B, String(w.b)) : pinLabel(A, String(w.a2))) + (w.note ? ' · ' + w.note : '')) + '</title></path></g>' + lbl;
     });
     // cầu nối trong cùng một đầu: vòng cung ra phía ngoài (A: lên trên, B: xuống dưới)
     (c.bridges || []).forEach(function (br, i) {
@@ -1142,6 +1216,7 @@
     if (c.warnings && c.warnings.length) {
       h += '<div class="alert alert--warn cwarn" role="note"><strong>⚠ Lưu ý</strong><ul>' + c.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul></div>';
     }
+    h += loopCableBox(c);
     var missing = [A, B].filter(function (x, i) { return (i === 0 || c.b) && x && (!x.p || !x.b); });
     if (missing.length) h += '<div class="alert alert--error"><strong>Thiếu dữ liệu đầu nối:</strong> ' + missing.map(function (x) { return esc(x.end.pinout); }).join(', ') + '</div>';
     h += '<div class="cends">' + [A, B].filter(Boolean).map(endCard).join('') + '</div>';
@@ -1265,10 +1340,15 @@
     var m = convertMatches(a, b), pa = pinoutById(a), pb = pinoutById(b);
     h += '<section class="card" aria-labelledby="cconv-r" aria-live="polite"><div class="section-title"><h2 id="cconv-r">Kết quả</h2><span class="muted">' +
       esc((pa.name || a) + ' ↔ ' + (pb.name || b)) + '</span></div>';
+    if (a === b) { // cùng pinout: nút loopback lên đầu, nhãn "Kiểm tra cổng"
+      h += '<h3 class="csub-h csub-h--first">Kiểm tra cổng (loopback)</h3>';
+      if (m.loop.length) h += '<ul class="cresults">' + m.loop.map(function (x) { return resultItem(x, a); }).join('') + '</ul>';
+      else h += '<div class="alert alert--info cloop-no">' + (pa.noLoop ? '<strong>Không loopback thụ động được:</strong> ' + esc(pa.noLoop) : 'Chưa có nút loopback nào trong dữ liệu cho đầu này.') + '</div>';
+      h += '<h3 class="csub-h">Cáp &amp; đầu chuyển nối hai đầu cùng loại</h3>';
+    }
     if (m.exact.length) h += '<ul class="cresults">' + m.exact.map(function (x) { return resultItem(x, a); }).join('') + '</ul>';
     else h += '<div class="alert alert--warn"><strong>Không có cách chế thụ động trong dữ liệu.</strong> Hai đầu này không có cáp/đầu chuyển chỉ bằng dây' +
       (pa.family !== pb.family ? ' — khác loại giao tiếp, thường phải dùng mạch chuyển đổi có IC (vd. USB ↔ RS-232 cần chip chuyển đổi)' : ' — có thể cần mạch chuyển đổi có IC') + '.</div>' + icHints(pa, pb);
-    if (m.loop.length) h += '<h3 class="csub-h">Nút thử vòng cho đầu này</h3><ul class="cresults">' + m.loop.map(function (x) { return resultItem(x, a); }).join('') + '</ul>';
     if (m.body.length) h += '<h3 class="csub-h">Cùng loại thân đầu nối nhưng khác cách gán chân</h3><p class="muted csub">Cắm vừa về cơ khí nhưng tín hiệu khác — chỉ tham khảo, đừng dùng thay.</p><ul class="cresults">' + m.body.map(function (x) { return resultItem(x, a); }).join('') + '</ul>';
     h += '</section>';
     return h;
@@ -1291,7 +1371,9 @@
       '<span class="chip">' + esc((KIND[c.kind] || { short: c.kind }).short) + '</span>' +
       (c.vendor ? ' <span class="badge badge--unv">Theo hãng, không phải chuẩn</span>' : '') +
       '<div class="muted csub">' + esc(ends) + (x.flip ? ' (dữ liệu ghi theo chiều ngược lại)' : '') + '</div>' +
+      (c.kind === 'loopback' ? ' <span class="cloop-sum">nối <b>' + esc(loopSummary(c)) + '</b></span> ' + loopForChips(c) : '') +
       (c.use ? '<div class="csub">' + esc(c.use) + '</div>' : '') +
+      (c.test ? '<div class="csub muted">Cách thử: ' + esc(c.test) + '</div>' : '') +
       (c.warnings && c.warnings.length ? '<div class="csub cwarn-t">⚠ ' + esc(c.warnings[0]) + (c.warnings.length > 1 ? ' (+' + (c.warnings.length - 1) + ')' : '') + '</div>' : '') + '</li>';
   }
 
@@ -1450,7 +1532,7 @@
 
   var ConnViz = {
     mirrored: mirrored, facePins: facePins, faceKeys: faceKeys, mergedPins: mergedPins, groupMap: groupMap,
-    resolvePin: resolvePin, parseRef: parseRef, cablesFor: cablesFor, convertMatches: convertMatches,
+    resolvePin: resolvePin, parseRef: parseRef, cablesFor: cablesFor, loopbacksOf: loopbacksOf, loopSummary: loopSummary, sameBodyPinouts: sameBodyPinouts, convertMatches: convertMatches,
     navModel: navModel, faceGeom: faceGeom, parseColor: parseColor, pinoutSearch: pinoutSearch, cableSearch: cableSearch,
     perspFace: perspFace, perspMating: perspMating, perspCableLayout: perspCableLayout, perspGenders: perspGenders,
     perspPinoutScene: perspPinoutScene, perspCableScene: perspCableScene, perspPinBoxes: perspPinBoxes, textBox: textBox, lblSize: lblSize

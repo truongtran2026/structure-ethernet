@@ -1275,6 +1275,22 @@ html.sim-zoom-lock, html.sim-zoom-lock body { overflow: hidden; }
 .cresult { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; background: var(--surface); }
 .cresult a { display: inline-block; min-height: 24px; line-height: 24px; }
 .csub-h { font-size: .95rem; margin: 16px 0 6px; }
+.csub-h--first { margin-top: 4px; }
+/* Kiểm tra cổng (loopback) */
+.cloop { border-left: 4px solid var(--accent); }
+.cloops { margin-bottom: 4px; }
+.cloop-i { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.cloop-i .csub { flex-basis: 100%; }
+.cloop-sum { display: inline-block; font-size: .92rem; padding: 2px 10px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); overflow-wrap: anywhere; }
+.cloop-sum b { font-family: var(--mono, ui-monospace, Consolas, monospace); }
+.cloop-for { background: var(--accent-soft); color: var(--accent); }
+.cloop-fors { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cloop-test { margin-top: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface-2); }
+.cloop-diff { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-strong); font-size: .92rem; }
+.cloop-diff .clinks { margin-top: 6px; }
+.cloop-no { margin: 0; }
+.cw-lblbg { fill: var(--surface); stroke: var(--border-strong); stroke-width: .8; pointer-events: none; }
+.cw-lbl { fill: var(--text); font-size: 9.5px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
 .cic { margin: 8px 0 0; padding-left: 20px; font-size: .88rem; }
 @media (max-width: 560px) {
   .cfig { flex-basis: 100%; }
@@ -1334,3 +1350,6 @@ html.sim-zoom-lock, html.sim-zoom-lock body { overflow: hidden; }
 .cwhere { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
 .cwhere-i { display: inline-flex; align-items: center; gap: 6px; }
 .cwhere-i .cmini { order: 0; margin-left: 0; }
+.cloop-det { flex-basis: 100%; }
+.cloop-det summary { cursor: pointer; font-size: .88rem; font-weight: 600; color: var(--accent); min-height: 24px; }
+.cloop-i .chip, .cloop-fors .chip { white-space: normal; text-align: left; }

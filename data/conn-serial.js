@@ -419,7 +419,12 @@
         { pin: "2", signal: "B (D+)", name: "Data B — đường không đảo", dir: "io", pair: "1", desc: "Theo TIA-485: B dương hơn A khi MARK (1). Xoắn cùng cặp với A." },
         { pin: "3", signal: "GND (SC)", name: "Signal Common", dir: "gnd", desc: "Đất tham chiếu chung; nối bằng dây thứ ba hoặc màn chắn tuỳ thiết kế." }
       ],
-      groups: [{ name: "Cặp dữ liệu", pins: ["1", "2"] }, { name: "Đất", pins: ["3"] }]
+      groups: [{ name: "Cặp dữ liệu", pins: ["1", "2"] }, { name: "Đất", pins: ["3"] }],
+      noLoop:
+        "RS-485 2 dây là bán song công: phát và thu dùng CHUNG một cặp A/B, không có cặp TX riêng để vòng về RX — nối A với B chỉ là chập đường dây. " +
+        "Cách thử: nối hai cổng (hai bộ chuyển USB-RS485) A–A, B–B, GND–GND, có kết cuối 120 Ω, rồi gửi ở bên này nhận ở bên kia; " +
+        "hoặc dùng chế độ 4 dây (RS-422/RS-485 full duplex: nối TX+ → RX+, TX− → RX−) nếu thiết bị hỗ trợ. " +
+        "Một số bộ chuyển 2 dây để bộ thu luôn bật nên tự nghe lại chính mình (echo) khi phát — thấy chữ dội lại KHÔNG chứng minh đường dây tốt."
     }
   });
 
@@ -539,9 +544,16 @@
       ],
       bridges: [{ end: "a", pins: ["4", "6", "1", "9"], note: "DTR → DSR, DCD, RI" }],
       use: "Kiểm cổng COM/USB-serial: gõ ký tự trong terminal phải thấy dội lại; phần mềm test đọc được DSR/DCD/CTS/RI đổi theo DTR/RTS.",
+      loopFor: ["RS-232 bất đồng bộ, mọi tốc độ (300 … 115 200 bit/s)", "Có hoặc không bắt tay phần cứng RTS/CTS, DTR/DSR"],
+      test:
+        "Cắm nút vào cổng COM (hoặc đầu USB-serial), mở PuTTY/Tera Term/minicom đúng cổng, TẮT local echo, gõ ký tự: thấy chữ hiện lại = TXD→RXD tốt; " +
+        "không thấy gì = đứt chân 2/3, sai cổng hoặc driver. Bật flow control RTS/CTS vẫn phải gõ được (chân 7→8). " +
+        "Kiểm chân điều khiển: phần mềm test cổng (vd. trên Linux `statserial`, Windows các công cụ COM port tester) bật/tắt DTR thì DSR, DCD, RI đổi theo; bật/tắt RTS thì CTS đổi theo.",
       standard: "Thực hành phổ biến (loopback plug kiểu PC)",
       vendor: false,
-      detail: "Một đầu DE-9 cái, các cầu: 2-3, 7-8, 4-6-1-9. Một đầu ra (DTR) kéo được 3 đầu vào — trong khả năng của mạch RS-232.",
+      detail:
+        "Một đầu DE-9 cái, các cầu: 2-3, 7-8, 4-6-1-9. Một đầu ra (DTR) kéo được 3 đầu vào — trong khả năng của mạch RS-232. " +
+        "Tự kiểm: TXD 3 (out) → RXD 2 (in); RTS 7 (out) → CTS 8 (in); DTR 4 (out) → DSR 6, DCD 1, RI 9 (in). Mọi chân ra đều về chân vào, không chân ra nào chập chân ra.",
       warnings: ["Không nối chân 5 (GND) vào cầu nào."]
     },
     {
@@ -622,6 +634,169 @@
         "terminal 4 (RTS) → ổ 1 → rollover → router 8 (CTS) ✓; router 1 (RTS) → rollover → ổ 8 → DB-25 5 (CTS) ✓. " +
         "Đầu chuyển DB-25 Cisco 29-0810-01 không cầu DSR–DCD; cầu 6–1 chỉ gặp ở một số đầu DE-9 bên thứ ba (APACN 24490-59) (conserver.com).",
       warnings: ["Cisco còn có đầu chuyển DB-25 ĐỰC kiểu \"modem\" (cho cổng AUX) với sơ đồ khác — không dùng thay cho nhau."]
+    },
+    // ---------- v3: nút loopback cho từng cách gán chân ----------
+    {
+      id: "loopback-db25-dte",
+      name: "Nút loopback DB-25 phía DTE (test cổng COM 25 chân)",
+      family: "serial",
+      kind: "loopback",
+      a: { pinout: "rs232-db25-dte", gender: "female", label: "Đầu DB-25 cái cắm vào cổng DTE 25 chân (đực)" },
+      wires: [
+        { a: "2", a2: "3", note: "TXD → RXD" },
+        { a: "4", a2: "5", note: "RTS → CTS" }
+      ],
+      bridges: [{ end: "a", pins: ["20", "6", "8", "22"], note: "DTR → DSR, DCD, RI (RI 22 tuỳ chọn)" }],
+      use: "Kiểm cổng nối tiếp DB-25 kiểu DTE (PC đời cũ, terminal, máy in nối tiếp, card đa cổng): dữ liệu phát phải quay về, bắt tay tự thoả.",
+      loopFor: ["RS-232 bất đồng bộ, mọi tốc độ", "Có hoặc không bắt tay phần cứng RTS/CTS, DTR/DSR"],
+      test:
+        "Như nút DE-9: terminal (PuTTY/minicom) mở đúng cổng, tắt local echo, gõ thấy chữ dội lại; bật/tắt DTR thì DSR/DCD/RI đổi, bật/tắt RTS thì CTS đổi. " +
+        "Không kiểm được chế độ đồng bộ (xung nhịp 15/17/24) và kênh phụ bằng nút này.",
+      standard: "Thực hành phổ biến (loopback plug DB-25); số chân theo TIA-232-F",
+      vendor: false,
+      detail:
+        "Một đầu DB-25 cái, cầu 2-3, 4-5, 20-6-8(-22). Chú ý số chân khác hẳn DE-9 (DB-25: 2 = TXD, 3 = RXD, 20 = DTR). " +
+        "Tự kiểm: TXD 2 (out) → RXD 3 (in); RTS 4 (out) → CTS 5 (in); DTR 20 (out) → DSR 6, DCD 8, RI 22 (in). " +
+        "Để trống có chủ ý: kênh phụ (14 STXD, 19 SRTS), xung nhịp đồng bộ 24 (TCE), lệnh thử 18 (LL), 21 (RL), chọn tốc độ 23 — các chân này là lệnh/xung cho modem, " +
+        "nút loop thông dụng không nối; validator sẽ liệt kê chúng là \"chân out không quay về\" — đó là chủ ý, không phải lỗi.",
+      warnings: ["Không nối chân 7 (GND) hay chân 1 (đất bảo vệ) vào cầu nào.", "Đừng dùng sơ đồ DE-9 (2-3, 7-8, 4-6-1-9) cho DB-25 — chân 7 là GND, sẽ chập RTS xuống đất."]
+    },
+    {
+      id: "loopback-db25-dce",
+      name: "Nút loopback DB-25 phía DCE (test cổng modem 25 chân)",
+      family: "serial",
+      kind: "loopback",
+      a: { pinout: "rs232-db25-dce", gender: "male", label: "Đầu DB-25 đực cắm vào cổng DCE (cái) của modem/CSU-DSU/thiết bị chế độ DCE" },
+      wires: [
+        { a: "3", a2: "2", note: "RXD (DCE phát) → TXD (DCE thu)" },
+        { a: "5", a2: "4", note: "CTS (DCE phát) → RTS (DCE thu)" },
+        { a: "6", a2: "20", note: "DSR (DCE phát) → DTR (DCE thu)" }
+      ],
+      use: "Kiểm cổng DB-25 của thiết bị đóng vai DCE (modem ngoài, CSU/DSU, cổng 'DCE' của bộ chuyển giao diện): dữ liệu thiết bị phát ra chân 3 quay về chân 2.",
+      loopFor: ["RS-232 bất đồng bộ phía DCE", "Bắt tay: CTS → RTS, DSR → DTR (mỗi đầu ra chỉ tới một đầu vào)"],
+      test:
+        "Chỉ có ý nghĩa khi thiết bị DCE có chế độ tự kiểm/terminal riêng (menu test, đèn TD/RD): sau khi cắm, đèn TD và RD phải nháy cùng nhau khi thiết bị phát; " +
+        "thiết bị thấy DTR (chân 20) lên ngay khi nó bật DSR. Modem thường không tự phát dữ liệu — khi đó dùng chức năng loop nội (AL/DL, V.54) của modem thay cho nút này.",
+      standard: "Suy ra từ TIA-232-F (đảo vai trò của nút DTE); không phải sơ đồ chuẩn hoá",
+      vendor: false,
+      detail:
+        "Tên tín hiệu luôn theo góc nhìn DTE, nên ở cổng DCE chân 3 (RXD) là ĐẦU RA, chân 2 (TXD) là ĐẦU VÀO. " +
+        "Tự kiểm: RXD 3 (out) → TXD 2 (in); CTS 5 (out) → RTS 4 (in); DSR 6 (out) → DTR 20 (in). " +
+        "KHÔNG cầu 6-8-20-22 như nút DTE: ở DCE, DSR 6, DCD 8 và RI 22 đều là đầu ra — cầu chúng với nhau là chập đầu ra với đầu ra. " +
+        "Vì vậy DCD 8, RI 22, xung nhịp 15/17, kênh phụ 12/13/16 và TM 25 để trống (validator liệt kê là chủ ý). " +
+        "CẦN KIỂM: chưa tìm được sơ đồ loop DCE DB-25 công bố của hãng để đối chiếu; sơ đồ này suy từ chiều mạch V.24.",
+      warnings: ["Không cầu các chân DSR (6), DCD (8), RI (22), CTS (5) với nhau ở phía DCE — đều là đầu ra."]
+    },
+    {
+      id: "loopback-rj45-cisco",
+      name: "Nút loopback RJ45 console kiểu Cisco (3↔6, 1↔8, 2↔7)",
+      family: "serial",
+      kind: "loopback",
+      a: { pinout: "rs232-rj45-cisco", gender: "male", label: "Phích 8P8C cắm vào cổng console/AUX RJ45" },
+      wires: [
+        { a: "3", a2: "6", note: "TXD → RXD" },
+        { a: "1", a2: "8", note: "RTS → CTS" },
+        { a: "2", a2: "7", note: "DTR → DSR" }
+      ],
+      use: "Kiểm cổng console/AUX RJ45 kiểu Cisco và đầu nối RJ45 kiểu đối xứng: mỗi chân ra nối sang chân đối xứng của nó.",
+      loopFor: ["Console/AUX RJ45 kiểu Cisco (và hãng dùng cùng sơ đồ: Juniper, Aruba…), 9600 8N1 hoặc tốc độ đã đặt"],
+      test:
+        "Trên router: `show line aux 0` (hoặc `show line console 0`) — phần trạng thái modem phải thấy CTS và DSR lên khi đường bật RTS/DTR. " +
+        "Cổng console router không có ‘terminal’ để xem dội lại: router đọc lại chính dòng nó in ra như lệnh, có thể sinh vòng lặp thông báo lỗi — chỉ cắm ngắn để thử, rồi rút. " +
+        "Cách hữu ích hơn: cắm nút cùng sơ đồ vào ổ RJ45 của đầu chuyển (xem loopback-rj45-cisco-adapter) hoặc qua đầu nối thẳng RJ45 (coupler) ở đầu cáp rollover để thử cả chuỗi PC → đầu chuyển → rollover.",
+      standard: "Suy ra từ sơ đồ console RJ45 tài liệu Cisco (\"Cabling Guide for Console and AUX Ports\")",
+      vendor: true,
+      detail:
+        "Sơ đồ console Cisco đối xứng nên loop chính là cáp rollover gập đôi: 3↔6, 1↔8, 2↔7 (4, 5 GND để trống). " +
+        "Tự kiểm: TXD 3 (out) → RXD 6 (in); RTS 1 (out) → CTS 8 (in); DTR 2 (out) → DSR 7 (in). " +
+        "KHÁC nút loop Ethernet (1↔3, 2↔6) và nút loop E1 (1↔4, 2↔5): cắm nhầm nút loop Ethernet vào console thì TXD 3 chập RTS 1, RXD 6 chập DTR 2 — không dội lại được. " +
+        "CẦN KIỂM: lệnh `show line` hiển thị trạng thái CTS/DSR cho dòng console (chắc chắn với AUX, chưa xác minh với console trên mọi dòng IOS).",
+      warnings: ["Không cắm nút này vào cổng Ethernet PoE: PSE chuẩn không thấy chữ ký 25 kΩ nên không cấp, nhưng với PoE thụ động 4 cặp (1,2,4,5 = +; 3,6,7,8 = −, cấp thẳng không dò) dây 1↔8, 2↔7 nối + sang − — chập nguồn (sơ đồ 4 cặp từng hãng chưa xác minh). Kiểu thụ động 4,5 = + / 7,8 = − thì không chập nhưng vẫn kéo V− sang cặp 1-2."]
+    },
+    {
+      id: "loopback-rj45-cisco-adapter",
+      name: "Nút loopback ở ổ RJ45 của đầu chuyển console (thử cổng COM + đầu chuyển)",
+      family: "serial",
+      kind: "loopback",
+      a: { pinout: "rs232-rj45-cisco-adapter", gender: "male", label: "Phích 8P8C cắm vào ổ RJ45 của đầu chuyển RJ45-DB9/DB25" },
+      wires: [
+        { a: "3", a2: "6", note: "TXD PC → RXD PC" },
+        { a: "1", a2: "8", note: "RTS PC → CTS PC" },
+        { a: "2", a2: "7", note: "DTR PC → DSR PC" }
+      ],
+      use: "Kiểm phía PC của bộ cáp console: cổng COM/USB-serial + đầu chuyển RJ45-DB9 — chưa cần router.",
+      loopFor: ["Đầu chuyển console RJ45-DE9 / RJ45-DB25 kiểu Cisco + cổng COM của PC, mọi tốc độ"],
+      test:
+        "Cắm đầu chuyển vào PC, cắm nút vào ổ RJ45 của đầu chuyển; PuTTY mở cổng COM (9600 8N1, tắt local echo), gõ phải thấy chữ dội lại. " +
+        "Thấy dội lại = cổng COM và đầu chuyển tốt → nếu cắm router vẫn không vào được thì lỗi ở cáp rollover, cổng console hay tốc độ. " +
+        "Muốn thử thêm cáp rollover: nối đầu xa rollover vào nút này qua một đầu nối thẳng RJ45 cái–cái (coupler); kết quả phải giống hệt.",
+      standard: "Suy ra từ sơ đồ đầu chuyển terminal adapter (tài liệu Cisco)",
+      vendor: true,
+      detail:
+        "Cùng một nút vật lý với loopback-rj45-cisco (3↔6, 1↔8, 2↔7) — vì sơ đồ đối xứng nên nhãn phía PC hay phía router đều cho cùng cặp chân. " +
+        "Tự kiểm theo nhãn phía PC: TXD 3 (PC phát) → RXD 6 (PC thu) ✓; RTS 1 → CTS 8 ✓; DTR 2 → DSR 7 ✓. " +
+        "Qua đầu chuyển DE-9: PC 3 → ổ 3 → nút → ổ 6 → PC 2 (RXD) ✓; PC 7 → ổ 1 → ổ 8 → PC 8 (CTS) ✓; PC 4 → ổ 2 → ổ 7 → PC 6 (DSR) ✓. " +
+        "Qua coupler + rollover: ổ 3 → rollover → 6 → nút → 3 → rollover → ổ 6 ✓ (rollover đảo 3↔6 hai lần).",
+      warnings: ["Coupler RJ45 phải là loại nối thẳng 1-1 (loại bán cho cáp mạng)."]
+    },
+    {
+      id: "loopback-rj45-tia561",
+      name: "Nút loopback RJ45 theo EIA/TIA-561 (6→5, 8→7, 3→1+2)",
+      family: "serial",
+      kind: "loopback",
+      a: { pinout: "rs232-rj45-tia561", gender: "male", label: "Phích 8P8C cắm vào cổng RS-232 RJ45 kiểu EIA/TIA-561" },
+      wires: [
+        { a: "6", a2: "5", note: "TXD → RXD" },
+        { a: "8", a2: "7", note: "RTS → CTS" }
+      ],
+      bridges: [{ end: "a", pins: ["3", "1", "2"], note: "DTR → DSR/RI, DCD" }],
+      use: "Kiểm cổng RS-232 RJ45 kiểu EIA/TIA-561 (terminal server, Sun/Digi, một số máy chủ): dữ liệu và bắt tay quay về chính cổng.",
+      loopFor: ["RS-232 bất đồng bộ trên RJ45 EIA/TIA-561, mọi tốc độ", "Có hoặc không bắt tay phần cứng"],
+      test:
+        "Terminal server: mở phiên vào cổng (reverse telnet/SSH tới cổng đó, hoặc lệnh test cổng của hãng), gõ thấy chữ dội lại; trạng thái cổng thấy DSR/DCD/CTS lên. " +
+        "Trên máy Linux có cổng RJ45 kiểu này: minicom/`statserial` như với DE-9.",
+      standard: "Suy ra từ gán chân EIA/TIA-561",
+      vendor: false,
+      detail:
+        "Tự kiểm: TXD 6 (out) → RXD 5 (in); RTS 8 (out) → CTS 7 (in); DTR 3 (out) → DSR/RI 1, DCD 2 (in). GND 4 để trống. " +
+        "Khác nút loop Cisco (3↔6, 1↔8, 2↔7): cắm nút Cisco vào cổng EIA/TIA-561 thì DTR 3 chập TXD 6 (ra–ra), DSR/RI 1 nối RTS 8, DCD 2 nối CTS 7 (vào–vào), RXD 5 bỏ trống — không dội lại. Mỗi cách gán chân RJ45 cần nút riêng.",
+      warnings: ["Đánh dấu rõ nút này: nhìn bên ngoài giống hệt nút loop Cisco/Ethernet/E1 nhưng nối khác."]
+    },
+    {
+      id: "loopback-v35",
+      name: "Nút loopback V.35 M/34 (phía DTE)",
+      family: "serial",
+      kind: "loopback",
+      a: { pinout: "v35-m34", gender: "female", label: "Đầu M/34 cái cắm vào đầu cáp V.35 DTE (đực)" },
+      wires: [
+        { a: "P", a2: "R", note: "SD A → RD A" },
+        { a: "S", a2: "T", note: "SD B → RD B" },
+        { a: "C", a2: "D", note: "RTS → CTS" },
+        { a: "U", a2: "V", note: "SCTE A → SCR A" },
+        { a: "U", a2: "Y", note: "SCTE A → SCT A" },
+        { a: "W", a2: "X", note: "SCTE B → SCR B" },
+        { a: "W", a2: "AA", note: "SCTE B → SCT B" }
+      ],
+      bridges: [{ end: "a", pins: ["H", "E", "F"], note: "DTR → DSR, DCD" }],
+      use: "Kiểm cổng serial V.35 của router (đầu cáp DTE) khi không có modem/CSU-DSU: dữ liệu phát quay về đầu thu, giữ A với A, B với B.",
+      loopFor: ["V.35 đồng bộ, 56 kbit/s … 2 Mbit/s (HDLC, PPP, Frame Relay)", "Cổng tự phát xung nhịp (xem test) — không có DCE cấp xung"],
+      test:
+        "Router Cisco: đặt đóng gói HDLC (mặc định), cắm nút; `show interfaces serial0/0` phải thấy \"line protocol is up (looped)\" — keepalive HDLC nhận lại chính mình; " +
+        "`show controllers serial0/0` cho biết loại cáp (DTE/DCE) và có xung nhịp không. Thử thêm: `ping` địa chỉ của chính cổng (gói đi ra dây rồi quay về). " +
+        "Không lên: không có xung nhịp — cổng DTE thuần cần SCT/SCR từ DCE. Không dùng cáp DCE với nút này (đầu cáp DCE cũng là M/34 cái nên không cắm vừa; ở DCE các chân E/F, V/Y là đầu ra nên cầu H-E-F, U-V-Y sẽ chập ra với ra). " +
+        "Cho cổng DTE tự phát xung trên SCTE (U/W) để vòng về SCR/SCT qua nút — Cisco: lệnh interface `transmit-clock-internal` (CHƯA XÁC MINH theo từng dòng IOS); không có thì dùng lệnh `loopback` trong interface (loop nội, không kiểm dây).",
+      standard: "Thực hành phổ biến; mạch theo ITU-T V.35/V.24, chân theo ISO 2593",
+      vendor: false,
+      detail:
+        "Tự kiểm: SD A P (out) → RD A R (in), SD B S (out) → RD B T (in) — giữ A–A, B–B (đảo A/B là đảo bit, HDLC không đồng bộ được cờ 7E); " +
+        "RTS C (out) → CTS D (in); DTR H (out) → DSR E, DCD F (in); SCTE U/W (out) → SCR V/X và SCT Y/AA (in): xung DTE trả về lại làm xung phát và thu của chính nó. " +
+        "Mỗi cặp cân bằng đi bằng một cặp xoắn ngắn. Chân A (đất khung), B (đất tín hiệu), J, K và chân trống không nối. " +
+        "CẦN KIỂM: (1) cổng DTE có tự phát SCTE khi không có SCT từ DCE hay không phụ thuộc phần cứng — nếu không, mạch xung U/W → V/X/Y/AA không có gì để vòng và cổng không lên; " +
+        "(2) đối chiếu với sơ đồ nút loop V.35 do hãng công bố (Cisco/Black Box) — chưa tìm được bản gốc.",
+      warnings: [
+        "Không nối P↔T hoặc S↔R (A sang B): dây vẫn thông nhưng tín hiệu bị đảo.",
+        "Không nối chéo xung nhịp SCT/SCR (Y/AA, V/X) với nhau — cả hai đều là đầu vào ở DTE."
+      ]
     }
   ]);
 })();

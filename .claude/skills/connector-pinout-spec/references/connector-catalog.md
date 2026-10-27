@@ -111,3 +111,27 @@ không có mục Cable, chỉ ghi trong `detail` (nói rõ IC gì và vì sao).
 | Cable | `hdmi-a-d` | hdmi-a-pin ↔ hdmi-d-pin (cáp Micro HDMI) |
 | Cable | `dp-dp` | dp-source ↔ dp-sink (DP_PWR không nối xuyên; lane theo VESA) |
 | Cable | `mini-dp-dp` | mini-dp-source ↔ dp-sink |
+
+## v3 — Nút loopback cho mọi cổng (2026-10-28)
+
+Mọi Pinout có ≥ 1 loopback hoặc `noLoop` (validator bắt). Loopback = 1 đầu, TX của cổng quay về RX của chính nó
+(+ bắt tay giả nếu có). Ghi `loopFor` (tốc độ/chế độ) và `test` (cách thử: phần mềm/lệnh, kết quả mong đợi, cảnh báo
+như loop-detect/err-disable trên switch, PoE).
+
+| File | id | a (pinout) | Nối |
+| --- | --- | --- | --- |
+| conn-telecom.js | `eth-loop-100` | eth-t568b | 1↔3, 2↔6 (10BASE-T/100BASE-TX) |
+| conn-telecom.js | `eth-loop-1000` | eth-t568b | 1↔3, 2↔6, 4↔7, 5↔8 (1000BASE-T; cũng dùng 2.5G/5G/10GBASE-T — CẦN KIỂM link thật có lên ở 1G) |
+| conn-telecom.js | (đã có) `e1-rj48c-loopback`, `e1-bnc-loopback` | | E1/T1 |
+| conn-telecom.js | `phone-rj11` | noLoop | thoại analog: không có TX/RX tách — dùng máy test/butt set |
+| conn-telecom.js | `eth-t568a`, `eth-gig-cross-b` | noLoop | trỏ sang eth-loop-100 / eth-loop-1000 (nút nối theo số chân, không theo màu) |
+| conn-serial.js | (đã có) `loopback-de9` | rs232-de9 | |
+| conn-serial.js | `loopback-db25-dte` | rs232-db25-dte | 2↔3, 4↔5, 6↔8↔20 (+22 tuỳ chọn) |
+| conn-serial.js | `loopback-db25-dce` | rs232-db25-dce | 3→2, 5→4, 6→20 (đã chỉnh 2026-10-27: KHÔNG cầu 6-8-20-22 như DTE vì ở DCE DSR/DCD/RI đều là đầu ra — cầu chúng là chập ra–ra; DCD/RI để trống) |
+| conn-serial.js | `loopback-rj45-cisco` | rs232-rj45-cisco | 3↔6, 1↔8, 2↔7 |
+| conn-serial.js | `loopback-rj45-tia561` | rs232-rj45-tia561 | TXD↔RXD, RTS↔CTS, DTR↔DSR/DCD |
+| conn-serial.js | `loopback-v35` | v35-m34 | P→R, S→T, C→D, H→E+F, U→V+Y, W→X+AA (CẦN KIỂM: cổng DTE có tự phát SCTE khi không có DCE) |
+| conn-serial.js | `rs485-2w` | noLoop | 2 dây bán song công: TX và RX chung cặp — không loop thụ động; dùng 2 cổng hoặc 4 dây |
+| conn-serial.js | `loopback-rj45-cisco-adapter` | rs232-rj45-cisco-adapter | 3↔6, 1↔8, 2↔7 (cùng nút vật lý với loopback-rj45-cisco; thêm làm loop riêng vì cắm vào ổ đầu chuyển là cách thử cổng COM + đầu chuyển hữu ích nhất) |
+| conn-usb.js | mọi pinout USB | noLoop | USB host–device có giao thức: không có nút loop thụ động; kiểm bằng thiết bị thật/tester; (USB 3.x loopback là chế độ giao thức khi compliance test) |
+| conn-video.js | mọi pinout video | noLoop | đường hình một chiều nguồn → nhận: không loop; kiểm bằng màn hình/EDID emulator; DDC/HPD tuỳ |

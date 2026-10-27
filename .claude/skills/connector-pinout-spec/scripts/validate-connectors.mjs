@@ -205,6 +205,35 @@ for (const c of CABLES) {
     if (!Array.isArray(br.pins) || br.pins.length < 2) err(`${where}: bridge cần ≥ 2 chân`);
     for (const id of br.pins || []) if (!P.get(String(id))) err(`${where}: bridge đầu ${br.end} chứa chân "${id}" không có`);
   }
+  // v3: loopFor / test; mỗi chân out của nút loop phải về được ít nhất một chân in (qua wires a↔a2 hoặc bridges).
+  if (c.loopFor !== undefined && !(Array.isArray(c.loopFor) && c.loopFor.length && c.loopFor.every((s) => typeof s === "string" && s.trim())))
+    err(`${where}: loopFor phải là mảng chuỗi khác rỗng`);
+  if (c.test !== undefined && !(typeof c.test === "string" && c.test.trim())) err(`${where}: test phải là chuỗi khác rỗng`);
+  if (!loop && (c.loopFor !== undefined || c.test !== undefined)) warn(`${where}: loopFor/test chỉ dành cho kind "loopback"`);
+  if (loop) {
+    if (c.test === undefined) warn(`${where}: loopback thiếu test (cách thử)`);
+    if (c.loopFor === undefined) warn(`${where}: loopback thiếu loopFor`);
+    const parent = new Map();
+    const find = (x) => { while (parent.has(x) && parent.get(x) !== x) x = parent.get(x); return x; };
+    const unite = (x, y) => { for (const z of [x, y]) if (!parent.has(z)) parent.set(z, z); const rx = find(x), ry = find(y); if (rx !== ry) parent.set(rx, ry); };
+    for (const w of wires) if (w.a !== undefined && w.a2 !== undefined) unite(String(w.a), String(w.a2));
+    for (const br of c.bridges || []) if (br.end === "a") for (const id of br.pins || []) unite(String(br.pins[0]), String(id));
+    const open = [];
+    for (const [id, pin] of A) {
+      if (pin.dir !== "out") continue;
+      const r = parent.has(id) ? find(id) : null;
+      const reaches = r !== null && [...A].some(([id2, p2]) => p2.dir === "in" && parent.has(id2) && find(id2) === r);
+      if (!reaches) open.push(`${id}(${pin.signal})`);
+    }
+    if (open.length) warn(`${where}: chân out không quay về chân in nào: ${open.join(", ")}`);
+    // Hai đầu ra nằm trong cùng một nút nối (qua wires/bridges) = chập đầu ra.
+    const outsByRoot = new Map();
+    for (const [id, pin] of A) if (pin.dir === "out" && parent.has(id)) {
+      const r = find(id);
+      outsByRoot.set(r, (outsByRoot.get(r) || []).concat(`${id}(${pin.signal})`));
+    }
+    for (const outs of outsByRoot.values()) if (outs.length > 1) warn(`${where}: các chân out bị nối chung (chập đầu ra): ${outs.join(", ")}`);
+  }
   for (const cp of c.components || []) {
     if (!cp.type) err(`${where}: component thiếu type`);
     for (const ref of cp.between || []) {
@@ -216,6 +245,18 @@ for (const c of CABLES) {
       if (!found) err(`${where}: component between "${ref}" không khớp chân/tín hiệu nào`);
     }
   }
+}
+
+// ---------- Luật 6 (v3): mỗi pinout có loopback hoặc noLoop ----------
+const loopsOf = {};
+for (const c of CABLES) if (c.kind === "loopback" && c.a?.pinout) (loopsOf[c.a.pinout] ||= []).push(c.id);
+for (const [key, p] of Object.entries(PINOUTS)) {
+  if (!p || typeof p !== "object") continue;
+  const where = `pinout "${key}"`;
+  if (p.noLoop !== undefined && !(typeof p.noLoop === "string" && p.noLoop.trim())) err(`${where}: noLoop phải là chuỗi lý do khác rỗng`);
+  const nl = typeof p.noLoop === "string" && p.noLoop.trim();
+  if (!loopsOf[key] && !nl) err(`${where}: không có Cable kind "loopback" nào và thiếu noLoop (luật 6)`);
+  if (loopsOf[key] && nl) warn(`${where}: vừa có loopback (${loopsOf[key].join(", ")}) vừa có noLoop`);
 }
 
 // ---------- Tóm tắt ----------

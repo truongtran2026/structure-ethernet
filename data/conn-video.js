@@ -948,6 +948,35 @@
   ];
 
   window.CONN_BODIES = Object.assign(window.CONN_BODIES || {}, bodies);
+  // v3 (luật 6): đường hình một chiều nguồn → nhận, không có nút loopback thụ động.
+  var VID_TEST_SRC = "Cách thử phía nguồn: cắm màn hình biết chắc tốt, hoặc bộ giả EDID (EDID emulator/dummy plug) để card nhận là có màn hình; máy test cáp kiểm thông mạch. ";
+  var VID_TEST_SINK = "Cách thử phía nhận: cấp hình từ một nguồn biết chắc tốt (laptop, máy phát mẫu hình/pattern generator) và xem màn hình báo 'không có tín hiệu' hay hiện hình. ";
+  var VIDEO_NOLOOP = {
+    "vga-de15":
+      "VGA là analog một chiều: R/G/B và HSync/VSync chỉ đi từ card ra màn hình, không có đường thu để vòng về; DDC (I²C) do card làm chủ, cần EEPROM EDID ở đầu kia. " +
+      "Nút 'dummy plug' VGA (điện trở 75 Ω trên R/G/B xuống đất) chỉ làm card tưởng có màn hình — là tải, không phải loopback. " + VID_TEST_SRC,
+    "vga-de15-sink":
+      "Phía màn hình VGA chỉ nhận R/G/B và đồng bộ, không phát gì ngược lại ngoài EDID trả lời qua DDC — không có cặp phát để vòng về thu. " + VID_TEST_SINK,
+    "dvi-i":
+      "TMDS (và analog C1–C5) chỉ đi một chiều nguồn → màn hình; chiều về duy nhất là DDC và Hot Plug Detect (mức tĩnh). Nối TMDS ra về đâu cũng không có bộ thu trên cùng cổng. " +
+      VID_TEST_SRC,
+    "hdmi-a-pin":
+      "TMDS/FRL HDMI chỉ đi một chiều nguồn → màn hình; DDC, CEC, HPD là kênh điều khiển chậm, không phải đường thu. Cùng một ổ HDMI hoặc là nguồn hoặc là nhận — không vòng về chính nó được. " +
+      VID_TEST_SRC + VID_TEST_SINK,
+    "hdmi-c-pin":
+      "Như HDMI Type A (cùng tín hiệu, khác chân): đường hình một chiều, không có bộ thu trên cổng phát. " + VID_TEST_SRC,
+    "hdmi-d-pin":
+      "Như HDMI Type A (cùng tín hiệu, khác chân): đường hình một chiều, không có bộ thu trên cổng phát. " + VID_TEST_SRC,
+    "dp-source":
+      "Main Link DisplayPort chỉ đi nguồn → nhận; AUX là kênh hai chiều bán song công do nguồn làm chủ (link training đọc DPCD của bộ nhận). " +
+      "Vòng Main Link về chính nguồn thì không có DPCD/bộ nhận để huấn luyện link. " + VID_TEST_SRC,
+    "dp-sink":
+      "Phía nhận DisplayPort chỉ thu Main Link và trả lời AUX — không có đường phát để vòng về. " + VID_TEST_SINK,
+    "mini-dp-source":
+      "Như DisplayPort phía nguồn (cùng tín hiệu, đầu nhỏ): Main Link một chiều, AUX do nguồn làm chủ — không loop thụ động được. " + VID_TEST_SRC
+  };
+  Object.keys(VIDEO_NOLOOP).forEach(function (k) { if (pinouts[k]) pinouts[k].noLoop = VIDEO_NOLOOP[k]; });
+
   window.CONN_PINOUTS = Object.assign(window.CONN_PINOUTS || {}, pinouts);
   window.CONN_CABLES = (window.CONN_CABLES || []).concat(cables);
 })();

@@ -27,7 +27,7 @@
     't-cell': 'Ô trong khung', 't-bits': 'Bit trong byte', 'u-rate': 'Tốc độ',
     'u-max': 'Số nhánh tối đa', 'u-oh': 'Overhead bước ghép', 'u-ts': 'TS (khe nhánh)', 'u-baud': 'Ký hiệu & điều chế',
     'c-sig': 'Tín hiệu của chân', 'c-pin': 'Vị trí tín hiệu', 'c-cable': 'Chọn cáp / đầu chuyển', 'c-wire': 'Nối dây trong cáp',
-    'c-dir': 'Hướng tín hiệu', 'c-ic': 'Thụ động hay cần IC'
+    'c-dir': 'Hướng tín hiệu', 'c-ic': 'Thụ động hay cần IC', 'c-loop': 'Nút loopback kiểm tra cổng'
   };
 
   // ---------- số ngẫu nhiên theo seed ----------
@@ -888,6 +888,35 @@
           return assemble(q, ans, textDistractors(ans, [t1, t2], rng), rng);
         } });
       });
+    });
+
+    // ----- (c-loop) nút loopback của pinout nối những chân nào; nhiễu = loop của pinout khác cùng thân -----
+    function pinKey(x) { var n = parseInt(x, 10); return isNaN(n) ? [1, String(x)] : [0, n, String(x)]; }
+    function pinCmp(x, y) { var a = pinKey(x), b = pinKey(y); return a[0] - b[0] || (a[0] ? (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) : a[1] - b[1]); }
+    /** "1↔3, 2↔6": mỗi cặp/cầu sắp theo số chân, các cặp sắp theo chân đầu → so sánh được giữa các loopback. */
+    function loopTxt(c) {
+      var groups = (c.wires || []).filter(function (w) { return w.a != null && w.a2 != null; }).map(function (w) { return [String(w.a), String(w.a2)]; });
+      (c.bridges || []).forEach(function (br) { if ((br.pins || []).length > 1) groups.push(br.pins.map(String)); });
+      groups.forEach(function (g) { g.sort(pinCmp); });
+      groups.sort(function (g1, g2) { return pinCmp(g1[0], g2[0]); });
+      return groups.map(function (g) { return g.join('↔'); }).join(', ');
+    }
+    var loops = CC.filter(function (c) { return c.kind === 'loopback' && !c.b && CP[c.a.pinout] && c.name && loopTxt(c); });
+    loops.forEach(function (c) {
+      var p = CP[c.a.pinout], mine = loops.filter(function (o) { return o.a.pinout === p.id; });
+      // nhiều nút cho một pinout: chỉ hỏi khi mỗi nút có loopFor riêng để đề nêu rõ
+      if (mine.length > 1 && (!(c.loopFor || []).length || mine.some(function (o) { return o !== c && String(o.loopFor) === String(c.loopFor); }))) return;
+      var ans = loopTxt(c);
+      out.push({ key: 'c-loop|' + c.id, topic: 'conn', type: 'c-loop', make: function (rng) {
+        var rest = loops.filter(function (o) { return o !== c; });
+        var tiers = [rest.filter(function (o) { return CP[o.a.pinout].body === p.body; }), rest.filter(function (o) { return famOf(CP[o.a.pinout]) === famOf(p); }), rest]
+          .map(function (l) { return l.map(loopTxt); });
+        var q = { prompt: 'Nút loopback để kiểm tra cổng “' + (p.name || p.id) + '”' + (mine.length > 1 ? ' (' + c.loopFor.join(', ') + ')' : '') + ' nối những chân nào với nhau?',
+          explain: 'Nút nối ' + ans + (c.wires && c.wires[0] && c.wires[0].note ? ' (' + c.wires[0].note + ')' : '') + '. ' + (c.test ? c.test : (c.use || '')) +
+            ' Cùng thân đầu nối nhưng gán chân khác thì loopback khác — đừng dùng lẫn.',
+          open: openC(c), check: { loop: c.id } };
+        return assemble(q, ans, textDistractors(ans, tiers, rng), rng);
+      } });
     });
 
     // ----- (c-ic) thụ động hay cần IC; chỉ hỏi khi hai đầu KHÁC thân đầu nối -----

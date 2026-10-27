@@ -862,6 +862,29 @@
   ];
 
   window.CONN_BODIES = Object.assign(window.CONN_BODIES || {}, bodies);
+  // v3 (luật 6): USB không có nút loopback thụ động — lý do theo từng pinout.
+  var USB2_WHY =
+    "USB 2.0 không có cặp phát/thu riêng: D+/D− là MỘT cặp bán song công, host điều khiển mọi giao dịch theo giao thức (token/data/handshake) — " +
+    "nối D+ với D− hay vòng về chính host không tạo ra 'thiết bị' nào, host chỉ thấy cổng trống. ";
+  var USB3_WHY =
+    "Cặp SuperSpeed có TX và RX riêng, nhưng nối SSTX → SSRX của chính host không cho link: LTSSM phải bắt tay (Rx.Detect, Polling, TS1/TS2) với một cổng đối diện; " +
+    "\"Loopback\" của USB 3.x là MỘT TRẠNG THÁI GIAO THỨC do máy đo compliance yêu cầu, không phải nút cắm dây. ";
+  var USB_TEST =
+    "Cách thử: cắm thiết bị biết chắc tốt (USB flash, chuột) rồi xem Device Manager / `lsusb` / `dmesg`; đo VBUS bằng đồng hồ hoặc USB tester (≈ 5 V, dòng tải); " +
+    "kiểm cáp bằng máy test cáp USB (thông mạch từng chân, nhận e-marker với USB-C).";
+  var USB_NOLOOP = {
+    "usb2-a": USB2_WHY + USB_TEST,
+    "usb3-a": USB2_WHY + USB3_WHY + USB_TEST,
+    "usb2-b": USB2_WHY + "Phía device (B) chỉ trả lời host, không tự phát. " + USB_TEST,
+    "usb3-b": USB2_WHY + USB3_WHY + USB_TEST,
+    "usb2-mini-b": USB2_WHY + "Chân ID chỉ báo vai trò OTG (nối GND = host A), không phải đường dữ liệu. " + USB_TEST,
+    "usb2-micro-b": USB2_WHY + "Chân ID chỉ báo vai trò OTG (nối GND = host A), không phải đường dữ liệu. " + USB_TEST,
+    "usb3-micro-b": USB2_WHY + USB3_WHY + USB_TEST,
+    "usb-c-rcpt": USB2_WHY + USB3_WHY +
+      "Thêm nữa, cổng nguồn USB-C chỉ bật VBUS khi thấy Rd 5,1 kΩ trên CC — nút dây không có Rd thì cổng thậm chí không cấp điện. " + USB_TEST
+  };
+  Object.keys(USB_NOLOOP).forEach(function (k) { if (pinouts[k]) pinouts[k].noLoop = USB_NOLOOP[k]; });
+
   window.CONN_PINOUTS = Object.assign(window.CONN_PINOUTS || {}, pinouts);
   window.CONN_CABLES = (window.CONN_CABLES || []).concat(cables);
 })();
