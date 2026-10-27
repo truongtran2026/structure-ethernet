@@ -81,7 +81,7 @@ window.TLABS = window.TLABS || [];
 
   F["e1"] = {
     id: "e1", name: "E1 (2,048 Mbit/s)", family: "pdh", category: "Khung PDH", order: 10,
-    standard: "ITU-T G.704 (10/98) §2.3, §5.1.3; G.703 (10/98) §6",
+    standard: "ITU-T G.704 (10/98) §2.3, §5.1.3; G.703 (10/98) §9",
     summary: "Khung PDH sơ cấp 2,048 Mbit/s: 32 khe thời gian × 8 bit, lặp mỗi 125 µs; đa khung CRC-4 và CAS 16 khung.",
     detail: "Mỗi khung E1 có 256 bit chia 32 khe (TS0–TS31), mỗi khe 64 kbit/s. TS0 không mang tải: khung chẵn chứa tín hiệu đồng bộ khung FAS 0011011, khung lẻ (NFAS) chứa bit A cảnh báo đầu xa và các bit Sa. Bit 1 của TS0 trên 16 khung tạo đa khung CRC-4 (C1–C4 giám sát lỗi, MFAS 001011, bit E báo lỗi ngược). TS16 hoặc mang báo hiệu kênh liên kết CAS (đa khung 16, mỗi kênh 4 bit abcd) – khi đó còn 30 kênh thoại – hoặc mang báo hiệu kênh chung / dữ liệu (31 kênh). Bấm TS0, TS16 để xem nghĩa thay đổi theo từng khung trong đa khung.",
     grid: { rows: 1, cols: 32, cellBits: 8 }, periodUs: 125, rateKbps: 2048, unit: "e1",
@@ -178,11 +178,11 @@ window.TLABS = window.TLABS || [];
   // =====================================================================
   function U(o) { o.family = "pdh"; M[o.id] = o; }
 
-  U({ id: "ds0", name: "DS0 / kênh 64 kbit/s", kind: "client", level: 0, rateKbps: 64, standard: "ITU-T G.703 (10/98) §1 (64 kbit/s), G.711",
+  U({ id: "ds0", name: "DS0 / kênh 64 kbit/s", kind: "client", level: 0, rateKbps: 64, standard: "ITU-T G.703 (10/98) §4 (64 kbit/s), G.711",
     summary: "Kênh cơ sở 64 kbit/s: một khe thời gian (8 bit × 8000 lần/s).",
     desc: "Một kênh thoại PCM G.711 (lấy mẫu 8 kHz × 8 bit) hoặc kênh dữ liệu 64 kbit/s. Là viên gạch của mọi cấp PDH/SDH: mỗi byte lặp mỗi 125 µs = 64 kbit/s." });
 
-  U({ id: "e1", name: "E1 (2,048 Mbit/s)", kind: "pdh", level: 1, rateKbps: 2048, leafOk: true, frame: "e1", standard: "ITU-T G.703 (10/98) §6, G.704 (10/98) §2.3, §5",
+  U({ id: "e1", name: "E1 (2,048 Mbit/s)", kind: "pdh", level: 1, rateKbps: 2048, leafOk: true, frame: "e1", standard: "ITU-T G.703 (10/98) §9, G.704 (10/98) §2.3, §5",
     summary: "Luồng PDH sơ cấp châu Âu 2,048 Mbit/s (32 khe 64 kbit/s, ±50 ppm).",
     desc: "Ghép đồng bộ 30 (hoặc 31) kênh 64 kbit/s vào 32 khe thời gian – không cần chèn bit vì các kênh cùng đồng hồ. TS0 dành cho đồng bộ khung/CRC-4, TS16 cho báo hiệu CAS. Trong lab SDH, E1 được thả nguyên khối và ánh xạ không đồng bộ vào C-12 (bù lệch đồng hồ bằng bit chèn).",
     accepts: [
@@ -192,7 +192,7 @@ window.TLABS = window.TLABS || [];
         mapping: "TDM đồng bộ (khe thời gian)", note: "31 × 64 + 64 = 2048 kbit/s – báo hiệu kênh chung (CCS) đi trong một khe, hoặc E1 thuần dữ liệu." }
     ] });
 
-  U({ id: "e2", name: "E2 (8,448 Mbit/s)", kind: "pdh", level: 2, rateKbps: 8448, leafOk: true, frame: "e2", standard: "ITU-T G.742 (11/88), G.703 (10/98) §7",
+  U({ id: "e2", name: "E2 (8,448 Mbit/s)", kind: "pdh", level: 2, rateKbps: 8448, leafOk: true, frame: "e2", standard: "ITU-T G.742 (11/88), G.703 (10/98) §10",
     summary: "Luồng PDH bậc 2 châu Âu 8,448 Mbit/s = 4 E1 ghép xen bit có chèn dương (±30 ppm).",
     desc: "Bốn E1 có đồng hồ độc lập (cận đồng bộ – plesiochronous) được ghép xen bit; mỗi nhánh có một bit cơ hội chèn mỗi khung, điều khiển bởi 3 bit Cj (biểu quyết đa số). SDH không có container cho E2 – E2 chỉ là cấp trung gian trong PDH.",
     accepts: [
@@ -200,7 +200,7 @@ window.TLABS = window.TLABS || [];
         mapping: "ghép xen bit + chèn dương", note: "4 × 2048 + 256 = 8448 kbit/s (danh định). Tỉ số chèn danh định 0,424: khoảng 42% số khung có chèn cho mỗi nhánh." }
     ] });
 
-  U({ id: "e3", name: "E3 (34,368 Mbit/s)", kind: "pdh", level: 3, rateKbps: 34368, leafOk: true, frame: "e3", standard: "ITU-T G.751 (11/88) §1.4, §2; G.703 (10/98) §8",
+  U({ id: "e3", name: "E3 (34,368 Mbit/s)", kind: "pdh", level: 3, rateKbps: 34368, leafOk: true, frame: "e3", standard: "ITU-T G.751 (11/88) §1.4, §2; G.703 (10/98) §11",
     summary: "Luồng PDH bậc 3 châu Âu 34,368 Mbit/s = 4 E2 = 16 E1 (±20 ppm).",
     desc: "Ghép xen bit 4 E2 có chèn dương (G.751). Muốn lấy một E1 ra phải tách ngược qua E3 → E2 → E1 (\"bậc thang ghép\") – điểm yếu lớn nhất của PDH. Vào SDH bằng ánh xạ không đồng bộ vào C-3 rồi VC-3 → TU-3 → TUG-3.",
     accepts: [
@@ -208,7 +208,7 @@ window.TLABS = window.TLABS || [];
         mapping: "ghép xen bit + chèn dương", note: "4 × 8448 + 576 = 34368 kbit/s (danh định); tỉ số chèn danh định 0,436." }
     ] });
 
-  U({ id: "e4", name: "E4 (139,264 Mbit/s)", kind: "pdh", level: 4, rateKbps: 139264, leafOk: true, frame: "e4", standard: "ITU-T G.751 (11/88) §1.5, §3; G.703 (10/98) §9",
+  U({ id: "e4", name: "E4 (139,264 Mbit/s)", kind: "pdh", level: 4, rateKbps: 139264, leafOk: true, frame: "e4", standard: "ITU-T G.751 (11/88) §1.5, §3; G.703 (10/98) §12",
     summary: "Luồng PDH bậc 4 châu Âu 139,264 Mbit/s = 4 E3 = 64 E1 (±15 ppm).",
     desc: "Ghép xen bit 4 E3 có chèn dương, 5 bit Cj mỗi nhánh. Vào SDH bằng ánh xạ không đồng bộ vào C-4 rồi VC-4 → AU-4, chiếm trọn một STM-1 (chỉ 64 E1 so với 63 E1 khi ghép qua TU-12, nhưng không truy nhập được từng E1).",
     accepts: [

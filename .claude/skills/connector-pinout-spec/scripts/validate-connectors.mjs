@@ -8,12 +8,14 @@ import vm from "node:vm";
 
 const root = path.resolve(process.argv[2] || ".");
 const dataDir = path.join(root, "data");
-const FAMILIES = ["serial", "telecom", "usb"];
+const FAMILIES = ["serial", "telecom", "usb", "video"];
 const OUTLINES = ["dsub", "rj", "usb-a", "usb-b", "usb-b-ss", "usb-mini-b", "usb-micro-b",
-  "usb-micro-b-ss", "usb-c", "bnc", "m34", "terminal"];
+  "usb-micro-b-ss", "usb-c", "bnc", "m34", "terminal",
+  // v2 Video (VGA DE-15 dùng "dsub" vỏ E, 3 hàng)
+  "hdmi-a", "hdmi-c", "hdmi-d", "dp", "mini-dp", "dvi"];
 const DIRS = ["in", "out", "io", "pwr", "gnd", "shield", "nc", "diff"];
 const KINDS = ["cable", "adapter", "loopback", "balun"];
-const ROLES = ["DTE", "DCE", "host", "device", "NT", "TE", null];
+const ROLES = ["DTE", "DCE", "host", "device", "NT", "TE", "source", "sink", null]; // source/sink: v2 Video
 
 const errors = [];
 const warns = [];

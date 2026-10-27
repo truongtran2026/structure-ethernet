@@ -1326,6 +1326,8 @@ html.sim-zoom-lock, html.sim-zoom-lock body { overflow: hidden; }
 .cmini { width: 112px; height: auto; flex: 0 0 auto; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; order: 9; margin-left: auto; }
 .cmini .cpv-body, .cmini .cpv-top, .cmini .cpv-dev, .cmini .cpv-devtop, .cmini .cpv-wall, .cmini .cpv-boot { stroke-width: 1; }
 .cmini-face { fill: color-mix(in srgb, var(--text) 80%, var(--surface)); stroke: var(--text); stroke-width: 1; }
+.cmini-shape * { stroke-width: .6px; }
+.cmini-shape .cf-flange { fill-opacity: .7; }
 .cmini-sight { stroke-width: 1.2; stroke-dasharray: 3 2; stroke: var(--accent); }
 .cmini-t { fill: var(--accent); font-size: 9.5px; font-weight: 700; stroke-width: 2.5px; }
 .cmini .cpv-eye-w { stroke-width: 1; }

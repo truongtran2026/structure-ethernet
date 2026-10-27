@@ -21,7 +21,7 @@ dưới dạng "không chế bằng dây được, cần …".
   id: "de9",
   name: "D-sub 9 chân (DE-9)",
   aka: ["DB9", "DB-9", "cổng COM 9 chân"],    // tên thường gọi, để tìm kiếm
-  family: "serial",                             // "serial" | "telecom" | "usb"
+  family: "serial",                             // "serial" | "telecom" | "usb" | "video"
   standard: "IEC 60807-3 / MIL-DTL-24308 (thân D-sub)",
   summary: "1 câu.",
   detail: "Đoạn giải thích: cách nhận biết, kích thước vỏ, nhầm lẫn tên (DB9 vs DE9)…",
@@ -32,6 +32,7 @@ dưới dạng "không chế bằng dây được, cần …".
   face: {                                       // hình mặt cắm để UI vẽ SVG
     outline: "dsub",   // "dsub" | "rj" | "usb-a" | "usb-b" | "usb-b-ss" | "usb-mini-b" | "usb-micro-b"
                        // | "usb-micro-b-ss" | "usb-c" | "bnc" | "m34" | "terminal"
+                       // | "hdmi-a" | "hdmi-c" | "hdmi-d" | "dp" | "mini-dp" | "dvi"  (v2: Video; VGA dùng "dsub" 3 hàng)
     shell: "E",        // (dsub) cỡ vỏ A/B/C/D/E; (khác) bỏ
     w: 100, h: 40,     // khung toạ độ (đơn vị tuỳ ý), gốc ở góc trên-trái
     viewOf: "male",    // pins[] dưới đây vẽ cho giới tính nào, NHÌN VÀO MẶT CẮM
@@ -60,7 +61,7 @@ Quy ước nhìn (UI dựa vào đây, **không được sai**):
   name: "RS-232 trên DE-9 (DTE, cổng COM PC)",
   family: "serial",
   standard: "TIA-574 (gán chân DE-9); TIA-232-F / ITU-T V.24, V.28 (tín hiệu, mức điện)",
-  role: "DTE",                        // (tuỳ chọn) "DTE" | "DCE" | "host" | "device" | "NT" | "TE" | null
+  role: "DTE",                        // (tuỳ chọn) "DTE" | "DCE" | "host" | "device" | "NT" | "TE" | "source" | "sink" | null
   gender: "male",                     // giới tính THƯỜNG GẶP của pinout này trên thiết bị (vd. PC: male)
   summary, detail,                    // detail: mức điện, tốc độ, khoảng cách, lỗi hay gặp, chuyển đổi cần IC
   pins: [
@@ -109,7 +110,7 @@ chỉ khi Body có `face.pins` chứa `"S"`.
 ## 4. Bất biến (validator `scripts/validate-connectors.mjs` kiểm)
 
 1. id duy nhất trong mỗi kho; id Cable duy nhất trong mảng.
-2. `family` ∈ {serial, telecom, usb}; `face.outline` ∈ danh sách mục 1; `dir` ∈ danh sách mục 2;
+2. `family` ∈ {serial, telecom, usb, video}; `face.outline` ∈ danh sách mục 1; `dir` ∈ danh sách mục 2;
    `kind` ∈ {cable, adapter, loopback, balun}; gender ∈ khoá `genders` của Body.
 3. Body: `pinCount === face.pins.length`; tên chân trong face không trùng; toạ độ nằm trong `w × h`.
 4. Pinout: `body` tồn tại; tập `pins[].pin` **bằng đúng** tập chân của Body (không thiếu, không thừa, không trùng).

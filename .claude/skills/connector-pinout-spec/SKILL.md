@@ -34,3 +34,6 @@ người đọc hàn sai cả sợi cáp. Vì vậy hai thứ phải tuyệt đ�
   Mini/Micro-B (cạnh rộng trên) 1→5; Micro-B 3.x 1→10 (khối 2.0 trái, SS phải); B: 2 1 / 3 4; bướu Std-B 3.x 5→9;
   hàng SS Std-A 9…5 trái→phải (chân 5 phía chân 4). Plug là ảnh gương. Luôn render hình chuẩn (PDF) để đối chiếu.
 - Bảng chân USB 3.x nằm trong "USB 3.1 Legacy Cable and Connector Spec", không phải USB 3.2 ch.5.
+- M/34 (V.35) là 4 CỘT so le nửa bước 9/8/9/8, trục dài thẳng đứng (không phải các hàng 2/4/5/5…): đầu đực nhìn mặt cắm,
+  cột 1 B F L…NN, cột 2 D J N…LL, cột 3 A E K…MM, cột 4 C H M…KK. Nguồn: catalogue Winchester MRAC (hình nhìn phía hàn đầu cái = mặt cắm đầu đực).
+- Luôn ghi NĂM BẢN khi trích số mục G.703 — số mục đổi theo bản (E1 2048 kbit/s: §6 bản 1991, §9 bản 10/98 và 11/2001, §11 bản 04/2016).

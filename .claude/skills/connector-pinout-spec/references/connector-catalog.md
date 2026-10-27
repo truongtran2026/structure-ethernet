@@ -1,6 +1,6 @@
 # Danh mục mảng Đấu nối (phạm vi v1 — 2026-10-27)
 
-Người dùng chọn: Nối tiếp/console, Viễn thông/mạng, USB. **Không** có Video (HDMI/DP/DVI/VGA — để sau).
+Người dùng chọn: Nối tiếp/console, Viễn thông/mạng, USB (v1). **v2 (2026-10-27):** thêm Video (VGA/DVI/HDMI/DP) — file `data/conn-video.js`.
 Chỉ chuyển đổi thụ động. Id cố định để connector-expert và frontend-dev làm song song.
 
 ## Body
@@ -79,3 +79,35 @@ Chỉ chuyển đổi thụ động. Id cố định để connector-expert và 
 | conn-usb.js | `usb-c-c-2` | cable | usb-c ↔ usb-c (USB 2.0, CC nối CC) |
 
 Nếu chuẩn không cho phép một mục (vd. cáp USB-A ↔ USB-A nối VBUS/D±; USB 3.x chỉ có cáp A–A gỡ lỗi, Legacy §5.5.2 Table 5-9), không tạo; ghi vào `warnings` của mục gần nhất.
+
+## v2 — Video (data/conn-video.js, family `video`)
+
+Chỉ chuyển đổi thụ động **bằng dây** (cùng loại tín hiệu: TMDS↔TMDS, analog↔analog). Đầu chuyển có IC
+(DP → HDMI dù quảng cáo "passive" — có bộ dịch mức/ID buffer DP++ type 1/2; HDMI → VGA; DP → VGA; USB-C Alt Mode → HDMI)
+không có mục Cable, chỉ ghi trong `detail` (nói rõ IC gì và vì sao).
+
+| Loại | id | Ghi chú |
+| --- | --- | --- |
+| Body | `de15` | D-sub 15 chân mật độ cao (DE-15 / "HD15", VGA), outline dsub 3 hàng 5/5/5, vỏ E |
+| Body | `dvi` | DVI (24 chân số 3×8 + C1–C5 analog quanh lưỡi dẹt), outline dvi; DVI-D/DVI-A là biến thể chân có/không |
+| Body | `hdmi-a` | HDMI Type A 19 chân (hàng trên lẻ 1…19, hàng dưới chẵn 2…18) |
+| Body | `hdmi-c` | HDMI Type C (Mini) 19 chân — gán chân KHÁC Type A |
+| Body | `hdmi-d` | HDMI Type D (Micro) 19 chân — gán chân KHÁC A và C |
+| Body | `dp` | DisplayPort 20 chân (vỏ một góc vát) |
+| Body | `mini-dp` | Mini DisplayPort 20 chân |
+| Pinout | `vga-de15` | VESA DDC/EDID; VGA (R/G/B 75 Ω, HSync/VSync, DDC SDA/SCL, +5 V) — phía nguồn (card đồ hoạ) |
+| Pinout | `vga-de15-sink` | VGA phía nhận (màn hình): dir theo cột Display của E-DDC 1.2 Bảng 7-1 (RGB/sync/SCL vào, chân 4/11 Reserved – không nối). Lý do thêm: đầu b của `vga-cable` không được dùng lại pinout source (sẽ thành out→out) |
+| Pinout | `dvi-i` | DDWG DVI 1.0: TMDS 2 link + DDC + Hot Plug + analog C1–C5; variants dvi-d-single, dvi-d-dual, dvi-a |
+| Pinout | `hdmi-a-pin` | HDMI 1.4/2.x Type A (TMDS D0–D2, clock, CEC, DDC, +5 V, HPD, Utility/HEAC) |
+| Pinout | `hdmi-c-pin` | HDMI Type C |
+| Pinout | `hdmi-d-pin` | HDMI Type D |
+| Pinout | `dp-source` | VESA DisplayPort 1.x, receptacle phía nguồn (ML_Lane0–3, AUX, HPD, CONFIG1/2, DP_PWR) |
+| Pinout | `dp-sink` | Receptacle phía nhận (thứ tự lane đảo — CẦN KIỂM theo VESA) |
+| Pinout | `mini-dp-source` | Mini DP phía nguồn |
+| Cable | `vga-cable` | vga-de15 M ↔ M (1–1; ID pins tuỳ) |
+| Cable | `dvi-hdmi` | dvi-i (D) ↔ hdmi-a-pin: thụ động, chỉ TMDS single-link + DDC + HPD; không âm thanh nếu nguồn không gửi |
+| Cable | `dvi-i-vga` | dvi-i (chỉ C1–C5 + DDC + sync) ↔ vga-de15: thụ động khi card xuất analog trên DVI-I/DVI-A |
+| Cable | `hdmi-a-c` | hdmi-a-pin ↔ hdmi-c-pin (cáp Mini HDMI) |
+| Cable | `hdmi-a-d` | hdmi-a-pin ↔ hdmi-d-pin (cáp Micro HDMI) |
+| Cable | `dp-dp` | dp-source ↔ dp-sink (DP_PWR không nối xuyên; lane theo VESA) |
+| Cable | `mini-dp-dp` | mini-dp-source ↔ dp-sink |

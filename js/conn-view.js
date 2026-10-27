@@ -18,7 +18,8 @@
   var FAMILY = {
     serial: { name: 'Nối tiếp / console', order: 1 },
     telecom: { name: 'Viễn thông / mạng', order: 2 },
-    usb: { name: 'USB', order: 3 }
+    usb: { name: 'USB', order: 3 },
+    video: { name: 'Video', order: 4 }
   };
   var KIND = {
     cable: { name: 'Cáp', short: 'cáp' },
@@ -42,13 +43,18 @@
     host: 'host — máy chủ USB',
     device: 'device — thiết bị USB',
     NT: 'NT — đầu cuối mạng (phía nhà mạng)',
-    TE: 'TE — thiết bị đầu cuối'
+    TE: 'TE — thiết bị đầu cuối',
+    source: 'source — phía nguồn hình (card đồ hoạ, máy tính)',
+    sink: 'sink — phía nhận hình (màn hình, TV)'
   };
   var GENDER_SHORT = { male: 'đầu đực', female: 'đầu cái' };
   // màu nhóm chân: mượn bảng màu layer (đã có biến thể sáng/tối, đủ tương phản)
   var GROUP_LAYERS = ['l2', 'l3', 'l4', 'tunnel', 'l2_5', 'trailer', 'l7', 'phy'];
   var DIR_LAYER = { 'in': 'l3', out: 'l2', io: 'tunnel', diff: 'tunnel', pwr: 'trailer', gnd: 'phy', shield: 'phy', nc: 'payload' };
-  var BLADE = { rj: 1, 'usb-a': 1, 'usb-b': 1, 'usb-b-ss': 1, 'usb-mini-b': 1, 'usb-micro-b': 1, 'usb-micro-b-ss': 1, 'usb-c': 1 };
+  var BLADE = { rj: 1, 'usb-a': 1, 'usb-b': 1, 'usb-b-ss': 1, 'usb-mini-b': 1, 'usb-micro-b': 1, 'usb-micro-b-ss': 1, 'usb-c': 1,
+    'hdmi-a': 1, 'hdmi-c': 1, 'hdmi-d': 1, dp: 1, 'mini-dp': 1 };
+  // vỏ hình thang vát hai góc dưới: tỉ lệ cạnh vát theo chiều cao (HDMI A/C/D, Mini DP)
+  var CHAMFER2 = { 'hdmi-a': 0.38, 'hdmi-c': 0.32, 'hdmi-d': 0.26, 'mini-dp': 0.3 };
   // màu dây (T568A/B, USB…): cụm dài trước để "xanh lá" không bị bắt thành "xanh"
   var WIRE_COLORS = [
     ['xanh lá', '#2f9e44'], ['xanh lục', '#2f9e44'], ['xanh dương', '#1c6fd6'], ['xanh lam', '#1c6fd6'], ['green', '#2f9e44'], ['blue', '#1c6fd6'],
@@ -277,8 +283,10 @@
     var inner = pins.filter(function (p) { return !p.shell; });
     var c;
     if (o === 'dsub') {
-      // hình thang: cạnh dài ở phía có nhiều chân hơn
-      var top = inner.filter(function (p) { return p.y < h / 2; }).length, bot = inner.length - top;
+      // hình thang: cạnh dài ở phía hàng ngoài cùng có nhiều chân hơn (so hàng trên cùng với hàng dưới cùng,
+      // để D-sub 3 hàng 5/5/5 như DE-15 vẫn đúng: bằng nhau → cạnh dài ở trên)
+      var ys = inner.map(function (p) { return p.y; }), yMin = Math.min.apply(null, ys), yMax = Math.max.apply(null, ys);
+      var top = inner.filter(function (p) { return p.y - yMin < r; }).length, bot = inner.filter(function (p) { return yMax - p.y < r; }).length;
       var k = h * 0.22, i = h * 0.07;
       var fx = h * 0.62, fy = h * 0.24;
       s += rect(-fx, -fy, w + 2 * fx, h + 2 * fy, h * 0.12, 'cf-flange');
@@ -311,6 +319,22 @@
         s += tongue(left, r) + tongue(right, r);
         if (gx != null) s += '<line class="cf-split" x1="' + r2(gx) + '" y1="' + r2(h * 0.05) + '" x2="' + r2(gx) + '" y2="' + r2(h * 0.95) + '"/>';
       } else s += tongue(pins, r);
+    } else if (CHAMFER2[o]) {
+      // HDMI A/C/D, Mini DP: hình thang, cạnh rộng ở trên, vát hai góc dưới; lưỡi nhựa mang tiếp điểm ở giữa
+      c = Math.min(h * CHAMFER2[o], w * 0.2);
+      s += poly([[0, 0], [w, 0], [w, h - c], [w - c, h], [c, h], [0, h - c]], 'cf-shell') + tongue(pins, r);
+    } else if (o === 'dp') {
+      // DisplayPort: chữ nhật vát MỘT góc (bất đối xứng ⇒ phải lật theo gương như chân)
+      c = Math.min(h * 0.32, w * 0.2);
+      var cn = dpCorner(body, keys, mirrored(body, gender, side));
+      var pts = [[0, 0], [w, 0], [w, h], [0, h]], ci = { tl: 0, tr: 1, br: 2, bl: 3 }[cn];
+      var cx = ci === 0 || ci === 3 ? 0 : w, cy = ci < 2 ? 0 : h, sx = cx ? -1 : 1, sy = cy ? -1 : 1;
+      // thay góc bằng hai điểm vát theo chiều kim đồng hồ
+      var cut = ci % 2 === 0 ? [[cx, cy + sy * c], [cx + sx * c, cy]] : [[cx + sx * c, cy], [cx, cy + sy * c]];
+      pts.splice.apply(pts, [ci, 1].concat(cut));
+      s += poly(pts, 'cf-shell') + tongue(pins, r);
+    } else if (o === 'dvi') {
+      s += dviOutline(inner, w, h, r, keys.length > 0);
     } else if (o === 'usb-c') {
       s += rect(0, 0, w, h, h / 2, 'cf-shell') + tongue(pins, r, h);
     } else if (o === 'bnc') {
@@ -326,13 +350,61 @@
       s += rect(0, 0, w, h, Math.min(w, h) * 0.06, 'cf-ins');
     }
     keys.forEach(function (k) {
-      s += rect(k.x, k.y, k.w, k.h, Math.min(k.w, k.h) * 0.15, tongue.off ? 'cf-key cf-key--ins' : 'cf-key');
+      // khoá "góc vát" của DP chỉ để định góc + chú thích: không vẽ khung đè lên góc đã vát
+      if (!(o === 'dp' && CHAMFER_RE.test(k.label))) s += rect(k.x, k.y, k.w, k.h, Math.min(k.w, k.h) * 0.15, tongue.off ? 'cf-key cf-key--ins' : 'cf-key');
       // nhãn chốt/lưỡi: chỉ in chữ khi vùng đó không chứa chân (không thì chữ nằm dưới chân, khó đọc); lời giải thích có trong orientation
       var covers = inner.some(function (p) { return p.x >= k.x && p.x <= k.x + k.w && p.y >= k.y && p.y <= k.y + k.h; });
       if (k.label && !covers) s += '<text class="cf-keyl" x="' + r2(k.x + k.w / 2) + '" y="' + r2(k.y + k.h / 2) + '" font-size="' + r2(Math.max(2, Math.min(k.h * 0.55, h * 0.09))) + '">' + esc(k.label) + '</text>';
     });
     var shape = o === 'terminal' ? 'screw' : (BLADE[o] ? 'blade' : 'round');
+    if (o === 'dvi') dviBlade(inner, r);
     return { vb: vb, outline: s, pins: pins, r: r, shape: shape, w: w, h: h, keys: keys, outlineKind: o };
+  }
+
+  var CHAMFER_RE = /vát|chamfer/i;
+  /**
+   * Góc vát của DP ('tl'|'tr'|'br'|'bl') trên hình đang vẽ: theo key có nhãn "vát" (key đã được lật gương cùng chân);
+   * không có key → mặc định dưới-phải ở hình gốc (viewOf, mặt cắm), lật trái/phải khi hình là ảnh gương.
+   */
+  function dpCorner(body, keys, mir) {
+    var f = body.face || {}, w = +f.w || 100, h = +f.h || 40;
+    var k = keys.filter(function (x) { return CHAMFER_RE.test(x.label); })[0];
+    if (k) return (k.y + k.h / 2 < h / 2 ? 't' : 'b') + (k.x + k.w / 2 < w / 2 ? 'l' : 'r');
+    return mir ? 'bl' : 'br';
+  }
+  /** Chân "C…" của DVI (vùng analog quanh lưỡi dẹt); chân gần tâm vùng nhất là lưỡi dẹt (C5). */
+  function dviCPins(inner) {
+    var cs = inner.filter(function (p) { return /^C\d+$/i.test(p.pin); });
+    if (cs.length < 2) return { cs: cs, blade: null };
+    var mx = 0, my = 0; cs.forEach(function (p) { mx += p.x / cs.length; my += p.y / cs.length; });
+    var blade = cs.slice().sort(function (a, b) { return Math.hypot(a.x - mx, a.y - my) - Math.hypot(b.x - mx, b.y - my); })[0];
+    return { cs: cs, blade: blade };
+  }
+  /** Vỏ DVI: mặt bích + 2 lỗ vít, vỏ chữ D (vát hai góc dưới), lõi nhựa; vùng C1–C4 là khe chữ thập quanh lưỡi C5. */
+  function dviOutline(inner, w, h, r, hasKeys) {
+    var fx = h * 0.5, fy = h * 0.2, c = h * 0.28, i = h * 0.07, s = '';
+    s += rect(-fx, -fy, w + 2 * fx, h + 2 * fy, h * 0.1, 'cf-flange');
+    s += circ(-fx * 0.52, h / 2, h * 0.12, 'cf-hole') + circ(w + fx * 0.52, h / 2, h * 0.12, 'cf-hole');
+    s += poly([[0, 0], [w, 0], [w, h - c], [w - c, h], [c, h], [0, h - c]], 'cf-shell');
+    s += poly([[i, i], [w - i, i], [w - i, h - c - i * 0.4], [w - c - i * 0.4, h - i], [c + i * 0.4, h - i], [i, h - c - i * 0.4]], 'cf-ins');
+    var d = dviCPins(inner);
+    if (d.blade && d.cs.length > 1 && !hasKeys) { // dữ liệu đã vẽ khe bằng keys thì không vẽ chồng
+      var o = d.cs.filter(function (p) { return p !== d.blade; });
+      var x0 = Math.min.apply(null, o.map(function (p) { return p.x; })), x1 = Math.max.apply(null, o.map(function (p) { return p.x; }));
+      var y0 = Math.min.apply(null, o.map(function (p) { return p.y; })), y1 = Math.max.apply(null, o.map(function (p) { return p.y; }));
+      var b = d.blade, pad = r * 1.4, t = r * 1.1;
+      // chữ thập: thanh ngang chứa lưỡi C5 + thanh đứng; bốn chân C quanh tâm
+      s += rect(x0 - pad, b.y - t, x1 - x0 + 2 * pad, 2 * t, t * 0.4, 'cf-key cf-key--ins cf-cross') +
+        rect(b.x - t, y0 - pad, 2 * t, y1 - y0 + 2 * pad, t * 0.4, 'cf-key cf-key--ins cf-cross');
+    }
+    return s;
+  }
+  /** Đánh dấu lưỡi dẹt C5 của DVI: chân vẽ thành thanh ngang (nửa dài hu, nửa dày hv theo đơn vị face). */
+  function dviBlade(inner, r) {
+    var d = dviCPins(inner); if (!d.blade || d.cs.length < 2) return;
+    var o = d.cs.filter(function (p) { return p !== d.blade; });
+    var span = Math.max.apply(null, o.map(function (p) { return p.x; })) - Math.min.apply(null, o.map(function (p) { return p.x; }));
+    d.blade.flat = { hu: Math.max(r * 1.6, span * 0.42), hv: r * 0.55 };
   }
 
   /** BNC: ghép chân thành cặp (tâm, vỏ) theo khoảng cách gần nhất; tâm = chân không phải đất/vỏ. */
@@ -381,7 +453,7 @@
       n: n, s: s, m: m, P: P, O: O, geo: geo,
       L: ax * geo.vb[2], A: ay * geo.vb[2], H: s * geo.vb[3], ax: ax, ay: ay,
       center: P(x0 + geo.vb[2] / 2, y0 + geo.vb[3] / 2),
-      pins: geo.pins.map(function (p) { var q = P(p.x, p.y); return { pin: p.pin, x: q.x, y: q.y, shell: p.shell }; })
+      pins: geo.pins.map(function (p) { var q = P(p.x, p.y); return { pin: p.pin, x: q.x, y: q.y, shell: p.shell, flat: p.flat }; })
     };
   }
   /** Giới tính trên thiết bị (ổ) và ở đầu cáp cho một pinout. */
@@ -468,7 +540,11 @@
         (DIR[info.dir] ? ' (' + DIR[info.dir].label.toLowerCase() + ')' : '') + ', ' + label;
       var cls = 'cpin layer-' + lay + (info.dir === 'nc' ? ' is-nc' : '') + (info._var ? ' is-var' : '');
       var txt = String(p.pin), shp = '', fs;
-      if (p.shell) {
+      if (p.flat) { // lưỡi dẹt (DVI C5): thanh ngang; đầu cái là khe
+        var fw = p.flat.hu * 2, fh = p.flat.hv * 2;
+        shp = rect(p.x - fw / 2, p.y - fh / 2, fw, fh, fh * 0.3, 'cp-body') + (gender === 'female' ? rect(p.x - fw * 0.42, p.y - fh * 0.22, fw * 0.84, fh * 0.44, fh * 0.1, 'cp-slot') : '');
+        fs = Math.min(fh * 1.6, r * 1.0);
+      } else if (p.shell) {
         var sz = r * 1.5;
         shp = rect(p.x - sz / 2, p.y - sz / 2, sz, sz, sz * 0.2, 'cp-body cp-shellpin');
         fs = sz * 0.7;
@@ -506,6 +582,16 @@
   function svgText(x, y, s, cls, anchor, size) {
     return '<text class="' + cls + '" x="' + r2(x) + '" y="' + r2(y) + '"' + (anchor ? ' text-anchor="' + anchor + '"' : '') + ' font-size="' + r2(size || lblSize(cls)) + '">' + esc(s) + '</text>';
   }
+  /** Hộp bao của mọi <text> do svgText sinh ra trong một đoạn SVG (để chú thích sau tránh chữ trước). */
+  function svgTextBoxes(svg) {
+    var out = [], re = /<text class="([^"]+)" x="([-\d.]+)" y="([-\d.]+)"(?: text-anchor="(\w+)")? font-size="([\d.]+)">([^<]*)<\/text>/g, m;
+    while ((m = re.exec(svg))) {
+      if (/cpv-pt/.test(m[1])) continue;
+      var t = m[6].replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+      out.push(textBox(+m[2], +m[3], t, +m[5], m[4]));
+    }
+    return out;
+  }
   /** Cỡ chữ số chân trong phối cảnh. */
   function perspPinFont(F, p) {
     var t = String(p.pin), f = F.geo.r * F.s * (t.length > 2 ? 0.95 : t.length === 2 ? 1.15 : 1.35);
@@ -520,7 +606,7 @@
     var g = F.geo, r = g.r;
     return F.pins.map(function (p) {
       var hu = r, hv = r; // nửa kích thước theo u, v trong toạ độ face
-      if (p.shell) { hu = hv = r * 0.75; } else if (g.shape === 'blade') { hu = r * 0.65; hv = r * 1.2; }
+      if (p.flat) { hu = p.flat.hu; hv = p.flat.hv; } else if (p.shell) { hu = hv = r * 0.75; } else if (g.shape === 'blade') { hu = r * 0.65; hv = r * 1.2; }
       var hw = hu * F.ax, hh = hv * F.s + hu * F.ay, f = perspPinFont(F, p), tw = String(p.pin).length * 0.62 * f / 2;
       var bx = Math.max(hw, tw), by = Math.max(hh, f * 0.55);
       return { pin: p.pin, shell: p.shell, x: p.x, y: p.y, hw: hw, hh: hh, x0: p.x - bx, x1: p.x + bx, y0: p.y - by, y1: p.y + by };
@@ -609,18 +695,22 @@
    */
   function keyCallout(F, gapOut, skipRj, avoid) {
     var g = F.geo; if (skipRj && g.outlineKind === 'rj') return '';
-    var k = (g.keys || []).filter(function (x) { return x.label; })[0]; if (!k) return '';
-    var top = k.y + k.h / 2 < g.vb[1] + g.vb[3] / 2, boxes = perspPinBoxes(F);
-    var fy = top ? g.vb[1] : g.vb[1] + g.vb[3], ky = top ? k.y : k.y + k.h;
-    var best = null, ts = [];
+    var labelled = (g.keys || []).filter(function (x) { return x.label; }); if (!labelled.length) return '';
+    var boxes = perspPinBoxes(F), ts = [], k = null, top, fy, best = null;
     for (var i = 0; i <= 50; i++) ts.push(i / 50);
     ts.sort(function (x, y) { return Math.abs(x - 0.5) - Math.abs(y - 0.5); });
-    ts.some(function (t) {
-      var u = k.x + k.w * t, a = F.P(u, ky), e = F.P(u, fy), seg = { x0: a.x - 1, x1: a.x + 1, y0: Math.min(a.y, e.y), y1: Math.max(a.y, e.y) };
-      var ok = !boxes.some(function (b) { return boxHit(seg, b, 1.5); });
-      if (ok || !best) best = { a: a, e: e, ok: ok };
-      return ok;
+    // key có nhãn đầu tiên kéo được đường dẫn ra mép mặt mà không cắt chân; key bị chân vây kín (vd. lưỡi C5 của DVI) thì bỏ qua
+    labelled.some(function (kk) {
+      var tp = kk.y + kk.h / 2 < g.vb[1] + g.vb[3] / 2, fyy = tp ? g.vb[1] : g.vb[1] + g.vb[3], ky = tp ? kk.y : kk.y + kk.h, hit = null;
+      ts.some(function (t) {
+        var u = kk.x + kk.w * t, a = F.P(u, ky), e = F.P(u, fyy), seg = { x0: a.x - 1, x1: a.x + 1, y0: Math.min(a.y, e.y), y1: Math.max(a.y, e.y) };
+        if (!boxes.some(function (b) { return boxHit(seg, b, 1.5); })) { hit = { a: a, e: e, ok: true }; return true; }
+        return false;
+      });
+      if (hit) { k = kk; top = tp; fy = fyy; best = hit; }
+      return !!hit;
     });
+    if (!k) return '';
     // mép mặt nghiêng: chữ nằm ngang nên lấy mép cao nhất (trên) / thấp nhất (dưới) trong bề rộng chữ
     var a = best.a, tw = k.label.length * 0.62 * lblSize('cpv-lbl--k') / 2 + 4;
     var e0 = edgeYAt(F, fy, a.x - tw), e1 = edgeYAt(F, fy, a.x + tw);
@@ -749,7 +839,6 @@
       var E = t[0], F = t[1], pb = t[2];
       s += pb.svg + latchSvg(F, pb.back);
       cut += perspFaceSvg(F, E.end.gender, E.pm, E.gmap, 'đầu ' + E.e.toUpperCase(), function (pin) { return { k: E.e + ':' + pin, h: E.e + ':' + pin }; });
-      cut += keyCallout(F, 12, true);
       var cx = (F.O.x + pb.back) / 2;
       s += svgText(cx + F.n * F.L * 0.5, F.O.y - F.A - 34, E.e.toUpperCase(), 'cend-tag', 'middle');
       // nhãn ngắn: tên đầy đủ (label dài) đã có ở thẻ A/B phía trên và trong title
@@ -762,22 +851,36 @@
       var sx = pb.bootEnd.x - F.n * 40;
       cut += eyeBtn(id, sx, pb.yb - 58, 'solder', 'Phía hàn ' + E.e.toUpperCase(), 'nhìn từ đây', xy(pb.back - F.n * 4, pb.yb - 18));
     });
+    // chú thích chốt/góc vát: đặt sau cùng, tránh mọi chữ đã có (nhãn con mắt, chú thích đầu A/B)
+    var avoid = svgTextBoxes(s + cut);
+    cut += keyCallout(fa, 12, true, avoid) + keyCallout(fb, 12, true, avoid);
     s += cut;
     return '<svg class="cpv-svg" viewBox="0 0 ' + r2(Lay.W) + ' ' + r2(Lay.H) + '" role="group" aria-label="Phối cảnh hai đầu cáp A và B, dây nối hai thân">' + s + '</svg>';
   }
 
   /** Hình nhỏ "bạn đang đứng ở đây": role 'plug' (đầu cáp) hoặc 'device' (ổ trên vỏ), side mate/solder. */
-  function miniWhere(role, side) {
+  /**
+   * Hình dáng mặt cắm thu nhỏ đặt lên mặt nghiêng của hình nhỏ: ánh xạ affine khung vb của face → hình bình hành
+   * q00 (u=x0,v=y0), q10 (u=x1,v=y0), q01 (u=x0,v=y1). Chỉ vẽ vỏ (bỏ chữ), để nhận ra HDMI/DP/DVI… ngay ở hình nhỏ.
+   */
+  function miniOutline(geo, q00, q10, q01) {
+    if (!geo) return '';
+    var vb = geo.vb, a = (q10.x - q00.x) / vb[2], b = (q10.y - q00.y) / vb[2], c = (q01.x - q00.x) / vb[3], d = (q01.y - q00.y) / vb[3];
+    var e = q00.x - a * vb[0] - c * vb[1], f = q00.y - b * vb[0] - d * vb[1];
+    var body = geo.outline.replace(/<text[^>]*>[^<]*<\/text>/g, '');
+    return '<g class="cmini-shape" transform="matrix(' + [a, b, c, d, e, f].map(function (v) { return Math.round(v * 10000) / 10000; }).join(' ') + ')">' + body + '</g>';
+  }
+  function miniWhere(role, side, geo) {
     var mate = side !== 'solder', s = '', ex, ey, tx;
     var desc = (role === 'device' ? 'ổ trên vỏ thiết bị' : 'đầu cáp') + ', ' + (mate ? 'đứng trước mặt cắm' : (role === 'device' ? 'đứng phía sau tấm vỏ (bên trong máy, phía hàn)' : 'đứng sau đầu nối, phía dây (phía hàn)'));
     if (role === 'device') {
       s += pg([xy(66, 12), xy(106, 12), xy(98, 5), xy(58, 5)], 'cpv-devtop') + rect(66, 12, 40, 44, 0, 'cpv-dev') + pg([xy(66, 12), xy(58, 5), xy(58, 49), xy(66, 56)], 'cpv-wall') +
-        pg([xy(64.5, 24), xy(59.5, 20), xy(59.5, 36), xy(64.5, 40)], 'cmini-face');
+        pg([xy(64.5, 24), xy(59.5, 20), xy(59.5, 36), xy(64.5, 40)], 'cmini-face') + miniOutline(geo, xy(59.5, 20), xy(64.5, 24), xy(59.5, 36));
       if (mate) { ex = 24; ey = 30; tx = xy(54, 28); } else { ex = 114; ey = 30; tx = xy(108, 32); }
     } else {
       s += '<path class="cpv-cable-o" d="M30 36 C18 36 14 46 2 56"/><path class="cpv-cable cmini-cable" d="M30 36 C18 36 14 46 2 56"/>' +
         pg([xy(34, 24), xy(70, 24), xy(80, 17), xy(44, 17)], 'cpv-top') + rect(34, 24, 36, 22, 0, 'cpv-body') + rect(28, 30, 6, 12, 1, 'cpv-boot') +
-        pg([xy(70, 24), xy(80, 17), xy(80, 39), xy(70, 46)], 'cmini-face');
+        pg([xy(70, 24), xy(80, 17), xy(80, 39), xy(70, 46)], 'cmini-face') + miniOutline(geo, xy(70, 24), xy(80, 17), xy(70, 46));
       if (mate) { ex = 104; ey = 30; tx = xy(84, 29); } else { ex = 14; ey = 13; tx = xy(30, 26); }
     }
     var lx = Math.sign(tx.x - ex), ly = Math.sign(tx.y - ey);
@@ -821,7 +924,7 @@
       var svg = '<svg class="cface" viewBox="' + geo.vb.map(r2).join(' ') + '" role="group" aria-label="' + esc(cap(lbl) + ', ' + sideTxt(side)) + '">' +
         geo.outline + pinsSvg(geo, pm, gmap, g, lbl, function (pin) { return { k: 'p:' + pin, h: 'p:' + pin }; }) + '</svg>';
       var wide = geo.vb[2] / geo.vb[3] > 3; // mặt rất dẹt (USB-C, DB-25): mỗi hình một hàng cho đủ lớn
-      return '<figure class="cfig' + (wide ? ' cfig--wide' : '') + '"><figcaption>' + miniWhere(g === pg2.dev ? 'device' : 'plug', side) + '<b>' + esc(genderName(b, g)) + '</b>' +
+      return '<figure class="cfig' + (wide ? ' cfig--wide' : '') + '"><figcaption>' + miniWhere(g === pg2.dev ? 'device' : 'plug', side, faceGeom(b, g, 'mate', p)) + '<b>' + esc(genderName(b, g)) + '</b>' +
         (p.gender === g ? ' <span class="badge badge--add" title="Giới tính thường gặp của sơ đồ chân này trên thiết bị">thường gặp</span>' : '') +
         '<span class="cfig-side">' + esc((g === pg2.dev ? 'ổ trên thiết bị' : 'đầu cáp') + ' · ' + sideTxt(side)) + (mirrored(b, g, side) ? ' · ảnh gương của hình gốc' : '') + '</span></figcaption>' + svg +
         (b.genders[g] && b.genders[g].note ? '<p class="cfig-note muted">' + esc(b.genders[g].note) + '</p>' : '') + '</figure>';
@@ -1046,7 +1149,7 @@
     var fs = flatSide(side);
     if (side === 'persp' && A && A.b && A.b.face) h += cablePersp(c);
     var minis = [A, B].filter(function (x) { return x && x.b && x.b.face; }).map(function (E) {
-      return '<span class="cwhere-i"><span class="cend-l">' + E.e.toUpperCase() + '</span>' + miniWhere('plug', fs) + '</span>';
+      return '<span class="cwhere-i"><span class="cend-l">' + E.e.toUpperCase() + '</span>' + miniWhere('plug', fs, faceGeom(E.b, E.end.gender, 'mate', E.p)) + '</span>';
     }).join('');
     h += '<section class="card" aria-labelledby="cwd-t"><div class="section-title"><h2 id="cwd-t">Sơ đồ nối dây</h2><span class="muted">' + esc(cap(sideTxt(fs))) + ' · rê/nhấn vào dây hoặc chân</span></div>' +
       (minis ? '<div class="cwhere">' + minis + '<span class="muted csub">Mắt = chỗ bạn đứng khi nhìn mỗi đầu trong sơ đồ dưới' + (side === 'persp' ? ' (sơ đồ dây vẽ theo mặt cắm)' : '') + '.</span></div>' : '') +

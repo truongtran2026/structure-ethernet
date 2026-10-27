@@ -154,7 +154,7 @@
       name: "Cặp BNC 75 Ω (TX + RX)",
       aka: ["BNC", "đầu BNC E1", "coax E1", "75 ohm"],
       family: "telecom",
-      standard: "IEC 61169-8 (BNC); ITU-T G.703 §9 (giao diện 2048 kbit/s đồng trục)",
+      standard: "IEC 61169-8 (BNC); ITU-T G.703 (11/2001) §9 (giao diện 2048 kbit/s đồng trục)",
       summary: "Hai đầu BNC rời: một cho chiều phát, một cho chiều thu — giao diện E1 không cân bằng 75 Ω.",
       detail:
         "Mỗi BNC có 2 \"chân\": lõi (tâm) và vỏ ngoài. Ở đây gộp 2 BNC thành một thân 4 chân để vẽ đủ một cổng E1. " +
@@ -211,8 +211,8 @@
       gender: "female",
       summary: "Thứ tự màu T568A: cặp xanh lá ở 1-2, cặp cam ở 3-6 — tương thích ngược với dây thoại USOC (cặp 1, 2 ở giữa).",
       detail:
-        "Tín hiệu theo chân giống hệt T568B; chỉ màu dây khác. TIA-568 chấp nhận cả hai kiểu; thường được nói là TIA ưu tiên T568A cho lắp đặt mới " +
-        "(CẦN KIỂM: chưa đối chiếu nguyên văn TIA-568.2-D), nhưng thực tế T568B phổ biến hơn. Một đầu A + một đầu B = cáp chéo 10/100.",
+        "Tín hiệu theo chân giống hệt T568B; chỉ màu dây khác. TIA-568 chấp nhận cả hai kiểu. Các bản TIA-568 cũ (568-B.1) cho phép T568B như tuỳ chọn " +
+        "'if necessary to accommodate certain 8-pin cabling systems', ngầm ưu tiên T568A (chưa đối chiếu 568.2-D/E; nguồn: en.wikipedia.org/wiki/ANSI/TIA-568), nhưng thực tế T568B phổ biến hơn. Một đầu A + một đầu B = cáp chéo 10/100.",
       pins: ethPins(T568A),
       groups: [
         { name: "Cặp 3 (xanh lá)", pins: ["1", "2"] }, { name: "Cặp 2 (cam)", pins: ["3", "6"] },
@@ -248,7 +248,7 @@
       body: "8p8c",
       name: "E1/T1 120 Ω trên RJ48C (phía thiết bị đầu cuối)",
       family: "telecom",
-      standard: "FCC Part 68 / ANSI T1.403 (RJ48C); ITU-T G.703 §9 (E1 2048 kbit/s, cặp đối xứng 120 Ω)",
+      standard: "FCC Part 68 / ANSI T1.403 (RJ48C); ITU-T G.703 (11/2001) §9 (E1 2048 kbit/s, cặp đối xứng 120 Ω)",
       role: "TE",
       gender: "female",
       summary: "Cổng E1/T1 đối xứng trên ổ 8P8C: thu ở 1-2, phát ở 4-5 (nhìn từ router/thiết bị khách hàng).",
@@ -256,15 +256,16 @@
         "E1 cân bằng 120 Ω: mỗi chiều một cặp xoắn, mã HDB3, biên độ danh định 3 V đỉnh (G.703). " +
         "Quy ước chân: 1 = RX ring, 2 = RX tip, 4 = TX ring, 5 = TX tip — đúng cho router/thiết bị khách hàng (CPE, \"TE\") theo tài liệu Cisco và phần lớn hãng; " +
         "phía mạng (NT/NTU, smartjack) dùng cùng chân nhưng ĐẢO chiều (1-2 phát về CPE, 4-5 thu). Hai thiết bị cùng kiểu CPE nối nhau cần cáp chéo E1. " +
-        "CẦN KIỂM: chân 3, 6 — có hãng nối màn chắn/đất, có hãng bỏ trống; đọc tài liệu thiết bị. " +
+        "Chân 3, 6 (và 7, 8) tuỳ hãng: Juniper ghi 3, 6 = Shield/Return/Ground, 7–8 NC; FarSite ghi RX Shield / TX Shield; Wikipedia (Registered jack) ghi 3, 6 = Reserved, 7–8 = Shield; " +
+        "ADTRAN không dùng chân 3 — đọc tài liệu thiết bị trước khi nối đất. " +
         "Nối sang BNC 75 Ω phải dùng balun (biến áp), không nối dây thẳng được.",
       pins: [
         { pin: "1", signal: "RX ring", name: "Receive Ring (R)", dir: "in", desc: "Thu, dây ring của cặp thu (cực tính trong cặp không quan trọng với HDB3 nhưng nên giữ đúng)." },
         { pin: "2", signal: "RX tip", name: "Receive Tip (T)", dir: "in", desc: "Thu, dây tip của cặp thu; xoắn với chân 1." },
-        { pin: "3", signal: "RX shield", name: "Receive shield (tuỳ chọn)", dir: "shield", desc: "Màn chắn cặp thu hoặc bỏ trống — tuỳ hãng (CẦN KIỂM)." },
+        { pin: "3", signal: "RX shield", name: "Receive shield (tuỳ chọn)", dir: "shield", desc: "Màn chắn cặp thu hoặc bỏ trống — tuỳ hãng (Juniper: Shield/Return/Ground; FarSite: RX Shield; Wikipedia: Reserved; ADTRAN: không dùng)." },
         { pin: "4", signal: "TX ring", name: "Transmit Ring (R1)", dir: "out", desc: "Phát, dây ring của cặp phát." },
         { pin: "5", signal: "TX tip", name: "Transmit Tip (T1)", dir: "out", desc: "Phát, dây tip; xoắn với chân 4 (đúng cặp giữa của 8P8C)." },
-        { pin: "6", signal: "TX shield", name: "Transmit shield (tuỳ chọn)", dir: "shield", desc: "Màn chắn cặp phát hoặc bỏ trống — tuỳ hãng (CẦN KIỂM)." },
+        { pin: "6", signal: "TX shield", name: "Transmit shield (tuỳ chọn)", dir: "shield", desc: "Màn chắn cặp phát hoặc bỏ trống — tuỳ hãng (Juniper: Shield/Return/Ground; FarSite: TX Shield; Wikipedia: Reserved)." },
         { pin: "7", signal: "NC", name: "Không dùng", dir: "nc", desc: "Không dùng." },
         { pin: "8", signal: "NC", name: "Không dùng", dir: "nc", desc: "Không dùng." },
         { pin: "S", signal: "Shield", name: "Vỏ kim loại ổ", dir: "shield", desc: "Vỏ ổ bọc giáp (nếu có), nối đất khung." }
@@ -292,12 +293,13 @@
       body: "bnc2",
       name: "E1 75 Ω không cân bằng (2 BNC)",
       family: "telecom",
-      standard: "ITU-T G.703 §9 (2048 kbit/s, cặp đồng trục 75 Ω, biên độ danh định 2,37 V đỉnh)",
+      standard: "ITU-T G.703 (11/2001) §9 (2048 kbit/s, cặp đồng trục 75 Ω, biên độ danh định 2,37 V đỉnh)",
       role: "TE",
       gender: "female",
       summary: "Cổng E1 đồng trục: một BNC phát (TX/OUT), một BNC thu (RX/IN); lõi mang tín hiệu HDB3, vỏ là đất.",
       detail:
-        "Theo G.703, vỏ ngoài cáp đồng trục nối đất ở cổng ra; ở cổng vào có thể nối đất hoặc không (tuỳ chọn, thường có cầu nối/jumper trên thiết bị). " +
+        "Theo G.703 (1991 §6.4; 10/98 và 11/2001 §9.4; 04/2016 §11.4), vỏ ngoài cáp đồng trục \"shall be connected to earth at the output port\"; " +
+        "ở cổng vào \"provision shall be made … to earth if required\" (tuỳ chọn, thường có cầu nối/jumper trên thiết bị). " +
         "Biên độ 2,37 V (75 Ω) thay vì 3 V (120 Ω). Đấu DDF: TX thiết bị này phải tới RX thiết bị kia — nhãn trên DDF thường ghi theo hướng thiết bị, dễ nhầm, kiểm bằng đèn LOS. " +
         "Chuyển sang 120 Ω RJ48C/cặp xoắn: cần balun.",
       pins: [
@@ -382,7 +384,9 @@
       vendor: false,
       detail:
         "Bấm một đầu T568B, đầu kia T568A — theo màu là dây nối thẳng, theo số chân là 1↔3, 2↔6. Chỉ đảo cặp phát/thu của 10/100; " +
-        "hai cặp xanh dương, nâu đi thẳng nên với Gigabit cặp C/D không được đảo (thường vẫn chạy vì PHY 1000BASE-T tự nhận đảo cặp/cực tính — CẦN KIỂM mức bắt buộc trong IEEE 802.3 Cl.40; xem cáp chéo 1000).",
+        "hai cặp xanh dương, nâu đi thẳng nên với Gigabit cặp C/D không được đảo (thường vẫn chạy vì PHY 1000BASE-T thường tự nhận đảo cặp; xem cáp chéo 1000). " +
+        "Auto-MDI-X là tuỳ chọn (802.3 §40.4.4); 1000BASE-T được coi là không nhạy cực tính (ghi chú thêm theo yêu cầu bảo trì 1115, có từ 802.3-2005) — " +
+        "mức bắt buộc của việc tự sửa đảo cặp C/D chưa xác minh.",
       warnings: ["Hầu hết thiết bị từ khoảng 2005 có Auto-MDI-X — cáp thẳng là đủ; chỉ chế cáp chéo cho thiết bị cũ."]
     },
     {
@@ -409,8 +413,8 @@
       detail:
         "Đầu b dùng sơ đồ riêng eth-gig-cross-b (không phải T568A): 1 trắng-xanh lá, 2 xanh lá, 3 trắng-cam, 4 trắng-nâu, 5 nâu, 6 cam, 7 xanh dương, 8 trắng-xanh dương. " +
         "Kiểm bằng lời: cặp A đầu a (1-2) tới cặp B đầu b (3-6) và ngược lại; cặp C (4-5) tới cặp D (7-8) và ngược lại; + tới +, − tới −. " +
-        "Thực tế PHY 1000BASE-T thường tự nhận đảo cặp/cực tính (CẦN KIỂM mức bắt buộc trong IEEE 802.3 Cl.40) và Auto-MDI-X là tuỳ chọn phổ biến, " +
-        "nên cáp này chủ yếu có giá trị học tập.",
+        "Auto-MDI-X là tuỳ chọn (802.3 §40.4.4); 1000BASE-T được coi là không nhạy cực tính (ghi chú thêm theo yêu cầu bảo trì 1115, có từ 802.3-2005) — " +
+        "mức bắt buộc của việc tự sửa đảo cặp C/D chưa xác minh. Thực tế hầu hết PHY tự xử lý nên cáp này chủ yếu có giá trị học tập.",
       warnings: ["Màu đầu b khác cả T568A lẫn T568B — đánh dấu cáp để khỏi bị dùng nhầm làm cáp thẳng."]
     },
     {
@@ -461,7 +465,7 @@
         { a: "TXS", a2: "RXS", note: "vỏ – vỏ (vỏ cáp đồng trục)" }
       ],
       use: "Kiểm cổng E1 75 Ω hoặc vòng lặp tại DDF: một đoạn cáp đồng trục ngắn nối thẳng BNC TX sang BNC RX.",
-      standard: "ITU-T G.703 §9 (giao diện); thực hành vòng lặp tại DDF",
+      standard: "ITU-T G.703 (11/2001) §9 (giao diện); thực hành vòng lặp tại DDF",
       vendor: false,
       detail: "Thường là một sợi coax 75 Ω ngắn hai đầu BNC đực, hoặc thanh nối U trên DDF. Đặt clock internal khi test.",
       warnings: ["Dùng cáp 75 Ω (RG-59, RG-179…), không dùng cáp 50 Ω RG-58."]
@@ -484,12 +488,12 @@
         { type: "transformer", value: "1,26 : 1 (120 Ω : 75 Ω)", between: ["a:2", "b:RX"], note: "Biến áp chiều thu, giống chiều phát" }
       ],
       use: "Nối cổng E1 120 Ω (RJ48C trên router) vào DDF/thiết bị truyền dẫn E1 75 Ω (BNC).",
-      standard: "ITU-T G.703 §9 (120 Ω và 75 Ω); sơ đồ balun theo thực hành hãng",
+      standard: "ITU-T G.703 (11/2001) §9 (120 Ω và 75 Ω); sơ đồ balun theo thực hành hãng",
       vendor: false,
       detail:
         "Biến áp vừa chuyển trở kháng vừa chuyển cân bằng ↔ không cân bằng; dây nối hai phía KHÔNG thông mạch một chiều (cách ly galvanic). " +
         "Balun đi thẳng chiều: TX của router ra BNC TX của balun; tới DDF phải nối BNC TX balun vào RX của thiết bị truyền dẫn. " +
-        "CẦN KIỂM: cực tính tip/ring ↔ lõi/vỏ khác nhau giữa các hãng balun; HDB3 không phụ thuộc cực tính nên vẫn chạy.",
+        "Cực tính tip/ring ↔ lõi/vỏ không chuẩn hoá — đọc sơ đồ balun (Juniper: tip 2, 5 = +; Balun B2/S: P1 (+), P2 (−)); HDB3 không phụ thuộc cực tính nên vẫn chạy.",
       warnings: ["Không nối dây thẳng RJ48C sang BNC không qua biến áp: lệch trở kháng và nối đất một dây của cặp cân bằng."]
     }
   ]);

@@ -18,13 +18,16 @@
     { id: 'sdh', name: 'SDH', hint: 'STM-N, VC, TU, TUG: khung, con trỏ, overhead' },
     { id: 'otn', name: 'OTN', hint: 'OTUk/ODUk/OPUk, TS (khe nhánh)' },
     { id: 'flexe', name: 'FlexE', hint: 'Instance 100G, khe lịch 5G, nhóm, PHY mang FlexE' },
-    { id: 'eos', name: 'Ethernet qua truyền dẫn', hint: 'GFP-F, VCAT, ODUflex(GFP)' }
+    { id: 'eos', name: 'Ethernet qua truyền dẫn', hint: 'GFP-F, VCAT, ODUflex(GFP)' },
+    { id: 'conn', name: 'Đấu nối', hint: 'Sơ đồ chân, cáp & đầu chuyển, hướng tín hiệu, khi nào cần IC' }
   ];
   var TYPE_NAME = {
     'ip-bits': 'Độ dài trường', 'ip-offset': 'Vị trí trường', 'ip-value': 'Giá trị trường',
     'ip-hbytes': 'Độ dài header', 'ip-added': 'Header thêm vào', 'ip-role': 'Vai trò đóng gói',
     't-cell': 'Ô trong khung', 't-bits': 'Bit trong byte', 'u-rate': 'Tốc độ',
-    'u-max': 'Số nhánh tối đa', 'u-oh': 'Overhead bước ghép', 'u-ts': 'TS (khe nhánh)', 'u-baud': 'Ký hiệu & điều chế'
+    'u-max': 'Số nhánh tối đa', 'u-oh': 'Overhead bước ghép', 'u-ts': 'TS (khe nhánh)', 'u-baud': 'Ký hiệu & điều chế',
+    'c-sig': 'Tín hiệu của chân', 'c-pin': 'Vị trí tín hiệu', 'c-cable': 'Chọn cáp / đầu chuyển', 'c-wire': 'Nối dây trong cáp',
+    'c-dir': 'Hướng tín hiệu', 'c-ic': 'Thụ động hay cần IC'
   };
 
   // ---------- số ngẫu nhiên theo seed ----------
@@ -71,7 +74,9 @@
     return {
       H: g.HEADERS || {}, S: Array.isArray(g.STACKS) ? g.STACKS.filter(function (s) { return s && s.id; }) : [],
       F: g.TFRAMES || {}, M: g.TMUX || {}, LABS: Array.isArray(g.TLABS) ? g.TLABS : [], LINE: g.TLINE || null,
-      EV: g.EthViz || null, TV: g.TransViz || null
+      EV: g.EthViz || null, TV: g.TransViz || null,
+      CB: g.CONN_BODIES || {}, CP: g.CONN_PINOUTS || {},
+      CC: Array.isArray(g.CONN_CABLES) ? g.CONN_CABLES.filter(function (c) { return c && c.id && c.a; }) : []
     };
   }
 
@@ -760,6 +765,181 @@
     });
   }
 
+  // ---------- mẫu câu Đấu nối (CONN_BODIES / CONN_PINOUTS / CONN_CABLES) ----------
+  var C_DIR = { 'in': 'Vào', out: 'Ra', io: 'Hai chiều' };
+  var C_GENDER = { male: 'đầu đực', female: 'đầu cái' };
+  var C_YES = 'Được — chế thụ động (dây, cầu nối, điện trở / biến áp)';
+  var C_NO = 'Không — cần mạch chuyển đổi có IC';
+  // nhiễu luôn sai cho câu "thụ động hay IC" (chỉ dùng khi hai đầu KHÁC thân, nên đổi giới tính/cắm thẳng không thể đúng)
+  var C_WRONG = ['Được — chỉ cần đầu đổi giới tính (gender changer)', 'Được — cắm thẳng vào nhau, không cần dây', 'Không — chuẩn cấm nối hai loại này với nhau'];
+  function firstSentence(s) { var m = /^[\s\S]*?[.!?](\s|$)/.exec(String(s || '')); return (m ? m[0] : String(s || '')).trim(); }
+  function reEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  /**
+   * (c-sig) chân N là tín hiệu gì; (c-pin) tín hiệu X ở chân nào; (c-dir) hướng vào/ra nhìn từ role;
+   * (c-cable) cáp/đầu chuyển nào nối A với B; (c-wire) trong cáp, chân a N nối tới chân nào ở đầu kia;
+   * (c-ic) nối A với B được bằng dây (thụ động) hay cần IC.
+   * Nhiễu ưu tiên cùng pinout → cùng thân → cùng family. Chân vỏ/NC và chân bị biến thể đổi gán không dùng làm câu.
+   */
+  function connTemplates(D, out) {
+    var CB = D.CB || {}, CP = D.CP || {}, CC = D.CC || [];
+    var pids = Object.keys(CP).filter(function (k) { return CP[k] && CP[k].id && Array.isArray(CP[k].pins); });
+    if (!pids.length) return;
+    function famOf(p) { return p.family || (CB[p.body] && CB[p.body].family) || ''; }
+    function openP(p) { return { kind: 'conn', id: p.id, label: p.name || p.id }; }
+    function openC(c) { return { kind: 'conn', id: c.id, label: c.name || c.id }; }
+    function pinOf(p, pin) { return (p.pins || []).filter(function (z) { return String(z.pin) === String(pin); })[0] || null; }
+    function pinTxt(p, pin) { var x = pinOf(p, pin); return 'Chân ' + pin + (x && x.signal ? ' – ' + x.signal : ''); }
+    function usable(x) { return x && x.signal && x.dir !== 'nc' && x.dir !== 'shield'; }
+    function varied(p) { var s = {}; (p.variants || []).forEach(function (v) { Object.keys(v.pins || {}).forEach(function (k) { s[k] = 1; }); }); return s; }
+    function sigs(p) { return (p.pins || []).filter(usable).map(function (x) { return String(x.signal); }); }
+    var famSigs = {};
+    pids.forEach(function (k) { var f = famOf(CP[k]); famSigs[f] = (famSigs[f] || []).concat(sigs(CP[k])); });
+
+    // ----- câu theo chân của từng pinout -----
+    pids.forEach(function (k) {
+      var p = CP[k], f = famOf(p), vs = varied(p), pname = p.name || p.id, body = CB[p.body] || {};
+      var sigCount = {};
+      (p.pins || []).forEach(function (x) { if (x.signal) sigCount[x.signal] = (sigCount[x.signal] || 0) + 1; });
+      var own = sigs(p);
+      var sameBody = pids.filter(function (o) { return o !== k && CP[o].body === p.body; }).reduce(function (a, o) { return a.concat(sigs(CP[o])); }, []);
+      (p.pins || []).filter(function (x) { return usable(x) && !vs[x.pin]; }).forEach(function (x) {
+        var pin = String(x.pin), sig = String(x.signal), full = sig + (x.name && x.name !== sig ? ' (' + x.name + ')' : '');
+        out.push({ key: 'c-sig|' + p.id + '|' + pin, topic: 'conn', type: 'c-sig', make: function (rng) {
+          var q = { prompt: 'Theo sơ đồ chân “' + pname + '”, chân ' + pin + ' mang tín hiệu gì?',
+            explain: 'Chân ' + pin + ' = ' + full + '. ' + (x.desc ? x.desc + ' ' : '') + 'Chuẩn: ' + (p.standard || '–') + '.', open: openP(p), check: { pinout: p.id, pin: pin } };
+          return assemble(q, sig, textDistractors(sig, [own, sameBody, famSigs[f] || []], rng), rng);
+        } });
+        if (sigCount[sig] === 1) { // tín hiệu duy nhất trên pinout → hỏi ngược "ở chân nào"
+          out.push({ key: 'c-pin|' + p.id + '|' + pin, topic: 'conn', type: 'c-pin', make: function (rng) {
+            var ans = 'Chân ' + pin;
+            var near = (p.pins || []).filter(function (z) { return String(z.pin) !== pin && z.dir !== 'shield'; }).map(function (z) { return 'Chân ' + z.pin; });
+            var q = { prompt: 'Theo sơ đồ chân “' + pname + '”, tín hiệu ' + full + ' nằm ở chân nào?',
+              explain: sig + ' ở chân ' + pin + ' của ' + (body.name || p.body) + '. ' + (body.face && body.face.orientation ? 'Hướng nhìn: ' + body.face.orientation : ''), open: openP(p), check: { pinout: p.id, signal: sig } };
+            return assemble(q, ans, textDistractors(ans, [near], rng), rng);
+          } });
+        }
+        if (p.role && C_DIR[x.dir]) {
+          out.push({ key: 'c-dir|' + p.id + '|' + pin, topic: 'conn', type: 'c-dir', make: function (rng) {
+            var ans = C_DIR[x.dir];
+            // đề không được chứa chữ của các lựa chọn ("vào", "ra"…) — isLeaky sẽ loại
+            var q = { prompt: 'Theo sơ đồ chân “' + pname + '”, nhìn từ thiết bị ' + p.role + ', chân ' + pin + ' (' + sig + ') có hướng tín hiệu nào?',
+              explain: full + ': “' + ans + '” tính từ ' + p.role + ' — ở thiết bị đầu bên kia thì ngược lại. ' + (x.desc || ''), open: openP(p), check: { pinout: p.id, pin: pin } };
+            return assemble(q, ans, textDistractors(ans, [['Vào', 'Ra', 'Hai chiều'], ['Nguồn', 'Đất']], rng), rng);
+          } });
+        }
+      });
+    });
+
+    // ----- cáp / đầu chuyển hai đầu -----
+    var two = CC.filter(function (c) { return c.b && CP[c.a.pinout] && CP[c.b.pinout]; });
+    function pairKey(a, b) { return [a, b].sort().join('~'); }
+    var byPair = {}, nameCnt = {};
+    two.forEach(function (c) { var pk = pairKey(c.a.pinout, c.b.pinout); (byPair[pk] = byPair[pk] || []).push(c); });
+    CC.forEach(function (c) { nameCnt[c.name] = (nameCnt[c.name] || 0) + 1; });
+    function endTxt(e) { var p = CP[e.pinout]; return (p.name || p.id) + ' (' + (C_GENDER[e.gender] || e.gender) + ')'; }
+    function bodiesOf(c) { return [c.a, c.b].filter(Boolean).map(function (e) { return CP[e.pinout] && CP[e.pinout].body; }); }
+    two.forEach(function (c) {
+      if (!c.name || nameCnt[c.name] > 1) return;
+      var pk = pairKey(c.a.pinout, c.b.pinout), same = byPair[pk].filter(function (o) { return o !== c; });
+      // nhiều cáp cùng cặp sơ đồ chân → đề phải nêu mục đích (use) khác nhau, không thì mơ hồ
+      if (same.length && (!c.use || same.some(function (o) { return o.use === c.use; }))) return;
+      var bs = bodiesOf(c);
+      out.push({ key: 'c-cable|' + c.id, topic: 'conn', type: 'c-cable', make: function (rng) {
+        var other = CC.filter(function (o) { return o !== c && same.indexOf(o) < 0 && o.name && nameCnt[o.name] === 1; });
+        var touch = other.filter(function (o) { return bodiesOf(o).some(function (b) { return bs.indexOf(b) >= 0; }); });
+        var tiers = [same, touch, other.filter(function (o) { return o.family === c.family; }), other].map(function (l) { return l.map(function (o) { return o.name; }); });
+        var q = { prompt: 'Cần nối ' + endTxt(c.a) + ' với ' + endTxt(c.b) + (same.length ? ', dùng khi: ' + String(c.use).replace(/[.\s]+$/, '') : '') + '. Chọn cáp / đầu chuyển nào?',
+          explain: (c.use ? 'Dùng khi: ' + c.use + ' ' : '') + firstSentence(c.detail) + (c.vendor ? ' (Sơ đồ theo hãng, không phải chuẩn.)' : ''), open: openC(c),
+          check: { cable: c.id, byUse: same.length > 0 } };
+        return assemble(q, c.name, textDistractors(c.name, tiers, rng), rng);
+      } });
+    });
+
+    // ----- (c-wire) chân a N nối tới chân nào (đầu b; loopback: cùng đầu) -----
+    CC.forEach(function (c) {
+      var pa = CP[c.a.pinout], pb = c.b ? CP[c.b.pinout] : pa;
+      if (!pa || !pb || !c.name) return;
+      var wires = (c.wires || []).filter(function (w) { return w.a != null && (c.b ? w.b != null : w.a2 != null); });
+      var endB = c.b ? 'b' : 'a';
+      function tgt(w) { return String(c.b ? w.b : w.a2); }
+      function shield(p, pin) { var x = pinOf(p, pin); return !x || x.dir === 'shield'; }
+      var deg = {}; // số dây chạm mỗi chân đầu A (loopback: cả hai phía)
+      wires.forEach(function (w) { deg[w.a] = (deg[w.a] || 0) + 1; if (!c.b) deg[w.a2] = (deg[w.a2] || 0) + 1; });
+      wires.forEach(function (w) {
+        var t = tgt(w);
+        if (deg[w.a] !== 1 || shield(pa, w.a) || shield(pb, t)) return;
+        // chân cùng cầu nối với đáp án tương đương về điện → không làm nhiễu
+        var bridged = {};
+        (c.bridges || []).forEach(function (br) {
+          var ps = (br.pins || []).map(String);
+          if ((br.end || 'a') === endB && ps.indexOf(t) >= 0) ps.forEach(function (x) { bridged[x] = 1; });
+        });
+        out.push({ key: 'c-wire|' + c.id + '|' + w.a, topic: 'conn', type: 'c-wire', make: function (rng) {
+          var ans = pinTxt(pb, t);
+          // nhiễu không trùng tên tín hiệu với đáp án (GND ↔ GND ở chân khác dễ gây tranh cãi)
+          var ansSig = (pinOf(pb, t) || {}).signal;
+          var ok = function (pin) { pin = String(pin); return pin !== t && !bridged[pin] && !shield(pb, pin) && (c.b || pin !== String(w.a)) && (pinOf(pb, pin) || {}).signal !== ansSig; };
+          var t1 = wires.map(tgt).filter(ok).map(function (pin) { return pinTxt(pb, pin); });
+          var t2 = (pb.pins || []).map(function (z) { return z.pin; }).filter(ok).map(function (pin) { return pinTxt(pb, pin); });
+          var sa = (pinOf(pa, w.a) || {}).signal;
+          var q = { prompt: 'Trong ' + c.name + ', chân ' + w.a + (sa ? ' (' + sa + ')' : '') + ' của đầu A nối tới chân nào ' + (c.b ? 'ở đầu B' : 'trên cùng đầu') + '?',
+            explain: 'A ' + pinTxt(pa, w.a) + ' → ' + (c.b ? 'B ' : '') + ans + (w.note ? ' (' + w.note + ')' : '') + '. ' + (c.use ? 'Dùng khi: ' + c.use : ''),
+            objNames: [c.name], open: openC(c), check: { cable: c.id, a: String(w.a) } };
+          return assemble(q, ans, textDistractors(ans, [t1, t2], rng), rng);
+        } });
+      });
+    });
+
+    // ----- (c-ic) thụ động hay cần IC; chỉ hỏi khi hai đầu KHÁC thân đầu nối -----
+    function icSentences(p) {
+      return String(p.detail || '').split(/(?<=[.;])\s+/).filter(function (s) { return /cần/i.test(s) && (/\b(IC|chip)\b/.test(s) || /mạch|bộ chuyển/i.test(s)); });
+    }
+    // từ nhận diện chuẩn của pinout: chữ đầu tên nếu là ký hiệu (RS-232, USB, HDMI, DisplayPort, VGA…) + aka của thân
+    function tags(p) {
+      var w = String(p.name || '').split(/\s+/)[0], b = CB[p.body] || {};
+      return uniq([w].concat(b.aka || []).filter(function (t) { return t && t.length >= 2 && /[A-Z].*[A-Z0-9]|\d/.test(t); }));
+    }
+    // ranh giới từ coi "-" là một phần tên ("USB" không khớp trong "USB-C")
+    function mentions(sent, p) {
+      return tags(p).some(function (t) { return new RegExp('(^|[^\\p{L}\\p{N}-])' + reEsc(t) + '(?![\\p{L}\\p{N}-])', 'iu').test(sent); });
+    }
+    /** Có cặp chuyển đổi "A ↔/→ B" (một vế nhắc pa, vế kia nhắc pb) trong cùng một đoạn giữa dấu phẩy/ngoặc? */
+    function convPair(sent, pa, pb) {
+      return String(sent).split(/[,;()]/).some(function (seg) {
+        var m = /^(.*?)(↔|→|<->|->)(.*)$/.exec(seg);
+        return !!m && ((mentions(m[1], pa) && mentions(m[3], pb)) || (mentions(m[1], pb) && mentions(m[3], pa)));
+      });
+    }
+    function shareTag(pa, pb) { var tb = tags(pb).map(function (t) { return t.toLowerCase(); }); return tags(pa).some(function (t) { return tb.indexOf(t.toLowerCase()) >= 0; }); }
+    var seenIc = {};
+    function icQ(pa, pb, yes, explain, open) {
+      var pk = pairKey(pa.id, pb.id);
+      seenIc[pk] = 1;
+      out.push({ key: 'c-ic|' + pk, topic: 'conn', type: 'c-ic', make: function (rng) {
+        var q = { prompt: 'Muốn nối ' + (pa.name || pa.id) + ' với ' + (pb.name || pb.id) + ': làm được chỉ bằng dây / linh kiện thụ động không?',
+          explain: explain, open: open, check: { a: pa.id, b: pb.id, yes: yes } };
+        return yes ? assemble(q, C_YES, [C_NO].concat(shuffle(C_WRONG, rng).slice(0, 2)), rng)
+          : assemble(q, C_NO, [C_YES].concat(shuffle(C_WRONG, rng).slice(0, 2)), rng);
+      } });
+    }
+    two.forEach(function (c) {
+      var pa = CP[c.a.pinout], pb = CP[c.b.pinout];
+      if (pa.body === pb.body || seenIc[pairKey(pa.id, pb.id)]) return;
+      icQ(pa, pb, true, 'Có sẵn ' + c.name + '. ' + (c.use || ''), openC(c));
+    });
+    pids.forEach(function (ka) {
+      var pa = CP[ka];
+      icSentences(pa).forEach(function (sent) {
+        pids.forEach(function (kb) {
+          var pb = CP[kb], pk = pairKey(ka, kb);
+          if (kb === ka || pa.body === pb.body || seenIc[pk] || byPair[pk] || !convPair(sent, pa, pb)) return;
+          if (shareTag(pa, pb)) return; // cùng chuẩn tín hiệu (USB 2 ↔ USB 3, DP ↔ Mini DP…): không suy ra "cần IC"
+          icQ(pa, pb, false, sent, openP(pa));
+        });
+      });
+    });
+  }
+
   // ---------- pool & sinh bộ câu ----------
   var poolCache = { key: null, pool: null };
   function buildPool(D) {
@@ -768,10 +948,12 @@
     try { frameTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz frame', e); }
     try { unitTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz unit', e); }
     try { lineTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz line', e); }
+    try { connTemplates(D, out); } catch (e) { if (root.console) console.warn('quiz conn', e); }
     return out;
   }
   function poolOf(D) {
-    var k = Object.keys(D.H).length + '|' + D.S.length + '|' + Object.keys(D.F).length + '|' + Object.keys(D.M).length;
+    var k = Object.keys(D.H).length + '|' + D.S.length + '|' + Object.keys(D.F).length + '|' + Object.keys(D.M).length +
+      '|' + Object.keys(D.CP || {}).length + '|' + (D.CC || []).length;
     if (poolCache.D !== D || poolCache.key !== k) { poolCache = { D: D, key: k, pool: buildPool(D) }; }
     return poolCache.pool;
   }
@@ -993,6 +1175,7 @@
       else if (o.kind === 't') { seedFrame(o); hash = '#t/' + o.frame; }
       else if (o.kind === 'lab') { seedLab(o); hash = '#lab/' + o.lab; }
       else if (o.kind === 'line') hash = '#line/' + o.chain;
+      else if (o.kind === 'conn') hash = '#conn/' + encodeURIComponent(o.id);
     } catch (e) { /* không ghi được trạng thái → vẫn mở trang */ }
     if (!hash || !window.AppNav.has(hash)) return;
     window.AppNav.go(hash);
@@ -1065,7 +1248,8 @@
     if (done) {
       var ok = a === q.answer;
       html += '<div class="quiz-fb ' + (ok ? 'is-ok' : 'is-bad') + '" aria-live="polite"><strong>' + (ok ? 'Đúng!' : 'Chưa đúng — đáp án: ' + LETTERS[q.answer] + '. ' + esc(q.options[q.answer])) + '</strong>' +
-        (q.explain ? '<p>' + esc(q.explain) + '</p>' : '') + '</div>';
+        (q.explain ? '<p>' + esc(q.explain) + '</p>' : '') +
+        (q.open && q.open.kind === 'conn' ? '<p><a class="quiz-link" href="#conn/' + esc(encodeURIComponent(q.open.id)) + '">Xem ' + esc(q.open.label || q.open.id) + ' →</a></p>' : '') + '</div>';
     }
     html += '<div class="quiz-nav">' +
       '<button type="button" class="btn-ghost" data-qgo="' + (s.i - 1) + '"' + (s.i ? '' : ' disabled') + '>← Câu trước</button>' +

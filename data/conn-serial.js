@@ -10,14 +10,19 @@
     Array.from({ length: top }, (_, i) => ({ pin: String(i + 1), x: x0 + i * step, y: y1 }))
       .concat(Array.from({ length: bottom }, (_, i) => ({ pin: String(top + i + 1), x: x0 + step / 2 + i * step, y: y2 })));
 
-  // M/34: các hàng chữ cái như hình in phổ biến của khối Winchester MRAC-34 (CẦN KIỂM với ISO 2593).
-  const M34_ROWS = [
-    ["A", "B"], ["C", "D", "E", "F"], ["H", "J", "K", "L", "M"], ["N", "P", "R", "S", "T"],
-    ["U", "V", "W", "X", "Y"], ["Z", "AA", "BB", "CC", "DD"], ["EE", "FF", "HH", "JJ"], ["KK", "LL", "MM", "NN"]
+  // M/34: khối Winchester MRAC-34 = 4 CỘT so le nửa bước (9/8/9/8 = 34), trục dài thẳng đứng,
+  // nhìn mặt cắm đầu ĐỰC. Cột 1 và 3 ở hàng chẵn 0,2,…,16; cột 2 và 4 ở hàng lẻ 1,3,…,15.
+  // Nguồn: catalogue Winchester MRAC (pccomponents.com/datasheets/WINC-MRAC.pdf tr.4, 13: hình vẽ nhìn
+  // phía hàn của đầu cái = nhìn mặt cắm đầu đực); pinouts.ru m34m.gif / m34f.gif.
+  const M34_COLS = [
+    ["B", "F", "L", "R", "V", "Z", "DD", "JJ", "NN"], // cột 1 (trái), hàng chẵn
+    ["D", "J", "N", "T", "X", "BB", "FF", "LL"],      // cột 2, hàng lẻ
+    ["A", "E", "K", "P", "U", "Y", "CC", "HH", "MM"], // cột 3, hàng chẵn
+    ["C", "H", "M", "S", "W", "AA", "EE", "KK"]       // cột 4 (phải), hàng lẻ
   ];
   const m34Pins = [];
-  M34_ROWS.forEach((row, r) =>
-    row.forEach((p, j) => m34Pins.push({ pin: p, x: 90 + (j - (row.length - 1) / 2) * 30, y: 16 + r * 22 })));
+  M34_COLS.forEach((col, c) =>
+    col.forEach((p, j) => m34Pins.push({ pin: p, x: 35 + c * 30, y: 45 + (2 * j + (c % 2)) * 15 })));
 
   const DSUB_GENDERS = {
     male: { name: "Đầu đực (chân cắm, plug)", note: "Có chân kim. Cổng COM trên PC là đầu đực DE-9." },
@@ -77,25 +82,32 @@
       name: "Winchester M/34 (V.35)",
       aka: ["M34", "M/34", "MRAC-34", "Winchester", "đầu V.35", "ISO 2593"],
       family: "serial",
-      standard: "ISO 2593 (đầu nối 34 chân cho V.35)",
+      standard: "ISO 2593 (đầu nối 34 chân cho V.35); bố trí chân theo catalogue Winchester MRAC-34 (khối dùng cho ISO 2593)",
       summary: "Khối đầu nối chữ nhật to, 34 chân đặt tên bằng chữ cái, hai vít khoá lớn — giao diện V.35 của modem/CSU-DSU.",
       detail:
         "Chân đặt tên bằng chữ cái A…Z rồi AA…NN, bỏ các chữ dễ nhầm (G, I, O, Q; GG, II). " +
         "Đầu DTE (cáp từ router) thường là ĐỰC, cổng trên modem/DCE là CÁI. Router thường có cổng nén (Cisco 60 chân, Smart Serial) và cáp chuyển ra M/34. " +
-        "CẦN KIỂM: vị trí các hàng chữ cái trên mặt cắm vẽ theo hình in phổ biến (A-B / C-F / H-M / N-T / U-Y / Z-DD / EE-JJ / KK-NN), chưa đối chiếu được hình gốc ISO 2593; " +
-        "khi hàn hãy đọc chữ in nổi trên khối nhựa.",
+        "Bố trí theo catalogue Winchester MRAC-34 (khối dùng cho ISO 2593): 4 cột so le nửa bước, 9/8/9/8 chân; đọc theo hàng từng cặp " +
+        "B·A / D·C / F·E / J·H / L·K / N·M / R·P / T·S / V·U / X·W / Z·Y / BB·AA / DD·CC / FF·EE / JJ·HH / LL·KK / NN·MM. " +
+        "Catalogue vẽ nhìn phía hàn của đầu cái (\"Male inserts are opposite\") — trùng với nhìn mặt cắm đầu đực. " +
+        "Khi hàn vẫn đọc chữ in nổi trên khối nhựa.",
       genders: {
         male: { name: "Đầu đực (chân cắm)", note: "Thường ở đầu cáp phía DTE (router)." },
         female: { name: "Đầu cái (lỗ cắm)", note: "Thường trên modem/CSU-DSU (DCE)." }
       },
       face: {
         outline: "m34",
-        w: 180, h: 180,
+        w: 160, h: 330,
         viewOf: "male",
         orientation:
-          "Nhìn MẶT CẮM đầu ĐỰC, hàng A-B ở TRÊN: mỗi hàng đọc chữ cái từ trái sang phải. Đầu cái nhìn mặt cắm là ảnh gương. " +
-          "CẦN KIỂM: bố trí hàng theo hình in phổ biến, chưa đối chiếu hình gốc ISO 2593.",
-        pins: m34Pins
+          "Nhìn MẶT CẮM đầu ĐỰC, trục dài thẳng đứng, chốt dẫn hướng/vít khoá ở hai đầu ngắn (trên, dưới), hàng A-B ở TRÊN. " +
+          "4 cột so le nửa bước, trái → phải: cột 1 B F L R V Z DD JJ NN; cột 2 D J N T X BB FF LL; cột 3 A E K P U Y CC HH MM; cột 4 C H M S W AA EE KK " +
+          "(cột 1, 3 ở hàng chẵn; cột 2, 4 lệch xuống nửa bước). Đầu cái nhìn mặt cắm là ảnh gương (cột trái → phải: C…, A…, D…, B…).",
+        pins: m34Pins,
+        keys: [
+          { x: 60, y: 6, w: 40, h: 20, label: "vít/chốt" },
+          { x: 60, y: 304, w: 40, h: 20, label: "vít/chốt" }
+        ]
       },
       pinCount: 34
     },
@@ -254,7 +266,9 @@
         "nên cáp rollover (đảo 1↔8) nối hai cổng kiểu này thành null-modem. Ý tưởng đối xứng giống Yost nhưng KHÁC sơ đồ chân: " +
         "Yost DTE là 1 CTS, 2 DCD, 3 RD, 4-5 SG, 6 TD, 7 DTR, 8 RTS (yost.com) — Cisco là ảnh đảo 1↔8 của nó và dùng DSR thay DCD. " +
         "Cấu hình mặc định 9600 8N1, không flow control. Nhiều hãng khác dùng cùng sơ đồ (Juniper, Aruba…), nhưng một số (APC, một số Fortinet cũ) khác — đọc tài liệu. " +
-        "Cisco không có DCD trên RJ45; cổng AUX dùng chân 7 cho DSR/DCD tuỳ đời máy (CẦN KIỂM theo model). " +
+        "Cisco không có DCD trên RJ45; chân 7 là DSR (vào) trên cả cổng console lẫn AUX. Ở AUX nối modem bằng rollover + đầu chuyển DB-25 đực CAB-MMOD " +
+        "(ổ 1→5, 2→8, 3→3, 4/5→7, 6→2, 7→20, 8→4), router 7 → rollover → ổ 2 → DB-25 chân 8: DSR của router nhận DCD của modem là do đầu chuyển đi dây, " +
+        "không phải do chân 7 đổi chức năng (conserver.com/consoles/Cisco/ciscocons.html). " +
         NO_IC,
       pins: [
         { pin: "1", signal: "RTS", name: "Request To Send", dir: "out", v24: "105", desc: "Xin phát / sẵn sàng nhận." },
@@ -339,13 +353,15 @@
       gender: "male",
       summary: "Giao diện đồng bộ tốc độ cao (56 k – 2 Mbit/s): dữ liệu và xung nhịp là cặp cân bằng A/B, điều khiển là RS-232 đơn.",
       detail:
-        "Dữ liệu (SD, RD) và xung nhịp (SCT, SCR, SCTE) là cặp vi sai ±0,55 V trên tải 100 Ω (V.35 Phụ lục II); RTS/CTS/DSR/DCD/DTR là mức V.28 như RS-232. " +
+        "Dữ liệu (SD, RD) và xung nhịp (SCT, SCR, SCTE) là cặp vi sai ±0,55 V trên tải 100 Ω (V.35 Appendix 4); RTS/CTS/DSR/DCD/DTR là mức V.28 như RS-232. " +
         "DCE (modem/CSU-DSU) cấp xung nhịp phát SCT và thu SCR; DTE có thể trả về SCTE (đồng hồ ngoài) để bù trễ khi cáp dài. " +
         "Nối hai router back-to-back: một đầu cáp DCE (Cisco: \"clock rate\" trên đầu DCE). " +
-        "Chân L, M, N, Z, BB…NN không gán trong V.35 cơ bản; các chân J–N và NN dùng tuỳ hãng: N (RL, 140), L (LL, 141), M (TM, 142); " +
-        "J = LL theo pinouts.ru nhưng RI theo ADTRAN; NN = TM (ADTRAN) — chỉ là ghi chú, đọc tài liệu thiết bị trước khi hàn. " +
-        "Tên dây A/B của cặp cân bằng: đừng đọc A là '+' — theo quy ước cặp cân bằng (V.11) A âm hơn B khi truyền bit 1; pinouts.ru ghi P = TxD−, S = TxD+. " +
-        "CẦN KIỂM: nguyên văn cực tính A/B trong V.35 Phụ lục II. " +
+        "V.35 (1968) §10a chỉ liệt kê mạch 101–107, 109, 114, 115 (cân bằng: 103, 104, 114, 115); DTR 108 (H) và SCTE 113 (U/W) theo ISO 2593/thực hành hãng. " +
+        "Chân J, K dùng tuỳ hãng: Cisco chỉ gán K = LT, Juniper ghi K = Test Mode; pinouts.ru ghi J = Local Loopback, K = Local Test; ADTRAN (trích đoạn) ghi J = RI. " +
+        "L, M, N, Z, BB…NN để trống (pinouts.ru, Cisco) — đọc tài liệu thiết bị trước khi hàn các chân này. " +
+        "Cực tính A/B do V.35 quy định (Appendix 4 mục 2c): \"A terminal is positive to the B terminal when binary 0 is transmitted\", ngược lại khi phát 1; " +
+        "0,55 V ±20 %, nguồn 100 Ω ±50 %, tải 100 Ω ±10 %. Nhãn +/− giữa các hãng ngược nhau (pinouts.ru P = TxD−, S = TxD+; Cisco CAB-V35MT/FC P = SD+, S = SD−, R = RD+, T = RD−; " +
+        "Juniper ghi (A)/(B)) — chỉ A/B là tên chuẩn, đừng hàn theo dấu +/−. " +
         "Chuyển V.35 ↔ RS-232/RS-485/G.703 cần bộ chuyển giao diện có IC, không chế bằng dây.",
       pins: [
         { pin: "A", signal: "FG", name: "Frame Ground (Chassis)", dir: "shield", v24: "101", desc: "Đất khung / màn chắn cáp." },
@@ -355,11 +371,11 @@
         { pin: "E", signal: "DSR", name: "Data Set Ready", dir: "in", v24: "107", desc: "DCE sẵn sàng (V.28)." },
         { pin: "F", signal: "DCD", name: "Data Carrier Detect (RLSD)", dir: "in", v24: "109", desc: "DCE báo đường lên (V.28)." },
         { pin: "H", signal: "DTR", name: "Data Terminal Ready", dir: "out", v24: "108/2", desc: "DTE sẵn sàng (V.28)." },
-        { pin: "J", signal: "RI", name: "Ring Indicator", dir: "in", v24: "125", desc: "Báo chuông (ít dùng). Tuỳ hãng: ADTRAN ghi RI, pinouts.ru ghi LL (Local Loopback)." },
-        { pin: "K", signal: "LT", name: "Local Test", dir: "out", v24: "141", desc: "DTE yêu cầu vòng lặp nội bộ ở DCE (tuỳ thiết bị)." },
-        { pin: "L", signal: "(chưa gán)", name: "Unassigned", dir: "nc", desc: "Không gán trong V.35 cơ bản (CẦN KIỂM tuỳ hãng)." },
-        { pin: "M", signal: "(chưa gán)", name: "Unassigned", dir: "nc", desc: "Không gán; một số hãng dùng làm Test Mode (142)." },
-        { pin: "N", signal: "(chưa gán)", name: "Unassigned", dir: "nc", desc: "Không gán; một số hãng dùng làm Remote Loopback (140)." },
+        { pin: "J", signal: "(tuỳ hãng)", name: "Vendor-specific", dir: "nc", desc: "Tuỳ hãng: pinouts.ru ghi Local Loopback, ADTRAN (trích đoạn) ghi RI; Cisco không gán. Đọc tài liệu thiết bị." },
+        { pin: "K", signal: "LT / TM (tuỳ hãng)", name: "Local Test (Cisco) / Test Mode (Juniper)", dir: "nc", desc: "Tuỳ hãng: Cisco ghi LT, Juniper ghi Test Mode, pinouts.ru ghi Local Test — chiều và mạch V.24 khác nhau theo hãng." },
+        { pin: "L", signal: "(chưa gán)", name: "Unassigned", dir: "nc", desc: "Để trống (pinouts.ru, Cisco)." },
+        { pin: "M", signal: "(chưa gán)", name: "Unassigned", dir: "nc", desc: "Để trống (pinouts.ru, Cisco)." },
+        { pin: "N", signal: "(chưa gán)", name: "Unassigned", dir: "nc", desc: "Để trống (pinouts.ru, Cisco)." },
         { pin: "P", signal: "SD A", name: "Send Data A", dir: "out", v24: "103", desc: "Dữ liệu phát, dây A của cặp cân bằng P/S (không phải '+': xem ghi chú cực tính)." },
         { pin: "R", signal: "RD A", name: "Receive Data A", dir: "in", v24: "104", desc: "Dữ liệu thu, dây A của cặp R/T." },
         { pin: "S", signal: "SD B", name: "Send Data B", dir: "out", v24: "103", desc: "Dữ liệu phát, dây B của cặp P/S. Chân tên \"S\" — không phải vỏ." },
@@ -373,12 +389,13 @@
         { pin: "AA", signal: "SCT B", name: "Serial Clock Transmit B", dir: "in", v24: "114", desc: "Xung nhịp phát do DCE cấp, dây B." }
       ].concat(["BB", "CC", "DD", "EE", "FF", "HH", "JJ", "KK", "LL", "MM", "NN"].map((p) => ({
         pin: p, signal: "(chưa gán)", name: "Unassigned", dir: "nc",
-        desc: p === "NN" ? "Không gán trong V.35 cơ bản; ADTRAN dùng làm TM (Test Mode, 142)." : "Không gán trong V.35 cơ bản."
+        desc: p === "NN" ? "Để trống (pinouts.ru, Cisco); một tài liệu ADTRAN ghi TM — CHƯA XÁC MINH." : "Không gán trong V.35 cơ bản."
       }))),
       groups: [
         { name: "Dữ liệu (cân bằng)", pins: ["P", "S", "R", "T"] },
         { name: "Xung nhịp (cân bằng)", pins: ["U", "W", "V", "X", "Y", "AA"] },
-        { name: "Điều khiển (V.28)", pins: ["C", "D", "E", "F", "H", "J", "K"] },
+        { name: "Điều khiển (V.28)", pins: ["C", "D", "E", "F", "H"] },
+        { name: "Tuỳ hãng", pins: ["J", "K"] },
         { name: "Đất", pins: ["A", "B"] }
       ]
     },
@@ -603,7 +620,7 @@
         "Cùng logic với đầu chuyển DE-9 (phía RJ45 là rs232-rj45-cisco-adapter, nhãn theo phía terminal) nhưng theo số chân DB-25 (2 = TXD, 3 = RXD, 4 = RTS, 5 = CTS, 6 = DSR, 7 = GND, 20 = DTR). " +
         "Kiểm TX→RX toàn tuyến: router 3 (TXD, out) → rollover → ổ 6 → DB-25 3 (RXD terminal, in) ✓; terminal 2 (TXD, out) → ổ 3 → rollover → router 6 (RXD, in) ✓; " +
         "terminal 4 (RTS) → ổ 1 → rollover → router 8 (CTS) ✓; router 1 (RTS) → rollover → ổ 8 → DB-25 5 (CTS) ✓. " +
-        "CẦN KIỂM: một số đầu chuyển Cisco cầu thêm DSR (6) với DCD (8) phía DB-25.",
+        "Đầu chuyển DB-25 Cisco 29-0810-01 không cầu DSR–DCD; cầu 6–1 chỉ gặp ở một số đầu DE-9 bên thứ ba (APACN 24490-59) (conserver.com).",
       warnings: ["Cisco còn có đầu chuyển DB-25 ĐỰC kiểu \"modem\" (cho cổng AUX) với sơ đồ khác — không dùng thay cho nhau."]
     }
   ]);
